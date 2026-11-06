@@ -114,14 +114,14 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
   const [isMountModalOpen, setIsMountModalOpen] = useState(false);
   const [mountCustomTitle, setMountCustomTitle] = useState('');
 
-  const [panelAmount, setPanelAmount] = useState<number>(1800);
+  const [panelAmount, setPanelAmount] = useState<number>(0);
   const [mountHoleCount, setMountHoleCount] = useState<number>(80);
 
   const [coinCounter, setCoinCounter] = useState<number>(
-    selectedMachine ? selectedMachine.last_coin_counter + 260 : 0
+    selectedMachine ? selectedMachine.last_coin_counter : 0
   );
   const [prizeCounter, setPrizeCounter] = useState<number>(
-    selectedMachine ? selectedMachine.last_prize_counter + 8 : 0
+    selectedMachine ? selectedMachine.last_prize_counter : 0
   );
   const [resetMode, setResetMode] = useState<CounterResetMode>('NORMAL');
   const [notes, setNotes] = useState<string>('');
@@ -145,9 +145,9 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
   const handleSelectMachine = (machine: Machine) => {
     setSelectedMachineId(machine.machine_id);
     setSelectedTargetBoardId(null);
-    setCoinCounter(machine.last_coin_counter + 220);
-    setPrizeCounter(machine.last_prize_counter + 6);
-    setPanelAmount(1600);
+    setCoinCounter(machine.last_coin_counter || 0);
+    setPrizeCounter(machine.last_prize_counter || 0);
+    setPanelAmount(0);
     setResetMode('NORMAL');
     setNotes('');
     setOcrResultNote(null);
@@ -745,9 +745,14 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
             {/* 金額大字輸入 */}
             <div className="bg-[#0B0F17] border border-slate-800 rounded-xl p-4">
               <div className="flex items-center justify-between text-xs text-slate-400 mb-2">
-                <span>當前數位面板金額</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="font-bold text-slate-200">數位面板金額</span>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-amber-300/80 border border-slate-700 font-mono">
+                    單位：元 (1 = 1元)
+                  </span>
+                </div>
                 <span className="font-mono text-amber-400">
-                  約 {Math.round(panelAmount / (selectedMachine.coin_unit_value || 10))} 枚幣
+                  折合 {Math.round(panelAmount / (selectedMachine.coin_unit_value || 10))} 枚幣
                 </span>
               </div>
 
@@ -875,7 +880,7 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <AnalogCounterWheel
                 label="投幣錶 (COIN)"
-                subLabel="累計投幣"
+                subLabel="單位：枚 (1格 = 10元)"
                 value={coinCounter}
                 lastValue={selectedMachine.last_coin_counter}
                 accentColor="amber"
@@ -883,7 +888,7 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
               />
               <AnalogCounterWheel
                 label="出貨錶 (PRIZE)"
-                subLabel="累計出貨"
+                subLabel="單位：件 (出貨數)"
                 value={prizeCounter}
                 lastValue={selectedMachine.last_prize_counter}
                 accentColor="emerald"
