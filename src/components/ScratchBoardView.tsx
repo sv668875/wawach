@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Trophy,
   Plus,
@@ -57,6 +57,8 @@ interface ScratchBoardViewProps {
   }) => void;
   onUpdateGrossRevenue: (boardId: string, newGrossRevenue: number) => void;
   onSettleBoard: (payload: SettleBoardPayload | string) => void;
+  targetBoardId?: string | null;
+  onTargetBoardConsumed?: () => void;
 }
 
 const HOLE_PRESETS = [40, 60, 80, 100, 120, 160, 200];
@@ -72,6 +74,8 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
   onRecordBatchProgress,
   onUpdateGrossRevenue,
   onSettleBoard,
+  targetBoardId,
+  onTargetBoardConsumed,
 }) => {
   // 分頁切換：進行中刮板 vs 刮板紀錄與統計 (需求 5)
   const [mainTab, setMainTab] = useState<'active' | 'stats'>('active');
@@ -105,8 +109,15 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
   );
 
   const [selectedBoardId, setSelectedBoardId] = useState<string>(
-    activeBoards[0]?.board_id || ''
+    targetBoardId || activeBoards[0]?.board_id || ''
   );
+
+  useEffect(() => {
+    if (targetBoardId && boards.some((b) => b.board_id === targetBoardId)) {
+      setSelectedBoardId(targetBoardId);
+      onTargetBoardConsumed?.();
+    }
+  }, [targetBoardId, boards, onTargetBoardConsumed]);
 
   // 選取的刮板：若目前選取的板已被下版，自動指派第一個進行中的刮板
   const selectedBoard = useMemo(() => {

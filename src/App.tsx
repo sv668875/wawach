@@ -85,6 +85,7 @@ export default function App() {
   );
 
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [targetScratchBoardId, setTargetScratchBoardId] = useState<string | null>(null);
 
   useEffect(() => {
     try {
@@ -252,7 +253,7 @@ export default function App() {
     setMachines((prev) =>
       prev.map((m) => {
         if (m.machine_id !== targetMachine.machine_id) return m;
-        // 如果是下版清0，只清掉該特定版，若還有其他版則自動保留
+        // 如果是結算下版，只清掉該特定版，若還有其他版則自動保留
         let updatedActiveBoardId = m.active_board_id;
         if (payload.clearAction === 'BOARD_CLOSE_CLEAR' && activeBoardId) {
           if (m.active_board_id === activeBoardId) {
@@ -277,8 +278,8 @@ export default function App() {
 
     showToast(
       payload.clearAction === 'BOARD_CLOSE_CLEAR'
-        ? `[${targetMachine.code}] 下版清0 +$${cashAdded.toLocaleString()}`
-        : `[${targetMachine.code}] 分段清0 +$${cashAdded.toLocaleString()}`
+        ? `[${targetMachine.code}] 結算下版 +$${cashAdded.toLocaleString()}`
+        : `[${targetMachine.code}] 記錄收幣 +$${cashAdded.toLocaleString()}`
     );
   };
 
@@ -625,7 +626,7 @@ export default function App() {
       )
     );
 
-    // 4. 若本次有收幣，自動建立一筆「下版清0 (BOARD_CLOSE_CLEAR)」紀錄
+    // 4. 若本次有收幣，自動建立一筆「結算下版 (BOARD_CLOSE_CLEAR)」紀錄
     // (確保收幣歷史有這筆紀錄，且 board_id 正確關聯，不會變成 standaloneCoin 造成二次重複計算！)
     if (finalCash > 0) {
       const coinUnit = targetMachine?.coin_unit_value || 10;
@@ -1184,15 +1185,16 @@ export default function App() {
             machines={machines}
             readings={readings}
             scratchBoards={scratchBoards}
-            inventoryItems={inventoryItems}
             onSaveReading={handleSaveReading}
             onQuickMountBoard={handleQuickMountBoard}
             onAddMachine={handleAddMachine}
             onDeleteMachine={handleDeleteMachine}
             onCalibrateCounters={handleCalibrateMachineCounters}
             onSwitchMachineModel={handleSwitchMachineModel}
-            onJumpToScratchBoard={() => setActiveTab('scratch')}
-            onSettleBoard={handleSettleBoard}
+            onJumpToScratchBoard={(boardId) => {
+              if (boardId) setTargetScratchBoardId(boardId);
+              setActiveTab('scratch');
+            }}
           />
         )}
 
@@ -1201,6 +1203,8 @@ export default function App() {
             boards={scratchBoards}
             machines={machines}
             inventoryItems={inventoryItems}
+            targetBoardId={targetScratchBoardId}
+            onTargetBoardConsumed={() => setTargetScratchBoardId(null)}
             onQuickMountBoard={handleQuickMountBoard}
             onAddPrizeToBoard={handleAddPrizeToBoard}
             onTogglePrizeClaimed={handleTogglePrizeClaimed}

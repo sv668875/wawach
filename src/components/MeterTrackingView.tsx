@@ -23,12 +23,10 @@ import {
 import {
   ClearActionType,
   CounterResetMode,
-  InventoryItem,
   Machine,
   MachineModel,
   MeterReading,
   ScratchBoard,
-  SettleBoardPayload,
 } from '../types';
 import {
   calculateSessionMetrics,
@@ -36,13 +34,11 @@ import {
   generateSampleMeterPhotoBase64,
 } from '../utils/calculations';
 import { AnalogCounterWheel } from './AnalogCounterWheel';
-import { SettleBoardModal } from './SettleBoardModal';
 
 interface MeterTrackingViewProps {
   machines: Machine[];
   readings: MeterReading[];
   scratchBoards: ScratchBoard[];
-  inventoryItems?: InventoryItem[];
   onSaveReading: (payload: {
     machineId: string;
     entryMode: MachineModel;
@@ -60,7 +56,6 @@ interface MeterTrackingViewProps {
   onCalibrateCounters: (machineId: string, initialCoin: number, initialPrize: number) => void;
   onSwitchMachineModel: (machineId: string, model: MachineModel) => void;
   onJumpToScratchBoard: (boardId?: string) => void;
-  onSettleBoard?: (payload: SettleBoardPayload | string) => void;
 }
 
 const QUICK_HOLE_OPTIONS = [40, 60, 80, 100, 120, 160, 200];
@@ -69,7 +64,6 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
   machines,
   readings,
   scratchBoards,
-  inventoryItems = [],
   onSaveReading,
   onQuickMountBoard,
   onAddMachine,
@@ -77,17 +71,11 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
   onCalibrateCounters,
   onSwitchMachineModel,
   onJumpToScratchBoard,
-  onSettleBoard,
 }) => {
   const [selectedMachineId, setSelectedMachineId] = useState<string>(
     machines[0]?.machine_id || ''
   );
   const [machineToDelete, setMachineToDelete] = useState<Machine | null>(null);
-
-  // 統一整合式下版結清彈窗狀態 (避免二次操作與重複計帳)
-  const [modalSettleBoard, setModalSettleBoard] = useState<ScratchBoard | null>(null);
-  const [isSettleModalOpen, setIsSettleModalOpen] = useState(false);
-  const [modalPrefilledCash, setModalPrefilledCash] = useState(0);
 
   const selectedMachine = useMemo(
     () => machines.find((m) => m.machine_id === selectedMachineId) || machines[0],
@@ -604,23 +592,11 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
                   <button
                     type="button"
                     onClick={() => onJumpToScratchBoard(b.board_id)}
-                    className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-300 text-xs font-bold whitespace-nowrap"
+                    className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-amber-300 text-xs font-bold whitespace-nowrap flex items-center gap-1"
                   >
-                    管獎項
+                    <span>管理獎項</span>
+                    <ArrowRight className="w-3 h-3" />
                   </button>
-                  {onSettleBoard && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setModalSettleBoard(b);
-                        setModalPrefilledCash(panelAmount);
-                        setIsSettleModalOpen(true);
-                      }}
-                      className="px-2.5 py-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/40 text-emerald-300 text-xs font-bold whitespace-nowrap"
-                    >
-                      下此版
-                    </button>
-                  )}
                 </div>
               </div>
             ))}
@@ -952,7 +928,7 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
                         : 'bg-amber-500/15 text-amber-400'
                     }`}
                   >
-                    {r.clear_action === 'BOARD_CLOSE_CLEAR' ? '下版清0' : '分段清0'}
+                    {r.clear_action === 'BOARD_CLOSE_CLEAR' ? '結算下版' : '巡場收幣'}
                   </span>
                   <div className="min-w-0">
                     <div className="text-xs font-medium text-slate-200 truncate">
@@ -1266,30 +1242,6 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
           </div>
         </div>
       )}
-
-      {/* 統一整合式下版結清彈窗 (避免二次操作與重複計帳) */}
-      <SettleBoardModal
-        isOpen={isSettleModalOpen}
-        onClose={() => {
-          setIsSettleModalOpen(false);
-          setModalSettleBoard(null);
-        }}
-        board={modalSettleBoard}
-        machine={
-          modalSettleBoard
-            ? machines.find((m) => m.machine_id === modalSettleBoard.machine_id) || selectedMachine
-            : selectedMachine
-        }
-        inventoryItems={inventoryItems}
-        prefilledCash={modalPrefilledCash}
-        onConfirmSettle={(payload) => {
-          if (onSettleBoard) {
-            onSettleBoard(payload);
-          }
-          setPanelAmount(0);
-          setNotes('');
-        }}
-      />
     </div>
   );
 };
