@@ -209,7 +209,7 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
       isCashbackInput &&
       (!cashbackAmountInput.trim() || isNaN(cbAmount) || cbAmount <= 0)
     ) {
-      setFormError('勾選回錢時，回錢金額為必填且須大於 0');
+      setFormError('請填寫回錢金額');
       return;
     }
 
@@ -602,7 +602,11 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                           const found = inventoryItems.find((it) => it.item_id === id);
                           if (found) {
                             setPrizeNameInput(found.name);
-                            setPrizeCostInput(String(found.unit_cost || 0));
+                            const costStr = String(found.unit_cost || 0);
+                            setPrizeCostInput(costStr);
+                            if (isCashbackInput && (!cashbackAmountInput || Number(cashbackAmountInput) === 0)) {
+                              setCashbackAmountInput(costStr);
+                            }
                           }
                         }}
                         className="w-full bg-[#111827] border border-slate-700 rounded-lg px-2.5 py-2 text-xs text-white focus:outline-none focus:border-sky-500"
@@ -660,23 +664,38 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                           if (e.target.value === '0') e.target.value = '';
                           e.target.select();
                         }}
-                        onChange={(e) => setPrizeCostInput(e.target.value)}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setPrizeCostInput(val);
+                          if (isCashbackInput && (!cashbackAmountInput || Number(cashbackAmountInput) === 0)) {
+                            setCashbackAmountInput(val);
+                          }
+                        }}
                         placeholder="0"
                         className="w-full bg-[#111827] border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs font-mono text-white focus:outline-none focus:border-amber-500"
                       />
                     </div>
                   </div>
 
-                  {/* 回錢勾選與必填金額 (按鈕獨立往下，徹底解決擠壓問題 - 需求 3) */}
+                  {/* 回錢勾選與金額 (勾選自動預設帶入成本，提供同成本快捷鍵) */}
                   <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-800">
                     <label className="flex items-center gap-2 text-xs font-bold text-amber-300 cursor-pointer">
                       <input
                         type="checkbox"
                         checked={isCashbackInput}
-                        onChange={(e) => setIsCashbackInput(e.target.checked)}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          setIsCashbackInput(checked);
+                          if (checked) {
+                            const cost = Number(prizeCostInput);
+                            if (cost > 0 && (!cashbackAmountInput || Number(cashbackAmountInput) === 0)) {
+                              setCashbackAmountInput(String(cost));
+                            }
+                          }
+                        }}
                         className="w-4 h-4 accent-amber-500 rounded"
                       />
-                      可回錢 (中獎退現金扣收幣)
+                      可回錢
                     </label>
 
                     {isCashbackInput && (
@@ -685,6 +704,7 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                         <input
                           type="number"
                           min={10}
+                          step={10}
                           required
                           value={cashbackAmountInput === '0' ? '' : cashbackAmountInput}
                           onFocus={(e) => {
@@ -692,9 +712,23 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                             e.target.select();
                           }}
                           onChange={(e) => setCashbackAmountInput(e.target.value)}
-                          placeholder="回錢金額 (必填)*"
-                          className="w-36 bg-[#111827] border border-amber-500 rounded-lg px-2.5 py-1.5 text-xs font-mono font-bold text-amber-300 focus:outline-none"
+                          placeholder="回錢金額"
+                          className="w-28 bg-[#111827] border border-amber-500 rounded-lg px-2.5 py-1.5 text-xs font-mono font-bold text-amber-300 focus:outline-none"
                         />
+                        {Number(prizeCostInput) > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => setCashbackAmountInput(prizeCostInput)}
+                            className={`px-2 py-1.5 rounded-lg border text-[11px] font-bold whitespace-nowrap transition-colors ${
+                              cashbackAmountInput === prizeCostInput
+                                ? 'bg-amber-500/25 border-amber-500/50 text-amber-300'
+                                : 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-300'
+                            }`}
+                            title={`帶入成本金額 $${prizeCostInput}`}
+                          >
+                            同成本
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>
