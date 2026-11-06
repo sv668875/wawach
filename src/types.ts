@@ -68,6 +68,7 @@ export interface ScratchBoardPrize {
   prize_cost: number;            // 獎品本身進貨成本 (選填，給實體商品算毛利)
   inventory_item_id?: string;    // 若綁定大獎庫存項目 ID
   is_claimed: boolean;           // 是否已開出中獎
+  claim_type?: 'PHYSICAL' | 'CASHBACK'; // 客人兌領方式：'PHYSICAL' (拿獎) | 'CASHBACK' (回錢)
   claimed_at?: string;
 }
 

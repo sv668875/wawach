@@ -380,20 +380,27 @@ export default function App() {
     showToast(`已加入 #${String(prizeInput.numberLabel).padStart(2, '0')}`);
   };
 
-  const handleTogglePrizeClaimed = (boardId: string, itemId: string) => {
+  const handleTogglePrizeClaimed = (
+    boardId: string,
+    itemId: string,
+    claimType?: 'PHYSICAL' | 'CASHBACK'
+  ) => {
     const nowIso = new Date().toISOString();
     setScratchBoards((prev) =>
       prev.map((b) => {
         if (b.board_id !== boardId) return b;
-        const nextPrizes = b.prizes.map((p) =>
-          p.item_id === itemId
-            ? {
-                ...p,
-                is_claimed: !p.is_claimed,
-                claimed_at: !p.is_claimed ? nowIso : undefined,
-              }
-            : p
-        );
+        const nextPrizes = b.prizes.map((p) => {
+          if (p.item_id !== itemId) return p;
+          const willBeClaimed = !p.is_claimed;
+          return {
+            ...p,
+            is_claimed: willBeClaimed,
+            claim_type: willBeClaimed
+              ? claimType || (p.is_cashback && (!p.prize_cost || p.prize_cost === 0) ? 'CASHBACK' : 'PHYSICAL')
+              : undefined,
+            claimed_at: willBeClaimed ? nowIso : undefined,
+          };
+        });
         const fin = calculateScratchBoardFinancials(
           b.board_cost,
           b.gross_coin_revenue,

@@ -38,7 +38,11 @@ interface ScratchBoardViewProps {
       prizeCost: number;
     }
   ) => void;
-  onTogglePrizeClaimed: (boardId: string, itemId: string) => void;
+  onTogglePrizeClaimed: (
+    boardId: string,
+    itemId: string,
+    claimType?: 'PHYSICAL' | 'CASHBACK'
+  ) => void;
   onDeletePrizeFromBoard: (boardId: string, itemId: string) => void;
   onRecordBatchProgress: (payload: {
     boardId: string;
@@ -119,6 +123,15 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
   const [cashbackAmountInput, setCashbackAmountInput] = useState<string>('');
   const [prizeCostInput, setPrizeCostInput] = useState<string>('');
   const [formError, setFormError] = useState<string | null>(null);
+
+  // 開獎兌領二擇一彈窗狀態 (拿獎 vs 回錢，需求 8)
+  const [choiceModalPrize, setChoiceModalPrize] = useState<{
+    item_id: string;
+    number_label: number;
+    prize_name?: string;
+    prize_cost: number;
+    cashback_amount: number;
+  } | null>(null);
 
   // 分批巡場紀錄表單狀態
   const [batchRemainingHoles, setBatchRemainingHoles] = useState<number>(
@@ -693,15 +706,29 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                       >
                         <button
                           type="button"
-                          onClick={() =>
-                            onTogglePrizeClaimed(selectedBoard.board_id, p.item_id)
-                          }
+                          onClick={() => {
+                            if (p.is_claimed) {
+                              onTogglePrizeClaimed(selectedBoard.board_id, p.item_id);
+                              return;
+                            }
+                            if (p.is_cashback && p.prize_cost > 0) {
+                              setChoiceModalPrize(p);
+                              return;
+                            }
+                            if (p.is_cashback && (!p.prize_cost || p.prize_cost === 0)) {
+                              onTogglePrizeClaimed(selectedBoard.board_id, p.item_id, 'CASHBACK');
+                              return;
+                            }
+                            onTogglePrizeClaimed(selectedBoard.board_id, p.item_id, 'PHYSICAL');
+                          }}
                           className="flex items-center gap-2 text-left min-w-0 flex-1"
                         >
                           <span
                             className={`w-8 h-8 rounded-lg font-mono font-black text-xs flex items-center justify-center shrink-0 ${
                               p.is_claimed
-                                ? 'bg-emerald-500 text-slate-950'
+                                ? p.claim_type === 'CASHBACK'
+                                  ? 'bg-amber-500 text-slate-950'
+                                  : 'bg-emerald-500 text-slate-950'
                                 : 'bg-slate-800 text-amber-400'
                             }`}
                           >
@@ -712,7 +739,19 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                               {p.prize_name || (p.is_cashback ? '回錢獎' : '大獎')}
                             </div>
                             <div className="text-[10px] font-mono text-slate-400 truncate">
-                              {p.is_cashback ? (
+                              {p.is_claimed ? (
+                                p.claim_type === 'PHYSICAL' ? (
+                                  <span className="text-emerald-400 font-bold">🎁 拿獎 (${p.prize_cost})</span>
+                                ) : p.claim_type === 'CASHBACK' ? (
+                                  <span className="text-amber-400 font-bold">💵 回錢 -${p.cashback_amount}</span>
+                                ) : (
+                                  <span className="text-emerald-400 font-bold">已開出</span>
+                                )
+                              ) : p.is_cashback && p.prize_cost > 0 ? (
+                                <span className="text-amber-300 font-medium">
+                                  拿獎(${p.prize_cost}) / 回錢(${p.cashback_amount})
+                                </span>
+                              ) : p.is_cashback ? (
                                 <span className="text-amber-400">
                                   回錢 -${p.cashback_amount}
                                 </span>
@@ -1017,6 +1056,72 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
               </div>
             </div>
           )}
+        </div>
+      )}
+      {/* 兌獎二擇一彈窗 (拿獎 vs 回錢，避免扣兩次 $3000，名稱精簡好明瞭) */}
+      {choiceModalPrize && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#111827] border border-amber-500/40 rounded-2xl p-5 max-w-xs w-full space-y-4 shadow-2xl text-center">
+            <div className="space-y-1">
+              <span className="w-10 h-10 mx-auto rounded-xl bg-amber-500/20 text-amber-400 font-mono font-black text-base flex items-center justify-center">
+                #{String(choiceModalPrize.number_label).padStart(2, '0')}
+              </span>
+              <h3 className="text-white font-bold text-sm">
+                {choiceModalPrize.prize_name || '大獎'}
+              </h3>
+              <p className="text-slate-400 text-xs">
+                本獎項具備實體商品 (成本 ${choiceModalPrize.prize_cost})，並提供回錢選項 (${choiceModalPrize.cashback_amount})
+              </p>
+            </div>
+
+            <div className="text-xs text-amber-300 font-bold">
+              請選擇客人本次兌獎方式：
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  onTogglePrizeClaimed(
+                    selectedBoard!.board_id,
+                    choiceModalPrize.item_id,
+                    'PHYSICAL'
+                  );
+                  setChoiceModalPrize(null);
+                }}
+                className="py-3 px-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-sm flex flex-col items-center justify-center gap-1 shadow-lg shadow-emerald-950/40 transition-colors"
+              >
+                <span className="text-base">🎁</span>
+                <span>拿獎</span>
+                <span className="text-[10px] font-mono opacity-80">(扣成本 ${choiceModalPrize.prize_cost})</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  onTogglePrizeClaimed(
+                    selectedBoard!.board_id,
+                    choiceModalPrize.item_id,
+                    'CASHBACK'
+                  );
+                  setChoiceModalPrize(null);
+                }}
+                className="py-3 px-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-sm flex flex-col items-center justify-center gap-1 shadow-lg shadow-amber-950/40 transition-colors"
+              >
+                <span className="text-base">💵</span>
+                <span>回錢</span>
+                <span className="text-[10px] font-mono opacity-80">(退現金 ${choiceModalPrize.cashback_amount})</span>
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setChoiceModalPrize(null)}
+              className="w-full py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 text-xs font-bold transition-colors"
+            >
+              取消
+            </button>
+          </div>
         </div>
       )}
     </div>

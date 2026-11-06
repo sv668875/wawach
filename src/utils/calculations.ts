@@ -85,20 +85,43 @@ export function calculateScratchBoardFinancials(
 } {
   const claimedPrizes = prizes.filter((p) => p.is_claimed);
 
-  // 已中獎且勾選「回錢」的總回錢金額 -> 自動從當次版的幣量營收扣掉
-  const totalCashbackDeducted = claimedPrizes.reduce(
-    (sum, p) => sum + (p.is_cashback ? Number(p.cashback_amount) || 0 : 0),
-    0
-  );
+  // 1. 回錢扣減計算：
+  // 只有客人選擇「回錢」(claim_type === 'CASHBACK') 或純回錢獎項時，才計入回錢現金支出
+  const totalCashbackDeducted = claimedPrizes.reduce((sum, p) => {
+    if (p.claim_type === 'CASHBACK') {
+      return sum + (Number(p.cashback_amount) || 0);
+    }
+    if (p.claim_type === 'PHYSICAL') {
+      return sum; // 客人拿獎(實體商品)，台主無現金支出
+    }
+    // 相容未指定的情況：若有回錢金額且無實體成本，計入回錢
+    if (p.is_cashback && (!p.prize_cost || p.prize_cost === 0)) {
+      return sum + (Number(p.cashback_amount) || 0);
+    }
+    // 若同時有回錢與實體成本但未明確標註，擇一以回錢為優先扣除
+    if (p.is_cashback) {
+      return sum + (Number(p.cashback_amount) || 0);
+    }
+    return sum;
+  }, 0);
 
-  // 扣除回錢後的實質淨收幣金額
-  const netCoinRevenue = (Number(grossCoinRevenue) || 0) - totalCashbackDeducted;
-
-  // 已開出之實體獎品成本 (選填，若有設獎品成本則扣除)
-  const claimedPrizeCost = claimedPrizes.reduce(
-    (sum, p) => sum + (Number(p.prize_cost) || 0),
-    0
-  );
+  // 2. 實體獎品成本計算：
+  // 只有客人選擇「拿獎」(claim_type === 'PHYSICAL') 或純實體獎項時，才計入獎品成本消耗
+  // 若客人選擇「回錢」，實體獎品依然完好留存在機台/倉庫中，成本不損耗！
+  const claimedPrizeCost = claimedPrizes.reduce((sum, p) => {
+    if (p.claim_type === 'CASHBACK') {
+      return sum; // 客人選擇折現回錢，實體獎品未消耗，不扣成本！
+    }
+    if (p.claim_type === 'PHYSICAL') {
+      return sum + (Number(p.prize_cost) || 0);
+    }
+    // 相容舊資料：若未勾選回錢，才扣實體成本
+    if (!p.is_cashback) {
+      return sum + (Number(p.prize_cost) || 0);
+    }
+    // 若勾選了回錢且無標註 claim_type，上方已扣除現金，此處不重複扣除成本以避免重複雙重扣減！
+    return sum;
+  }, 0);
 
   const netProfit =
     netCoinRevenue - claimedPrizeCost - (Number(boardCost) || 0);
