@@ -343,8 +343,10 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
                 <label className="block text-[11px] text-slate-400 mb-1">月台租 ($)</label>
                 <input
                   type="number"
-                  value={newMachineRent}
-                  onChange={(e) => setNewMachineRent(Number(e.target.value))}
+                  value={newMachineRent === 0 ? '' : newMachineRent}
+                  onFocus={(e) => { if (e.target.value === '0') e.target.value = ''; e.target.select(); }}
+                  onChange={(e) => setNewMachineRent(e.target.value === '' ? 0 : Number(e.target.value))}
+                  placeholder="0"
                   className="w-full bg-[#0B0F17] border border-slate-700 rounded-lg px-2.5 py-2 text-xs font-mono text-white"
                 />
               </div>
@@ -375,8 +377,10 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
                   <input
                     type="number"
                     min={0}
-                    value={newMachineInitialCoin}
-                    onChange={(e) => setNewMachineInitialCoin(Number(e.target.value))}
+                    value={newMachineInitialCoin === 0 ? '' : newMachineInitialCoin}
+                    onFocus={(e) => { if (e.target.value === '0') e.target.value = ''; e.target.select(); }}
+                    onChange={(e) => setNewMachineInitialCoin(e.target.value === '' ? 0 : Number(e.target.value))}
+                    placeholder="0"
                     className="w-full bg-[#111827] border border-slate-700 rounded-lg px-2 py-1.5 text-xs font-mono text-white"
                   />
                 </div>
@@ -385,8 +389,10 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
                   <input
                     type="number"
                     min={0}
-                    value={newMachineInitialPrize}
-                    onChange={(e) => setNewMachineInitialPrize(Number(e.target.value))}
+                    value={newMachineInitialPrize === 0 ? '' : newMachineInitialPrize}
+                    onFocus={(e) => { if (e.target.value === '0') e.target.value = ''; e.target.select(); }}
+                    onChange={(e) => setNewMachineInitialPrize(e.target.value === '' ? 0 : Number(e.target.value))}
+                    placeholder="0"
                     className="w-full bg-[#111827] border border-slate-700 rounded-lg px-2 py-1.5 text-xs font-mono text-white"
                   />
                 </div>
@@ -692,7 +698,7 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
                       : 'bg-[#111827] text-slate-400 border border-slate-800'
                   }`}
                 >
-                  {b.board_seq ? `${b.board_seq}號版` : b.title}
+                  {b.board_letter ? `${b.board_letter}板` : (b.board_seq ? `${b.board_seq}號版` : b.title)}
                 </button>
               ))}
             </div>
@@ -716,10 +722,15 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
                   type="number"
                   min={0}
                   step={10}
-                  value={panelAmount}
-                  onChange={(e) =>
-                    setPanelAmount(Math.max(0, Number(e.target.value) || 0))
-                  }
+                  value={panelAmount === 0 ? '' : panelAmount}
+                  onFocus={(e) => {
+                    if (e.target.value === '0') e.target.value = '';
+                    e.target.select();
+                  }}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setPanelAmount(val === '' ? 0 : Math.max(0, Number(val)));
+                  }}
                   className="w-full bg-transparent text-3xl font-mono font-black tabular-nums text-white focus:outline-none"
                   placeholder="0"
                 />
@@ -1135,8 +1146,10 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
                   type="number"
                   min={0}
                   max={999999}
-                  value={calibrateCoin}
-                  onChange={(e) => setCalibrateCoin(Math.max(0, Number(e.target.value) || 0))}
+                  value={calibrateCoin === 0 ? '' : calibrateCoin}
+                  onFocus={(e) => { if (e.target.value === '0') e.target.value = ''; e.target.select(); }}
+                  onChange={(e) => setCalibrateCoin(e.target.value === '' ? 0 : Math.max(0, Number(e.target.value)))}
+                  placeholder="0"
                   className="w-full bg-[#0B0F17] border border-slate-700 rounded-xl px-3 py-2 text-sm font-mono font-bold text-white focus:outline-none focus:border-amber-500"
                 />
               </div>
@@ -1149,8 +1162,10 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
                   type="number"
                   min={0}
                   max={999999}
-                  value={calibratePrize}
-                  onChange={(e) => setCalibratePrize(Math.max(0, Number(e.target.value) || 0))}
+                  value={calibratePrize === 0 ? '' : calibratePrize}
+                  onFocus={(e) => { if (e.target.value === '0') e.target.value = ''; e.target.select(); }}
+                  onChange={(e) => setCalibratePrize(e.target.value === '' ? 0 : Math.max(0, Number(e.target.value)))}
+                  placeholder="0"
                   className="w-full bg-[#0B0F17] border border-slate-700 rounded-xl px-3 py-2 text-sm font-mono font-bold text-white focus:outline-none focus:border-amber-500"
                 />
               </div>

@@ -85,7 +85,8 @@ export interface BoardCheckLog {
 export interface ScratchBoard {
   board_id: string;
   machine_id: string;
-  board_seq?: number;            // 機台專屬版次 (例如 1 代表 1號版，2 代表 2號版)
+  board_letter?: string;         // 機台專屬英文字母標記 (如 'A', 'B', 'C'...)
+  board_seq?: number;            // 機台專屬版次順序 (1=A, 2=B...)
   title: string;                 // 板名 (選填或自動產生，例如: A01 1號版 - 80刮)
   total_holes: number;           // 總刮數/總洞數 (如 40, 60, 80, 100, 120, 160, 200)
   remaining_holes: number;       // 當前剩餘幾個洞

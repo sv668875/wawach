@@ -82,6 +82,7 @@ export const OverheadExpensesView: React.FC<OverheadExpensesViewProps> = ({
   // 登記定期付款彈窗狀態
   const currentMonthStr = useMemo(() => new Date().toISOString().slice(0, 7), []);
   const [payModalMachine, setPayModalMachine] = useState<Machine | null>(null);
+  const [payMonth, setPayMonth] = useState<string>(currentMonthStr);
   const [payTitle, setPayTitle] = useState('');
   const [payAmount, setPayAmount] = useState<number>(4500);
   const [payNote, setPayNote] = useState('');
@@ -312,6 +313,7 @@ export const OverheadExpensesView: React.FC<OverheadExpensesViewProps> = ({
                         type="button"
                         onClick={() => {
                           setPayModalMachine(m);
+                          setPayMonth(currentMonthStr);
                           setPayTitle(`${currentMonthStr} 台租與固定費用`);
                           setPayAmount(totalMonthly);
                           setPayNote('');
@@ -341,13 +343,15 @@ export const OverheadExpensesView: React.FC<OverheadExpensesViewProps> = ({
                         </label>
                         <input
                           type="number"
-                          value={editDraft.rent_monthly}
+                          value={editDraft.rent_monthly === 0 ? '' : editDraft.rent_monthly}
+                          onFocus={(e) => { if (e.target.value === '0') e.target.value = ''; e.target.select(); }}
                           onChange={(e) =>
                             setEditDraft({
                               ...editDraft,
-                              rent_monthly: Number(e.target.value),
+                              rent_monthly: e.target.value === '' ? 0 : Number(e.target.value),
                             })
                           }
+                          placeholder="0"
                           className="w-full bg-[#111827] border border-amber-500 rounded-lg px-2.5 py-1.5 text-xs font-mono font-bold text-white"
                         />
                       </div>
@@ -359,13 +363,15 @@ export const OverheadExpensesView: React.FC<OverheadExpensesViewProps> = ({
                           type="number"
                           min={1}
                           max={31}
-                          value={editDraft.rent_pay_day}
+                          value={editDraft.rent_pay_day === 0 ? '' : editDraft.rent_pay_day}
+                          onFocus={(e) => { if (e.target.value === '0') e.target.value = ''; e.target.select(); }}
                           onChange={(e) =>
                             setEditDraft({
                               ...editDraft,
-                              rent_pay_day: Math.min(31, Math.max(1, Number(e.target.value) || 5)),
+                              rent_pay_day: e.target.value === '' ? 1 : Math.min(31, Math.max(1, Number(e.target.value) || 5)),
                             })
                           }
+                          placeholder="5"
                           className="w-full bg-[#111827] border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs font-mono font-bold text-white"
                         />
                       </div>
@@ -513,9 +519,10 @@ export const OverheadExpensesView: React.FC<OverheadExpensesViewProps> = ({
                   type="number"
                   min={1}
                   required
-                  value={expAmount}
-                  onChange={(e) => setExpAmount(Number(e.target.value))}
-                  placeholder="金額"
+                  value={expAmount === 0 ? '' : expAmount}
+                  onFocus={(e) => { if (e.target.value === '0') e.target.value = ''; e.target.select(); }}
+                  onChange={(e) => setExpAmount(e.target.value === '' ? 0 : Number(e.target.value))}
+                  placeholder="0"
                   className="bg-[#111827] border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs font-mono text-white"
                 />
               </div>
@@ -658,8 +665,10 @@ export const OverheadExpensesView: React.FC<OverheadExpensesViewProps> = ({
                 <input
                   type="number"
                   min={0}
-                  value={newFeeAmount}
-                  onChange={(e) => setNewFeeAmount(Math.max(0, Number(e.target.value) || 0))}
+                  value={newFeeAmount === 0 ? '' : newFeeAmount}
+                  onFocus={(e) => { if (e.target.value === '0') e.target.value = ''; e.target.select(); }}
+                  onChange={(e) => setNewFeeAmount(e.target.value === '' ? 0 : Math.max(0, Number(e.target.value)))}
+                  placeholder="0"
                   className="w-full bg-[#0B0F17] border border-slate-700 rounded-xl px-3 py-2 text-sm font-mono font-bold text-white focus:outline-none focus:border-amber-500"
                 />
               </div>
@@ -718,6 +727,24 @@ export const OverheadExpensesView: React.FC<OverheadExpensesViewProps> = ({
 
             <div className="space-y-3">
               <div>
+                <label className="block text-xs text-slate-400 mb-1">
+                  繳費歸屬月份 (預設當月，可指定)
+                </label>
+                <input
+                  type="month"
+                  value={payMonth}
+                  onChange={(e) => {
+                    const mVal = e.target.value;
+                    setPayMonth(mVal);
+                    if (mVal) {
+                      setPayTitle(`${mVal} 台租與固定費用`);
+                    }
+                  }}
+                  className="w-full bg-[#0B0F17] border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-mono font-bold focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              <div>
                 <label className="block text-xs text-slate-400 mb-1">付款項目說明</label>
                 <input
                   type="text"
@@ -733,8 +760,10 @@ export const OverheadExpensesView: React.FC<OverheadExpensesViewProps> = ({
                 <input
                   type="number"
                   min={0}
-                  value={payAmount}
-                  onChange={(e) => setPayAmount(Math.max(0, Number(e.target.value) || 0))}
+                  value={payAmount === 0 ? '' : payAmount}
+                  onFocus={(e) => { if (e.target.value === '0') e.target.value = ''; e.target.select(); }}
+                  onChange={(e) => setPayAmount(e.target.value === '' ? 0 : Math.max(0, Number(e.target.value)))}
+                  placeholder="0"
                   className="w-full bg-[#0B0F17] border border-slate-700 rounded-xl px-3 py-2 text-sm font-mono font-bold text-emerald-400"
                 />
               </div>
@@ -762,11 +791,12 @@ export const OverheadExpensesView: React.FC<OverheadExpensesViewProps> = ({
               <button
                 type="button"
                 onClick={() => {
+                  const targetMonth = payMonth || currentMonthStr;
                   onRecordMachinePayment(payModalMachine.machine_id, {
                     machine_id: payModalMachine.machine_id,
-                    title: payTitle.trim() || `${currentMonthStr} 台租與雜費`,
+                    title: payTitle.trim() || `${targetMonth} 台租與固定費用`,
                     amount: payAmount,
-                    period_label: currentMonthStr,
+                    period_label: targetMonth,
                     status: 'PAID',
                     note: payNote.trim(),
                   });
@@ -811,8 +841,15 @@ export const OverheadExpensesView: React.FC<OverheadExpensesViewProps> = ({
                     className="bg-[#0B0F17] p-2.5 rounded-xl border border-slate-800 space-y-1"
                   >
                     <div className="flex items-center justify-between text-xs">
-                      <span className="font-bold text-white">{record.title}</span>
-                      <span className="font-mono font-bold text-emerald-400">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        {record.period_label && (
+                          <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-400 shrink-0">
+                            {record.period_label}
+                          </span>
+                        )}
+                        <span className="font-bold text-white truncate">{record.title}</span>
+                      </div>
+                      <span className="font-mono font-bold text-emerald-400 shrink-0">
                         ${record.amount.toLocaleString()}
                       </span>
                     </div>

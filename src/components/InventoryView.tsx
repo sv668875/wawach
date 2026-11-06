@@ -469,8 +469,10 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                   <input
                     type="number"
                     min={0}
-                    value={itemCost}
-                    onChange={(e) => setItemCost(Number(e.target.value))}
+                    value={itemCost === 0 ? '' : itemCost}
+                    onFocus={(e) => { if (e.target.value === '0') e.target.value = ''; e.target.select(); }}
+                    onChange={(e) => setItemCost(e.target.value === '' ? 0 : Number(e.target.value))}
+                    placeholder="0"
                     className="w-full bg-[#0B0F17] border border-slate-700 rounded-lg px-2.5 py-2 text-xs font-mono text-white"
                   />
                 </div>
@@ -479,8 +481,10 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                   <input
                     type="number"
                     min={1}
-                    value={itemQty}
-                    onChange={(e) => setItemQty(Number(e.target.value))}
+                    value={itemQty === 0 ? '' : itemQty}
+                    onFocus={(e) => { if (e.target.value === '0') e.target.value = ''; e.target.select(); }}
+                    onChange={(e) => setItemQty(e.target.value === '' ? 0 : Number(e.target.value))}
+                    placeholder="1"
                     className="w-full bg-[#0B0F17] border border-slate-700 rounded-lg px-2.5 py-2 text-xs font-mono text-white"
                   />
                 </div>

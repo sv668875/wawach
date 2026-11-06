@@ -1,4 +1,4 @@
-const CACHE_NAME = 'clawops-cache-v4-1793969637349';
+const CACHE_NAME = 'clawops-cache-v4-1793974747448';
 
 // 核心靜態檔案清單（含 Vite 打包產物）
 const PRECACHE_ASSETS = [
@@ -8,8 +8,8 @@ const PRECACHE_ASSETS = [
   "./icon-192.png",
   "./icon-512.png",
   "./apple-touch-icon.png",
-  "./assets/index-W30O6kcZ.js",
-  "./assets/index-CsGvU9NI.css"
+  "./assets/index-BNjzHK62.js",
+  "./assets/index-B0sW2m_n.css"
 ];
 
 // 安裝階段：快取核心靜態檔案

@@ -137,10 +137,8 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
     });
   }, [expenses, dateRange]);
 
-  // 台租乘數係數 (週為 1/4.33，月為 1，年為 12，全期間為 1)
+  // 台租乘數係數：台租為實收實付之固定成本，週與月均不除以 4，保留真實完整台租 (需求 6)
   const rentMultiplier = useMemo(() => {
-    if (periodType === 'WEEK') return 1 / 4.33;
-    if (periodType === 'MONTH') return 1;
     if (periodType === 'YEAR') return 12;
     return 1;
   }, [periodType]);
@@ -509,14 +507,6 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
               <Download className="w-3 h-3 text-emerald-400" />
               備份
             </button>
-            <button
-              type="button"
-              onClick={onResetDemoData}
-              className="p-1 rounded-lg bg-slate-900 text-slate-400 hover:text-rose-400"
-              title="重置範例"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-            </button>
           </div>
         </div>
 
@@ -738,16 +728,7 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
           </button>
         </div>
 
-        <div className="pt-2 border-t border-slate-800 flex items-center justify-between gap-2">
-          <button
-            type="button"
-            onClick={onResetDemoData}
-            className="text-xs text-slate-400 hover:text-white flex items-center gap-1"
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-            還原預設範例資料
-          </button>
-
+        <div className="pt-2 border-t border-slate-800 flex items-center justify-end">
           {/* 全系統初始化清空 (需求 2) */}
           <button
             type="button"

@@ -2,7 +2,6 @@ import React, { useState, useMemo } from 'react';
 import {
   Trophy,
   Plus,
-  CheckCircle2,
   Coins,
   History,
   Trash2,
@@ -11,8 +10,11 @@ import {
   Flame,
   AlertTriangle,
   Grid,
+  Calendar,
+  Package,
 } from 'lucide-react';
 import {
+  InventoryItem,
   Machine,
   ScratchBoard,
 } from '../types';
@@ -24,6 +26,7 @@ import {
 interface ScratchBoardViewProps {
   boards: ScratchBoard[];
   machines: Machine[];
+  inventoryItems?: InventoryItem[];
   onQuickMountBoard: (machineId: string, totalHoles: number) => void;
   onAddPrizeToBoard: (
     boardId: string,
@@ -53,6 +56,7 @@ const HOLE_PRESETS = [40, 60, 80, 100, 120, 160, 200];
 export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
   boards,
   machines,
+  inventoryItems = [],
   onQuickMountBoard,
   onAddPrizeToBoard,
   onTogglePrizeClaimed,
@@ -61,26 +65,54 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
   onUpdateGrossRevenue,
   onSettleBoard,
 }) => {
-  // 簡化子分頁名稱：版面紀錄 vs 選號統計
-  const [subTab, setSubTab] = useState<'board' | 'luck'>('board');
+  // 分頁切換：進行中刮板 vs 刮板紀錄與統計 (需求 5)
+  const [mainTab, setMainTab] = useState<'active' | 'stats'>('active');
+  const [statsViewMode, setStatsViewMode] = useState<'history' | 'luck'>('history');
+
+  // 1. 僅篩選出「進行中」刮板，按英文字母順序排列 (需求 5)
+  const activeBoards = useMemo(
+    () =>
+      boards
+        .filter((b) => b.status === 'ACTIVE')
+        .sort((a, b) =>
+          (a.board_letter || 'A').localeCompare(b.board_letter || 'A')
+        ),
+    [boards]
+  );
+
+  // 2. 僅篩選出「已下版結算」刮板，依下版時間新到舊排序
+  const settledBoards = useMemo(
+    () =>
+      boards
+        .filter((b) => b.status === 'SETTLED')
+        .sort(
+          (a, b) =>
+            new Date(b.settled_at || 0).getTime() -
+            new Date(a.settled_at || 0).getTime()
+        ),
+    [boards]
+  );
 
   const [selectedBoardId, setSelectedBoardId] = useState<string>(
-    boards.find((b) => b.status === 'ACTIVE')?.board_id ||
-      boards[0]?.board_id ||
-      ''
+    activeBoards[0]?.board_id || ''
   );
 
-  const selectedBoard = useMemo(
-    () => boards.find((b) => b.board_id === selectedBoardId) || boards[0],
-    [boards, selectedBoardId]
-  );
+  // 選取的刮板：若目前選取的板已被下版，自動指派第一個進行中的刮板
+  const selectedBoard = useMemo(() => {
+    return (
+      activeBoards.find((b) => b.board_id === selectedBoardId) ||
+      activeBoards[0] ||
+      null
+    );
+  }, [activeBoards, selectedBoardId]);
 
   const [mountMachineId, setMountMachineId] = useState<string>(
     machines[0]?.machine_id || ''
   );
   const [mountHoles, setMountHoles] = useState<number>(80);
 
-  // 新增獎項表單
+  // 新增獎項表單狀態
+  const [selectedInventoryId, setSelectedInventoryId] = useState<string>('');
   const [prizeNumberInput, setPrizeNumberInput] = useState<string>('');
   const [prizeNameInput, setPrizeNameInput] = useState<string>('');
   const [isCashbackInput, setIsCashbackInput] = useState<boolean>(false);
@@ -88,7 +120,7 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
   const [prizeCostInput, setPrizeCostInput] = useState<string>('');
   const [formError, setFormError] = useState<string | null>(null);
 
-  // 分批紀錄表單
+  // 分批巡場紀錄表單狀態
   const [batchRemainingHoles, setBatchRemainingHoles] = useState<number>(
     selectedBoard ? selectedBoard.remaining_holes : 60
   );
@@ -123,6 +155,7 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
 
   const luckStats = useMemo(() => computeNumberLuckMatrix(boards), [boards]);
 
+  // 新增獎項送出處理
   const handleAddPrizeSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedBoard) return;
@@ -130,18 +163,21 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
 
     const num = Number(prizeNumberInput);
     if (!prizeNumberInput.trim() || isNaN(num) || num < 1) {
-      setFormError('請填寫獎號');
+      setFormError('請填寫獎號 (正整數)');
       return;
     }
 
     if (selectedBoard.prizes.some((p) => p.number_label === num)) {
-      setFormError(`#${num} 已在名單中`);
+      setFormError(`#${num} 號已在獎項清單中`);
       return;
     }
 
     const cbAmount = Number(cashbackAmountInput);
-    if (isCashbackInput && (!cashbackAmountInput.trim() || isNaN(cbAmount) || cbAmount <= 0)) {
-      setFormError('勾選回錢時，金額必填');
+    if (
+      isCashbackInput &&
+      (!cashbackAmountInput.trim() || isNaN(cbAmount) || cbAmount <= 0)
+    ) {
+      setFormError('勾選回錢時，回錢金額為必填且須大於 0');
       return;
     }
 
@@ -157,6 +193,7 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
     setPrizeNameInput('');
     setCashbackAmountInput('');
     setPrizeCostInput('');
+    setSelectedInventoryId('');
   };
 
   const toggleBatchSelectNumber = (num: number) => {
@@ -168,62 +205,60 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
   const handleBatchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedBoard) return;
+
     onRecordBatchProgress({
       boardId: selectedBoard.board_id,
-      remainingHoles: Math.max(
-        0,
-        Math.min(selectedBoard.total_holes, batchRemainingHoles)
-      ),
-      addedCashRevenue: Math.max(0, Number(batchAddedCash) || 0),
+      remainingHoles: Math.max(0, Number(batchRemainingHoles)),
+      addedCashRevenue: Math.max(0, Number(batchAddedCash)),
       newlyClaimedNumbers: batchSelectedNumbers,
-      note: '',
+      note: '分批巡場記錄',
     });
+
     setBatchSelectedNumbers([]);
     setBatchAddedCash(0);
   };
 
+  const scratchedHoles = selectedBoard
+    ? selectedBoard.total_holes - selectedBoard.remaining_holes
+    : 0;
   const scratchedPct = selectedBoard
-    ? Math.round(
-        ((selectedBoard.total_holes - selectedBoard.remaining_holes) /
-          Math.max(1, selectedBoard.total_holes)) *
-          100
-      )
+    ? Math.round((scratchedHoles / Math.max(1, selectedBoard.total_holes)) * 100)
     : 0;
 
   return (
     <div className="space-y-4">
-      {/* 1. 簡潔雙子頁切換：版面紀錄 vs 選號統計 */}
-      <div className="flex items-center justify-between gap-2 bg-[#111827] border border-[#1E293B] rounded-xl p-1.5">
+      {/* 頂部主分頁切換：進行中刮板 vs 刮板紀錄與統計 (需求 5：明確分開兩者) */}
+      <div className="flex items-center bg-[#111827] p-1 rounded-xl border border-[#1E293B]">
         <button
           type="button"
-          onClick={() => setSubTab('board')}
+          onClick={() => setMainTab('active')}
           className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-bold transition-colors whitespace-nowrap ${
-            subTab === 'board'
+            mainTab === 'active'
               ? 'bg-amber-500 text-slate-950 shadow-sm'
               : 'text-slate-400 hover:text-white'
           }`}
         >
           <Grid className="w-3.5 h-3.5" />
-          版面紀錄
+          進行中刮板 ({activeBoards.length})
         </button>
 
         <button
           type="button"
-          onClick={() => setSubTab('luck')}
+          onClick={() => setMainTab('stats')}
           className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-bold transition-colors whitespace-nowrap ${
-            subTab === 'luck'
+            mainTab === 'stats'
               ? 'bg-amber-500 text-slate-950 shadow-sm'
               : 'text-slate-400 hover:text-white'
           }`}
         >
-          <Trophy className="w-3.5 h-3.5" />
-          選號統計
+          <History className="w-3.5 h-3.5" />
+          刮板紀錄與統計 ({settledBoards.length} 版結算)
         </button>
       </div>
 
-      {subTab === 'board' ? (
+      {mainTab === 'active' ? (
         <div className="space-y-4">
-          {/* 快速上版列 */}
+          {/* 快速上版操作列 */}
           <div className="bg-[#111827] border border-[#1E293B] rounded-xl p-3.5 flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               <select
@@ -261,64 +296,90 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
             </button>
           </div>
 
-          {/* 版面橫向切換 */}
-          <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
-            {boards.map((b) => {
-              const isSelected = selectedBoard?.board_id === b.board_id;
-              const m = machines.find((mc) => mc.machine_id === b.machine_id);
-              return (
-                <button
-                  key={b.board_id}
-                  type="button"
-                  onClick={() => handleSelectBoard(b)}
-                  className={`shrink-0 px-3.5 py-2 rounded-xl border text-left transition-all ${
-                    isSelected
-                      ? 'bg-amber-500/15 border-amber-500 text-white'
-                      : 'bg-[#111827] border-[#1E293B] text-slate-400'
-                  }`}
-                >
-                  <div className="flex items-center gap-1.5 text-xs font-bold whitespace-nowrap">
-                    <span className="font-mono text-amber-400">[{m?.code}]</span>
-                    <span>{b.board_seq ? `${b.board_seq}號版` : ''} ({b.total_holes}刮)</span>
-                    <span
-                      className={`text-[10px] ${
-                        b.status === 'ACTIVE' ? 'text-emerald-400' : 'text-slate-500'
-                      }`}
-                    >
-                      {b.status === 'ACTIVE' ? '● 台上' : '已結算'}
-                    </span>
-                  </div>
-                  <div className="text-[10px] font-mono text-slate-400 mt-0.5 whitespace-nowrap">
-                    剩 {b.remaining_holes} 洞 · 獎 {b.prizes.filter((p) => p.is_claimed).length}/{b.prizes.length}
-                  </div>
-                </button>
-              );
-            })}
-          </div>
+          {/* 進行中刮板橫向切換列 (僅顯示台上 ACTIVE 板，依英文字母順序排列，需求 5) */}
+          {activeBoards.length === 0 ? (
+            <div className="bg-[#111827] border border-[#1E293B] rounded-xl p-6 text-center space-y-2">
+              <Grid className="w-8 h-8 mx-auto text-slate-600" />
+              <div className="text-white text-xs font-bold">目前無任何機台上架刮板</div>
+              <p className="text-slate-400 text-[11px]">
+                請使用上方「一鍵上版」按鈕，為機台掛上新刮板（將自動從 A板 開始編號）。
+              </p>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
+              {activeBoards.map((b) => {
+                const isSelected = selectedBoard?.board_id === b.board_id;
+                const m = machines.find((mc) => mc.machine_id === b.machine_id);
+                return (
+                  <button
+                    key={b.board_id}
+                    type="button"
+                    onClick={() => handleSelectBoard(b)}
+                    className={`shrink-0 px-3.5 py-2.5 rounded-xl border text-left transition-all ${
+                      isSelected
+                        ? 'bg-amber-500/15 border-amber-500 text-white'
+                        : 'bg-[#111827] border-[#1E293B] text-slate-400'
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5 text-xs font-bold whitespace-nowrap">
+                      <span className="font-mono text-amber-400">[{m?.code}]</span>
+                      <span className="text-white font-black">
+                        {b.board_letter || 'A'}板 ({b.total_holes}刮)
+                      </span>
+                      <span className="text-[10px] text-emerald-400">● 進行中</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-3 text-[10px] font-mono text-slate-400 mt-1 whitespace-nowrap">
+                      <span>
+                        剩 {b.remaining_holes} 洞 · 獎{' '}
+                        {b.prizes.filter((p) => p.is_claimed).length}/{b.prizes.length}
+                      </span>
+                      <span className="text-slate-500">
+                        {new Date(b.created_at).toLocaleDateString([], {
+                          month: '2-digit',
+                          day: '2-digit',
+                        })}
+                      </span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
 
           {selectedBoard && (
             <>
-              {/* 本版核心損益量表卡片 */}
+              {/* 本版核心損益卡片 */}
               <div className="bg-[#111827] border border-[#1E293B] rounded-xl p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-sm font-bold text-white">
-                      {selectedBoard.title}
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-400 font-mono font-black text-xs">
+                        {selectedBoard.board_letter || 'A'}板
+                      </span>
+                      <span className="text-sm font-bold text-white truncate">
+                        {selectedBoard.title}
+                      </span>
                     </div>
-                    <div className="text-[11px] font-mono text-slate-400">
-                      已刮 {selectedBoard.total_holes - selectedBoard.remaining_holes} / {selectedBoard.total_holes} 洞 ({scratchedPct}%)
+                    <div className="text-[11px] font-mono text-slate-400 mt-1">
+                      上版時間：
+                      {new Date(selectedBoard.created_at).toLocaleString('zh-TW', {
+                        month: '2-digit',
+                        day: '2-digit',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}{' '}
+                      · 已刮 {scratchedHoles} / {selectedBoard.total_holes} 洞 ({scratchedPct}%)
                     </div>
                   </div>
-                  {selectedBoard.status === 'ACTIVE' && (
-                    <button
-                      type="button"
-                      onClick={() => onSettleBoard(selectedBoard.board_id)}
-                      className="px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold text-xs flex items-center gap-1 whitespace-nowrap"
-                    >
-                      <Flag className="w-3.5 h-3.5" />
-                      下版結算
-                    </button>
-                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => onSettleBoard(selectedBoard.board_id)}
+                    className="px-3.5 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold text-xs flex items-center gap-1 whitespace-nowrap shrink-0 shadow-lg shadow-emerald-950/30"
+                  >
+                    <Flag className="w-3.5 h-3.5" />
+                    結算下版
+                  </button>
                 </div>
 
                 {/* 視覺化刮數進度條 */}
@@ -329,7 +390,7 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                   />
                 </div>
 
-                {/* 4 格關鍵數字 */}
+                {/* 4 格關鍵損益數字 */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
                   <div className="bg-[#0B0F17] rounded-lg p-2.5 border border-slate-800/80">
                     <div className="text-[10px] text-slate-400">面板收幣</div>
@@ -371,7 +432,7 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
               {/* 分批紀錄：剩幾洞 & 哪幾號出了 */}
               <div className="bg-[#111827] border border-[#1E293B] rounded-xl p-4 space-y-3">
                 <div className="text-xs font-bold text-white flex items-center justify-between">
-                  <span>分批紀錄（剩幾洞 & 開出獎號）</span>
+                  <span>分批巡場紀錄（更新剩餘洞數 ＆ 開出獎號）</span>
                   <span className="font-mono text-amber-400">
                     目前剩 {selectedBoard.remaining_holes} 洞
                   </span>
@@ -387,10 +448,17 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                         type="number"
                         min={0}
                         max={selectedBoard.total_holes}
-                        value={batchRemainingHoles}
+                        value={batchRemainingHoles === 0 ? '' : batchRemainingHoles}
+                        onFocus={(e) => {
+                          if (e.target.value === '0') e.target.value = '';
+                          e.target.select();
+                        }}
                         onChange={(e) =>
-                          setBatchRemainingHoles(Number(e.target.value))
+                          setBatchRemainingHoles(
+                            e.target.value === '' ? 0 : Number(e.target.value)
+                          )
                         }
+                        placeholder="0"
                         className="w-full bg-transparent text-xl font-mono font-black text-amber-400 focus:outline-none"
                       />
                     </div>
@@ -403,11 +471,17 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                         type="number"
                         min={0}
                         step={10}
-                        value={batchAddedCash || ''}
+                        value={batchAddedCash === 0 ? '' : batchAddedCash}
+                        onFocus={(e) => {
+                          if (e.target.value === '0') e.target.value = '';
+                          e.target.select();
+                        }}
                         onChange={(e) =>
-                          setBatchAddedCash(Number(e.target.value))
+                          setBatchAddedCash(
+                            e.target.value === '' ? 0 : Number(e.target.value)
+                          )
                         }
-                        placeholder="$0"
+                        placeholder="0"
                         className="w-full bg-transparent text-xl font-mono font-black text-white focus:outline-none"
                       />
                     </div>
@@ -435,16 +509,12 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                                 }
                                 className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold border transition-all ${
                                   isPicked
-                                    ? 'bg-emerald-500 text-slate-950 border-emerald-400'
+                                    ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-sm'
                                     : 'bg-[#0B0F17] text-slate-200 border-slate-800'
                                 }`}
                               >
-                                #{String(p.number_label).padStart(2, '0')}
-                                {p.is_cashback
-                                  ? ` 回$${p.cashback_amount}`
-                                  : p.prize_name
-                                  ? ` ${p.prize_name}`
-                                  : ''}
+                                #{p.number_label}{' '}
+                                {p.prize_name ? `(${p.prize_name})` : ''}
                               </button>
                             );
                           })}
@@ -454,29 +524,61 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
 
                   <button
                     type="submit"
-                    className="w-full py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-xs"
+                    className="w-full py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-xs transition-colors shadow-lg shadow-amber-950/20"
                   >
-                    儲存本次進度
+                    儲存分批紀錄
                   </button>
                 </form>
               </div>
 
-              {/* 獎項清單與貼入獎號 */}
-              <div className="bg-[#111827] border border-[#1E293B] rounded-xl p-4 space-y-4">
+              {/* 獎項管理區塊 (貼入獎號 / 獎項清單) */}
+              <div className="bg-[#111827] border border-[#1E293B] rounded-xl p-4 space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-white">
-                    本版獎項號碼 ({selectedBoard.prizes.length})
-                  </span>
+                  <div className="text-xs font-bold text-white flex items-center gap-1.5">
+                    <Trophy className="w-4 h-4 text-amber-400" />
+                    <span>本版獎項清單 ({selectedBoard.prizes.length} 個獎)</span>
+                  </div>
                   <span className="text-[11px] text-slate-400">
                     點號碼可切換「已出 / 未出」
                   </span>
                 </div>
 
-                {/* 新增獎項精簡列 */}
+                {/* 新增獎項表單 (支援從倉庫庫存帶入 - 需求 4) */}
                 <form
                   onSubmit={handleAddPrizeSubmit}
-                  className="bg-[#0B0F17] border border-slate-800 rounded-xl p-3 space-y-2.5"
+                  className="bg-[#0B0F17] border border-slate-800 rounded-xl p-3.5 space-y-3"
                 >
+                  {/* 倉庫庫存品快速代入 (選填，需求 4) */}
+                  {inventoryItems.length > 0 && (
+                    <div>
+                      <label className="block text-[11px] text-sky-400 font-bold mb-1 flex items-center gap-1">
+                        <Package className="w-3.5 h-3.5" />
+                        從倉庫獎項庫存快速帶入 (選填)
+                      </label>
+                      <select
+                        value={selectedInventoryId}
+                        onChange={(e) => {
+                          const id = e.target.value;
+                          setSelectedInventoryId(id);
+                          if (!id) return;
+                          const found = inventoryItems.find((it) => it.item_id === id);
+                          if (found) {
+                            setPrizeNameInput(found.name);
+                            setPrizeCostInput(String(found.cost_price || 0));
+                          }
+                        }}
+                        className="w-full bg-[#111827] border border-slate-700 rounded-lg px-2.5 py-2 text-xs text-white focus:outline-none focus:border-sky-500"
+                      >
+                        <option value="">-- 手動自行填寫 / 非庫存品 --</option>
+                        {inventoryItems.map((it) => (
+                          <option key={it.item_id} value={it.item_id}>
+                            {it.name} (成本 ${it.cost_price} / 庫存 {it.quantity} 件)
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
                   <div className="grid grid-cols-3 gap-2">
                     <div>
                       <label className="block text-[10px] text-amber-400 font-bold mb-1">
@@ -487,9 +589,13 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                         min={1}
                         required
                         value={prizeNumberInput}
+                        onFocus={(e) => {
+                          if (e.target.value === '0') e.target.value = '';
+                          e.target.select();
+                        }}
                         onChange={(e) => setPrizeNumberInput(e.target.value)}
                         placeholder="如 18"
-                        className="w-full bg-[#111827] border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs font-mono font-bold text-white"
+                        className="w-full bg-[#111827] border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs font-mono font-bold text-white focus:outline-none focus:border-amber-500"
                       />
                     </div>
                     <div>
@@ -501,58 +607,71 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                         value={prizeNameInput}
                         onChange={(e) => setPrizeNameInput(e.target.value)}
                         placeholder="大獎/公仔"
-                        className="w-full bg-[#111827] border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white"
+                        className="w-full bg-[#111827] border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500"
                       />
                     </div>
                     <div>
                       <label className="block text-[10px] text-slate-400 mb-1">
-                        成本 (選填)
+                        成本 ($)
                       </label>
                       <input
                         type="number"
                         min={0}
-                        value={prizeCostInput}
+                        value={prizeCostInput === '0' ? '' : prizeCostInput}
+                        onFocus={(e) => {
+                          if (e.target.value === '0') e.target.value = '';
+                          e.target.select();
+                        }}
                         onChange={(e) => setPrizeCostInput(e.target.value)}
-                        placeholder="$0"
-                        className="w-full bg-[#111827] border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs font-mono text-white"
+                        placeholder="0"
+                        className="w-full bg-[#111827] border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs font-mono text-white focus:outline-none focus:border-amber-500"
                       />
                     </div>
                   </div>
 
-                  {/* 回錢勾選與必填金額 */}
-                  <div className="flex items-center justify-between gap-2 pt-1">
-                    <label className="flex items-center gap-2 text-xs font-bold text-amber-300 cursor-pointer whitespace-nowrap">
+                  {/* 回錢勾選與必填金額 (按鈕獨立往下，徹底解決擠壓問題 - 需求 3) */}
+                  <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-800">
+                    <label className="flex items-center gap-2 text-xs font-bold text-amber-300 cursor-pointer">
                       <input
                         type="checkbox"
                         checked={isCashbackInput}
                         onChange={(e) => setIsCashbackInput(e.target.checked)}
                         className="w-4 h-4 accent-amber-500 rounded"
                       />
-                      可回錢 (中獎自動扣幣量)
+                      可回錢 (中獎退現金扣收幣)
                     </label>
 
                     {isCashbackInput && (
-                      <input
-                        type="number"
-                        min={10}
-                        required
-                        value={cashbackAmountInput}
-                        onChange={(e) => setCashbackAmountInput(e.target.value)}
-                        placeholder="回錢金額 (必填)*"
-                        className="w-36 bg-[#111827] border border-amber-500 rounded-lg px-2.5 py-1 text-xs font-mono font-bold text-amber-300"
-                      />
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[11px] text-amber-400 font-bold">$</span>
+                        <input
+                          type="number"
+                          min={10}
+                          required
+                          value={cashbackAmountInput === '0' ? '' : cashbackAmountInput}
+                          onFocus={(e) => {
+                            if (e.target.value === '0') e.target.value = '';
+                            e.target.select();
+                          }}
+                          onChange={(e) => setCashbackAmountInput(e.target.value)}
+                          placeholder="回錢金額 (必填)*"
+                          className="w-36 bg-[#111827] border border-amber-500 rounded-lg px-2.5 py-1.5 text-xs font-mono font-bold text-amber-300 focus:outline-none"
+                        />
+                      </div>
                     )}
-
-                    <button
-                      type="submit"
-                      className="ml-auto px-3.5 py-1.5 rounded-lg bg-slate-800 hover:bg-amber-500 hover:text-slate-950 text-xs font-bold text-white transition-colors whitespace-nowrap"
-                    >
-                      + 貼入獎號
-                    </button>
                   </div>
 
+                  {/* 貼入獎號按鈕：獨立整列置底 (需求 3) */}
+                  <button
+                    type="submit"
+                    className="w-full py-2.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold transition-colors flex items-center justify-center gap-1.5 shadow-md shadow-amber-950/20"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    + 貼入獎號
+                  </button>
+
                   {formError && (
-                    <div className="text-[11px] text-rose-400">{formError}</div>
+                    <div className="text-[11px] text-rose-400 font-bold">{formError}</div>
                   )}
                 </form>
 
@@ -575,10 +694,7 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                         <button
                           type="button"
                           onClick={() =>
-                            onTogglePrizeClaimed(
-                              selectedBoard.board_id,
-                              p.item_id
-                            )
+                            onTogglePrizeClaimed(selectedBoard.board_id, p.item_id)
                           }
                           className="flex items-center gap-2 text-left min-w-0 flex-1"
                         >
@@ -612,12 +728,10 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                         <button
                           type="button"
                           onClick={() =>
-                            onDeletePrizeFromBoard(
-                              selectedBoard.board_id,
-                              p.item_id
-                            )
+                            onDeletePrizeFromBoard(selectedBoard.board_id, p.item_id)
                           }
                           className="p-1 text-slate-500 hover:text-rose-400 shrink-0"
+                          title="刪除獎項"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
@@ -630,128 +744,279 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
           )}
         </div>
       ) : (
-        /* 2. 選號統計 (樂趣功能：簡潔排行榜與勝率量表) */
+        /* 主分頁 2：刮板紀錄與統計 (需求 5：獨立專屬空間，已結算板清單＋運氣分析) */
         <div className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* 常用獎號與賺賠勝率 */}
-            <div className="bg-[#111827] border border-[#1E293B] rounded-xl p-4 space-y-3">
-              <div className="flex items-center gap-2 text-xs font-bold text-white">
-                <Sparkles className="w-4 h-4 text-amber-400" />
-                常用獎號 ＆ 下版賺賠統計
-              </div>
+          {/* 子切換標籤 */}
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setStatsViewMode('history')}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+                statsViewMode === 'history'
+                  ? 'bg-amber-500 text-slate-950'
+                  : 'bg-[#111827] text-slate-400 hover:text-white border border-[#1E293B]'
+              }`}
+            >
+              📜 已結算歷史帳本 ({settledBoards.length} 版)
+            </button>
+            <button
+              type="button"
+              onClick={() => setStatsViewMode('luck')}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+                statsViewMode === 'luck'
+                  ? 'bg-amber-500 text-slate-950'
+                  : 'bg-[#111827] text-slate-400 hover:text-white border border-[#1E293B]'
+              }`}
+            >
+              🎯 選號開獎統計 (運氣矩陣)
+            </button>
+          </div>
 
-              <div className="space-y-2.5">
-                {luckStats.favoriteAndWinList.map((stat) => (
-                  <div
-                    key={stat.number_label}
-                    className="p-3 rounded-xl bg-[#0B0F17] border border-slate-800 space-y-2"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2.5">
-                        <span className="w-9 h-9 rounded-lg bg-amber-500/15 border border-amber-500/40 font-mono font-black text-sm text-amber-400 flex items-center justify-center">
-                          #{String(stat.number_label).padStart(2, '0')}
-                        </span>
-                        <div>
-                          <div className="text-xs font-bold text-white">
-                            選用 {stat.times_selected} 次 · 開出 {stat.times_claimed} 次
-                          </div>
-                          <div className="text-[11px] font-mono text-slate-400">
-                            {stat.win_boards_count} 勝 (賺) / {stat.loss_boards_count} 敗 (賠)
-                          </div>
+          {statsViewMode === 'history' ? (
+            /* A. 已結算刮板帳本列表 (需求 5) */
+            <div className="space-y-3">
+              {settledBoards.length === 0 ? (
+                <div className="bg-[#111827] border border-[#1E293B] rounded-xl p-8 text-center space-y-2">
+                  <History className="w-8 h-8 mx-auto text-slate-600" />
+                  <div className="text-white text-xs font-bold">尚無已結算的刮板紀錄</div>
+                  <p className="text-slate-400 text-[11px]">
+                    當台上的刮板開完或更換時，點擊「結算下版」，完整的上架時間、收幣、獎項成本與淨利將完整收錄於此。
+                  </p>
+                </div>
+              ) : (
+                settledBoards.map((board) => {
+                  const m = machines.find((mc) => mc.machine_id === board.machine_id);
+                  const fin = calculateScratchBoardFinancials(
+                    board.board_cost,
+                    board.gross_coin_revenue,
+                    board.prizes
+                  );
+                  const claimedPrizes = board.prizes.filter((p) => p.is_claimed);
+
+                  return (
+                    <div
+                      key={board.board_id}
+                      className="bg-[#111827] border border-slate-800 rounded-xl p-4 space-y-3"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-slate-800 text-amber-400 shrink-0">
+                            [{m?.code || '機台'}] {board.board_letter || 'A'}板
+                          </span>
+                          <span className="text-xs font-bold text-white truncate">
+                            {board.total_holes} 刮 (全結算)
+                          </span>
                         </div>
-                      </div>
 
-                      <div className="text-right">
-                        <div
-                          className={`text-sm font-mono font-bold ${
-                            stat.cumulative_board_profit >= 0
-                              ? 'text-emerald-400'
-                              : 'text-rose-400'
+                        <span
+                          className={`text-sm font-mono font-black shrink-0 ${
+                            fin.netProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'
                           }`}
                         >
-                          {stat.cumulative_board_profit >= 0 ? '+' : ''}$
-                          {stat.cumulative_board_profit.toLocaleString()}
+                          {fin.netProfit >= 0 ? '+' : ''}$
+                          {fin.netProfit.toLocaleString()}
+                        </span>
+                      </div>
+
+                      {/* 上版與下版時間 (需求 5) */}
+                      <div className="flex flex-wrap items-center justify-between text-[11px] font-mono text-slate-400 bg-[#0B0F17] px-3 py-2 rounded-lg border border-slate-800/80">
+                        <span>
+                          上版：
+                          {new Date(board.created_at).toLocaleString('zh-TW', {
+                            year: 'numeric',
+                            month: '2-digit',
+                            day: '2-digit',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })}
+                        </span>
+                        <span>
+                          結算：
+                          {board.settled_at
+                            ? new Date(board.settled_at).toLocaleString('zh-TW', {
+                                year: 'numeric',
+                                month: '2-digit',
+                                day: '2-digit',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              })
+                            : '已結算'}
+                        </span>
+                      </div>
+
+                      {/* 財務摘要 */}
+                      <div className="grid grid-cols-3 gap-2 text-center text-xs font-mono">
+                        <div className="bg-[#0B0F17] p-2 rounded-lg border border-slate-800/60">
+                          <div className="text-[10px] text-slate-500">面板總收幣</div>
+                          <div className="font-bold text-white">
+                            ${fin.grossCoinRevenue.toLocaleString()}
+                          </div>
                         </div>
-                        <div className="text-[10px] font-mono text-slate-500">
-                          勝率 {stat.win_rate_pct}%
+                        <div className="bg-[#0B0F17] p-2 rounded-lg border border-slate-800/60">
+                          <div className="text-[10px] text-slate-500">回錢支出</div>
+                          <div className="font-bold text-amber-400">
+                            -${fin.totalCashbackDeducted.toLocaleString()}
+                          </div>
+                        </div>
+                        <div className="bg-[#0B0F17] p-2 rounded-lg border border-slate-800/60">
+                          <div className="text-[10px] text-slate-500">實質實收</div>
+                          <div className="font-bold text-emerald-400">
+                            ${fin.netCoinRevenue.toLocaleString()}
+                          </div>
                         </div>
                       </div>
-                    </div>
 
-                    {/* 勝率量表 */}
-                    <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                      <div
-                        className={`h-full ${
-                          stat.win_rate_pct >= 50
-                            ? 'bg-emerald-400'
-                            : 'bg-rose-400'
-                        }`}
-                        style={{ width: `${stat.win_rate_pct}%` }}
-                      />
+                      {/* 開出獎項紀錄 */}
+                      {claimedPrizes.length > 0 && (
+                        <div className="space-y-1.5 pt-1">
+                          <div className="text-[10px] text-slate-400">開出獎項 ({claimedPrizes.length} 個)：</div>
+                          <div className="flex flex-wrap gap-1.5">
+                            {claimedPrizes.map((p) => (
+                              <span
+                                key={p.item_id}
+                                className="px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/30 text-[10px] font-mono text-emerald-300"
+                              >
+                                #{p.number_label} {p.prize_name || '大獎'}{' '}
+                                {p.is_cashback
+                                  ? `(回錢 $${p.cashback_amount})`
+                                  : p.prize_cost > 0
+                                  ? `(成本 $${p.prize_cost})`
+                                  : ''}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  </div>
-                ))}
-              </div>
+                  );
+                })
+              )}
             </div>
-
-            {/* 帶財號 vs 虧損號 */}
+          ) : (
+            /* B. 選號統計 (運氣矩陣) */
             <div className="space-y-4">
-              <div className="bg-[#111827] border border-emerald-500/30 rounded-xl p-4 space-y-2.5">
-                <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-400">
-                  <Flame className="w-4 h-4" />
-                  帶財神號 TOP 5
-                </div>
-                {luckStats.profitLeaders.slice(0, 5).map((s) => (
-                  <div
-                    key={s.number_label}
-                    className="flex items-center justify-between p-2.5 rounded-lg bg-[#0B0F17] border border-slate-800"
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono font-bold text-xs text-emerald-400">
-                        #{String(s.number_label).padStart(2, '0')}
-                      </span>
-                      <span className="text-xs text-slate-300">
-                        選 {s.times_selected} 次 ({s.win_boards_count}賺/{s.loss_boards_count}賠)
-                      </span>
-                    </div>
-                    <span className="text-xs font-mono font-bold text-emerald-400">
-                      +${s.cumulative_board_profit.toLocaleString()}
-                    </span>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* 常用獎號與賺賠勝率 */}
+                <div className="bg-[#111827] border border-[#1E293B] rounded-xl p-4 space-y-3">
+                  <div className="flex items-center gap-2 text-xs font-bold text-white">
+                    <Sparkles className="w-4 h-4 text-amber-400" />
+                    常用獎號 ＆ 下版賺賠統計
                   </div>
-                ))}
-              </div>
 
-              <div className="bg-[#111827] border border-rose-500/30 rounded-xl p-4 space-y-2.5">
-                <div className="flex items-center gap-1.5 text-xs font-bold text-rose-400">
-                  <AlertTriangle className="w-4 h-4" />
-                  虧損注意號
+                  <div className="space-y-2.5">
+                    {luckStats.favoriteAndWinList.map((stat) => (
+                      <div
+                        key={stat.number_label}
+                        className="p-3 rounded-xl bg-[#0B0F17] border border-slate-800 space-y-2"
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2.5">
+                            <span className="w-9 h-9 rounded-lg bg-amber-500/15 border border-amber-500/40 font-mono font-black text-sm text-amber-400 flex items-center justify-center">
+                              #{String(stat.number_label).padStart(2, '0')}
+                            </span>
+                            <div>
+                              <div className="text-xs font-bold text-white">
+                                選用 {stat.times_selected} 次 · 開出 {stat.times_claimed} 次
+                              </div>
+                              <div className="text-[11px] font-mono text-slate-400">
+                                {stat.win_boards_count} 勝 (賺) / {stat.loss_boards_count} 敗 (賠)
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="text-right">
+                            <div
+                              className={`text-sm font-mono font-bold ${
+                                stat.cumulative_board_profit >= 0
+                                  ? 'text-emerald-400'
+                                  : 'text-rose-400'
+                              }`}
+                            >
+                              {stat.cumulative_board_profit >= 0 ? '+' : ''}$
+                              {stat.cumulative_board_profit.toLocaleString()}
+                            </div>
+                            <div className="text-[10px] font-mono text-slate-500">
+                              勝率 {stat.win_rate_pct}%
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* 勝率量表 */}
+                        <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full ${
+                              stat.win_rate_pct >= 50
+                                ? 'bg-emerald-400'
+                                : 'bg-rose-400'
+                            }`}
+                            style={{ width: `${stat.win_rate_pct}%` }}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-                {luckStats.lossTrapList.length === 0 ? (
-                  <div className="text-xs text-slate-500 py-2">目前無虧損紀錄</div>
-                ) : (
-                  luckStats.lossTrapList.slice(0, 5).map((s) => (
-                    <div
-                      key={s.number_label}
-                      className="flex items-center justify-between p-2.5 rounded-lg bg-[#0B0F17] border border-slate-800"
-                    >
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono font-bold text-xs text-rose-400">
-                          #{String(s.number_label).padStart(2, '0')}
-                        </span>
-                        <span className="text-xs text-slate-300">
-                          選 {s.times_selected} 次 ({s.loss_boards_count} 版虧損)
+
+                {/* 帶財號 vs 虧損號 */}
+                <div className="space-y-4">
+                  <div className="bg-[#111827] border border-emerald-500/30 rounded-xl p-4 space-y-2.5">
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-400">
+                      <Flame className="w-4 h-4" />
+                      帶財神號 TOP 5
+                    </div>
+                    {luckStats.profitLeaders.slice(0, 5).map((s) => (
+                      <div
+                        key={s.number_label}
+                        className="flex items-center justify-between p-2.5 rounded-lg bg-[#0B0F17] border border-slate-800"
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono font-bold text-xs text-emerald-400">
+                            #{String(s.number_label).padStart(2, '0')}
+                          </span>
+                          <span className="text-xs text-slate-300">
+                            選 {s.times_selected} 次 ({s.win_boards_count}賺/{s.loss_boards_count}賠)
+                          </span>
+                        </div>
+                        <span className="text-xs font-mono font-bold text-emerald-400">
+                          +${s.cumulative_board_profit.toLocaleString()}
                         </span>
                       </div>
-                      <span className="text-xs font-mono font-bold text-rose-400">
-                        {s.cumulative_board_profit >= 0 ? '+' : ''}$
-                        {s.cumulative_board_profit.toLocaleString()}
-                      </span>
+                    ))}
+                  </div>
+
+                  <div className="bg-[#111827] border border-rose-500/30 rounded-xl p-4 space-y-2.5">
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-rose-400">
+                      <AlertTriangle className="w-4 h-4" />
+                      虧損注意號
                     </div>
-                  ))
-                )}
+                    {luckStats.lossTrapList.length === 0 ? (
+                      <div className="text-xs text-slate-500 py-2">目前無虧損紀錄</div>
+                    ) : (
+                      luckStats.lossTrapList.slice(0, 5).map((s) => (
+                        <div
+                          key={s.number_label}
+                          className="flex items-center justify-between p-2.5 rounded-lg bg-[#0B0F17] border border-slate-800"
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono font-bold text-xs text-rose-400">
+                              #{String(s.number_label).padStart(2, '0')}
+                            </span>
+                            <span className="text-xs text-slate-300">
+                              選 {s.times_selected} 次 ({s.loss_boards_count} 版虧損)
+                            </span>
+                          </div>
+                          <span className="text-xs font-mono font-bold text-rose-400">
+                            {s.cumulative_board_profit >= 0 ? '+' : ''}$
+                            {s.cumulative_board_profit.toLocaleString()}
+                          </span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
+          )}
         </div>
       )}
     </div>

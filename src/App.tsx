@@ -291,17 +291,22 @@ export default function App() {
     const newBoardId = `sb_${Date.now()}`;
     const holeCount = Math.max(10, Number(totalHoles) || 80);
 
-    // 智能計算此機台目前進行中之版次 (1號版、2號版...)
+    // 智能填補缺號之英文字母版次 (A, B, C, D... 缺號自動遞補，需求 5)
+    const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
     const currentActiveForMachine = scratchBoards.filter(
       (b) => b.machine_id === machineId && b.status === 'ACTIVE'
     );
-    const nextSeq = currentActiveForMachine.length + 1;
-    const defaultTitle = `${targetMachine.code} ${nextSeq}號版 (${holeCount}刮)`;
+    const usedLetters = new Set(
+      currentActiveForMachine.map((b) => b.board_letter || 'A')
+    );
+    const nextLetter = LETTERS.find((char) => !usedLetters.has(char)) || 'A';
+    const defaultTitle = `${targetMachine.code} ${nextLetter}板 (${holeCount}刮)`;
 
     const newBoard: ScratchBoard = {
       board_id: newBoardId,
       machine_id: machineId,
-      board_seq: nextSeq,
+      board_letter: nextLetter,
+      board_seq: LETTERS.indexOf(nextLetter) + 1,
       title: customTitle?.trim() || defaultTitle,
       total_holes: holeCount,
       remaining_holes: holeCount,
@@ -317,7 +322,7 @@ export default function App() {
       created_at: nowIso,
     };
 
-    // 關鍵修復：不主動結算舊板，允許多個版同時在台上！
+    // 允許多個版同時在台上
     setScratchBoards((prev) => [newBoard, ...prev]);
 
     setMachines((prev) =>
@@ -326,7 +331,7 @@ export default function App() {
       )
     );
 
-    showToast(`[${targetMachine.code}] 已成功上架 ${nextSeq}號版 (${holeCount}刮)`);
+    showToast(`[${targetMachine.code}] 已成功上架 ${nextLetter}板 (${holeCount}刮)`);
   };
 
   const handleAddPrizeToBoard = (
@@ -1030,6 +1035,7 @@ export default function App() {
           <ScratchBoardView
             boards={scratchBoards}
             machines={machines}
+            inventoryItems={inventoryItems}
             onQuickMountBoard={handleQuickMountBoard}
             onAddPrizeToBoard={handleAddPrizeToBoard}
             onTogglePrizeClaimed={handleTogglePrizeClaimed}
