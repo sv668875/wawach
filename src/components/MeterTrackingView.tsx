@@ -23,10 +23,12 @@ import {
 import {
   ClearActionType,
   CounterResetMode,
+  InventoryItem,
   Machine,
   MachineModel,
   MeterReading,
   ScratchBoard,
+  SettleBoardPayload,
 } from '../types';
 import {
   calculateSessionMetrics,
@@ -34,11 +36,13 @@ import {
   generateSampleMeterPhotoBase64,
 } from '../utils/calculations';
 import { AnalogCounterWheel } from './AnalogCounterWheel';
+import { SettleBoardModal } from './SettleBoardModal';
 
 interface MeterTrackingViewProps {
   machines: Machine[];
   readings: MeterReading[];
   scratchBoards: ScratchBoard[];
+  inventoryItems?: InventoryItem[];
   onSaveReading: (payload: {
     machineId: string;
     entryMode: MachineModel;
@@ -56,7 +60,7 @@ interface MeterTrackingViewProps {
   onCalibrateCounters: (machineId: string, initialCoin: number, initialPrize: number) => void;
   onSwitchMachineModel: (machineId: string, model: MachineModel) => void;
   onJumpToScratchBoard: (boardId?: string) => void;
-  onSettleBoard?: (boardId: string) => void;
+  onSettleBoard?: (payload: SettleBoardPayload | string) => void;
 }
 
 const QUICK_HOLE_OPTIONS = [40, 60, 80, 100, 120, 160, 200];
@@ -65,6 +69,7 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
   machines,
   readings,
   scratchBoards,
+  inventoryItems = [],
   onSaveReading,
   onQuickMountBoard,
   onAddMachine,
@@ -78,6 +83,11 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
     machines[0]?.machine_id || ''
   );
   const [machineToDelete, setMachineToDelete] = useState<Machine | null>(null);
+
+  // 統一整合式下版結清彈窗狀態 (避免二次操作與重複計帳)
+  const [modalSettleBoard, setModalSettleBoard] = useState<ScratchBoard | null>(null);
+  const [isSettleModalOpen, setIsSettleModalOpen] = useState(false);
+  const [modalPrefilledCash, setModalPrefilledCash] = useState(0);
 
   const selectedMachine = useMemo(
     () => machines.find((m) => m.machine_id === selectedMachineId) || machines[0],
@@ -170,12 +180,33 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
   const handleExecuteClearRecord = (clearAction: ClearActionType) => {
     if (!selectedMachine) return;
     const isDigital = selectedMachine.machine_model === 'DIGITAL';
+    const currentRevenue = isDigital ? panelAmount : sessionMetrics.revenue;
+
+    // 如果是「下版清0 / 下版結算」，且當前機台有進行中的板面
+    if (clearAction === 'BOARD_CLOSE_CLEAR') {
+      let targetBoard = selectedTargetBoardId
+        ? machineActiveBoards.find((b) => b.board_id === selectedTargetBoardId)
+        : null;
+
+      // 若未特別選定，但機台剛好有 1 個進行中板次，自動以該板為目標
+      if (!targetBoard && machineActiveBoards.length === 1) {
+        targetBoard = machineActiveBoards[0];
+      }
+
+      // 如果有對應的看板，直接呼叫統一的「下版結清」彈窗！一次把錢、錶、獎項、板子一起結清！
+      if (targetBoard) {
+        setModalSettleBoard(targetBoard);
+        setModalPrefilledCash(currentRevenue);
+        setIsSettleModalOpen(true);
+        return;
+      }
+    }
 
     onSaveReading({
       machineId: selectedMachine.machine_id,
       entryMode: selectedMachine.machine_model,
       clearAction,
-      panelAmount: isDigital ? panelAmount : sessionMetrics.revenue,
+      panelAmount: currentRevenue,
       coinCounter: isDigital
         ? selectedMachine.last_coin_counter +
           Math.round(panelAmount / (selectedMachine.coin_unit_value || 10))
@@ -602,7 +633,11 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
                   {onSettleBoard && (
                     <button
                       type="button"
-                      onClick={() => onSettleBoard(b.board_id)}
+                      onClick={() => {
+                        setModalSettleBoard(b);
+                        setModalPrefilledCash(panelAmount);
+                        setIsSettleModalOpen(true);
+                      }}
                       className="px-2.5 py-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/40 text-emerald-300 text-xs font-bold whitespace-nowrap"
                     >
                       下此版
@@ -1270,6 +1305,30 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
           </div>
         </div>
       )}
+
+      {/* 統一整合式下版結清彈窗 (避免二次操作與重複計帳) */}
+      <SettleBoardModal
+        isOpen={isSettleModalOpen}
+        onClose={() => {
+          setIsSettleModalOpen(false);
+          setModalSettleBoard(null);
+        }}
+        board={modalSettleBoard}
+        machine={
+          modalSettleBoard
+            ? machines.find((m) => m.machine_id === modalSettleBoard.machine_id) || selectedMachine
+            : selectedMachine
+        }
+        inventoryItems={inventoryItems}
+        prefilledCash={modalPrefilledCash}
+        onConfirmSettle={(payload) => {
+          if (onSettleBoard) {
+            onSettleBoard(payload);
+          }
+          setPanelAmount(0);
+          setNotes('');
+        }}
+      />
     </div>
   );
 };

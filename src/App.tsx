@@ -19,6 +19,7 @@ import {
   MachinePaymentRecord,
   MeterReading,
   ScratchBoard,
+  SettleBoardPayload,
 } from './types';
 import {
   INITIAL_CATEGORIES,
@@ -572,11 +573,40 @@ export default function App() {
     showToast('已更新收幣金額');
   };
 
-  const handleSettleBoard = (boardId: string) => {
+  const handleSettleBoard = (payload: SettleBoardPayload | string) => {
+    const boardId = typeof payload === 'string' ? payload : payload.boardId;
+    const finalCash =
+      typeof payload === 'string'
+        ? 0
+        : Math.max(0, Number(payload.finalCollectedCash) || 0);
+    const isAlreadyRecorded =
+      typeof payload === 'string' ? false : !!payload.isCashAlreadyRecorded;
+    const prizesAction =
+      typeof payload === 'string'
+        ? 'KEEP_ON_MACHINE'
+        : payload.remainingPrizesAction || 'RETURN_TO_WAREHOUSE';
+    const customNotes = typeof payload === 'string' ? '' : payload.notes || '';
+
     const nowIso = new Date().toISOString();
     const targetBoard = scratchBoards.find((b) => b.board_id === boardId);
     if (!targetBoard) return;
 
+    const targetMachine = machines.find(
+      (m) => m.machine_id === targetBoard.machine_id
+    );
+
+    // 1. 計算最終總收幣 (防呆：若先前已登記過，則不額外累加，避免二次記帳重複計算！)
+    const addedCash = !isAlreadyRecorded && finalCash > 0 ? finalCash : 0;
+    const finalGrossRevenue = targetBoard.gross_coin_revenue + addedCash;
+
+    // 2. 重新計算該板最終損益
+    const fin = calculateScratchBoardFinancials(
+      targetBoard.board_cost,
+      finalGrossRevenue,
+      targetBoard.prizes || []
+    );
+
+    // 3. 更新看板狀態為 SETTLED 並存入最終結算數據
     setScratchBoards((prev) =>
       prev.map((b) =>
         b.board_id === boardId
@@ -585,11 +615,84 @@ export default function App() {
               status: 'SETTLED',
               settled_at: nowIso,
               remaining_holes: 0,
+              gross_coin_revenue: fin.grossCoinRevenue,
+              total_cashback_deducted: fin.totalCashbackDeducted,
+              net_coin_revenue: fin.netCoinRevenue,
+              total_prize_cost: fin.claimedPrizeCost,
+              net_profit: fin.netProfit,
             }
           : b
       )
     );
 
+    // 4. 若本次有收幣，自動建立一筆「下版清0 (BOARD_CLOSE_CLEAR)」紀錄
+    // (確保收幣歷史有這筆紀錄，且 board_id 正確關聯，不會變成 standaloneCoin 造成二次重複計算！)
+    if (finalCash > 0) {
+      const coinUnit = targetMachine?.coin_unit_value || 10;
+      const coinsDelta = Math.round(finalCash / coinUnit);
+      const newReading: MeterReading = {
+        reading_id: `read_${Date.now()}`,
+        machine_id: targetBoard.machine_id,
+        board_id: targetBoard.board_id,
+        entry_mode: targetMachine?.machine_model || 'DIGITAL',
+        clear_action: 'BOARD_CLOSE_CLEAR',
+        read_at: nowIso,
+        panel_amount: finalCash,
+        cash_collected: finalCash,
+        last_coin_counter: targetMachine?.last_coin_counter || 0,
+        coin_counter: (targetMachine?.last_coin_counter || 0) + coinsDelta,
+        last_prize_counter: targetMachine?.last_prize_counter || 0,
+        prize_counter: targetMachine?.last_prize_counter || 0,
+        reset_mode: 'NORMAL',
+        coins_delta: coinsDelta,
+        prizes_delta: 0,
+        notes:
+          customNotes.trim() ||
+          `[${targetBoard.board_letter ? `${targetBoard.board_letter}板` : ''}結算下版] 實收 $${finalCash.toLocaleString()}`,
+      };
+      setReadings((prev) => [newReading, ...prev]);
+
+      // 更新機台最新抄錶狀態
+      setMachines((prev) =>
+        prev.map((m) => {
+          if (m.machine_id !== targetBoard.machine_id) return m;
+          return {
+            ...m,
+            last_coin_counter: newReading.coin_counter,
+            last_read_at: nowIso,
+          };
+        })
+      );
+    }
+
+    // 5. 處理未被刮出的剩餘獎品（若選擇退回倉庫）
+    if (prizesAction === 'RETURN_TO_WAREHOUSE') {
+      const unclaimedPrizes = (targetBoard.prizes || []).filter(
+        (p) => !p.is_claimed
+      );
+      const unclaimedInvIds = new Set(
+        unclaimedPrizes.map((p) => p.inventory_item_id).filter(Boolean)
+      );
+
+      if (unclaimedInvIds.size > 0) {
+        setInventoryItems((prev) =>
+          prev.map((item) => {
+            if (unclaimedInvIds.has(item.item_id)) {
+              return {
+                ...item,
+                placement: 'IN_STOCK',
+                machine_id: null,
+                updated_at: nowIso,
+                note: item.note ? `${item.note} (下版退回倉庫)` : '下版退回倉庫',
+              };
+            }
+            return item;
+          })
+        );
+      }
+    }
+
+    // 6. 機台看板交接：若該機台目前 active_board_id 為本板，自動切換至同一機台的其他進行中板次
     setMachines((prev) =>
       prev.map((m) => {
         if (m.machine_id !== targetBoard.machine_id) return m;
@@ -609,7 +712,11 @@ export default function App() {
       })
     );
 
-    showToast(`已下版結算「${targetBoard.title}」`);
+    const profitSign = fin.netProfit >= 0 ? '+$' : '-$';
+    const profitAbs = Math.abs(fin.netProfit).toLocaleString();
+    showToast(
+      `[${targetMachine?.code || '機台'}] ${targetBoard.title} 已完成下版結清！總收幣 $${fin.grossCoinRevenue.toLocaleString()}，淨利 ${profitSign}${profitAbs}`
+    );
   };
 
   const handleAddMachine = (
@@ -1077,6 +1184,7 @@ export default function App() {
             machines={machines}
             readings={readings}
             scratchBoards={scratchBoards}
+            inventoryItems={inventoryItems}
             onSaveReading={handleSaveReading}
             onQuickMountBoard={handleQuickMountBoard}
             onAddMachine={handleAddMachine}

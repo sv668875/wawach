@@ -105,6 +105,15 @@ export interface ScratchBoard {
   notes?: string;
 }
 
+// 3.1 完整整合式下版結清參數 (一次完成收幣清0、未開出獎品退庫與板面結算，避免二次操作與重複計帳)
+export interface SettleBoardPayload {
+  boardId: string;
+  finalCollectedCash: number;            // 本次下版清0收幣金額 (若為0表示先前已全數登記過)
+  isCashAlreadyRecorded?: boolean;       // 是否先前已登記過 (若為 true 則不重複將 cash 累加進 gross_coin_revenue)
+  remainingPrizesAction?: 'RETURN_TO_WAREHOUSE' | 'KEEP_ON_MACHINE'; // 未開出獎品去向：退回倉庫備品 vs 留在機台給下一版
+  notes?: string;
+}
+
 // 4. 機台收幣與清0紀錄表 (對應數位面板清0 / 下版清0 / 類比抄錶)
 export interface MeterReading {
   reading_id: string;

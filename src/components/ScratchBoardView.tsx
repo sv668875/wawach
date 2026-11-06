@@ -17,11 +17,13 @@ import {
   InventoryItem,
   Machine,
   ScratchBoard,
+  SettleBoardPayload,
 } from '../types';
 import {
   calculateScratchBoardFinancials,
   computeNumberLuckMatrix,
 } from '../utils/calculations';
+import { SettleBoardModal } from './SettleBoardModal';
 
 interface ScratchBoardViewProps {
   boards: ScratchBoard[];
@@ -54,7 +56,7 @@ interface ScratchBoardViewProps {
     note: string;
   }) => void;
   onUpdateGrossRevenue: (boardId: string, newGrossRevenue: number) => void;
-  onSettleBoard: (boardId: string) => void;
+  onSettleBoard: (payload: SettleBoardPayload | string) => void;
 }
 
 const HOLE_PRESETS = [40, 60, 80, 100, 120, 160, 200];
@@ -74,6 +76,9 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
   // 分頁切換：進行中刮板 vs 刮板紀錄與統計 (需求 5)
   const [mainTab, setMainTab] = useState<'active' | 'stats'>('active');
   const [statsViewMode, setStatsViewMode] = useState<'history' | 'luck'>('history');
+
+  // 統一整合式下版結清彈窗狀態 (避免二次操作與重複計帳)
+  const [isSettleModalOpen, setIsSettleModalOpen] = useState(false);
 
   // 1. 僅篩選出「進行中」刮板，按英文字母順序排列 (需求 5)
   const activeBoards = useMemo(
@@ -393,7 +398,7 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
 
                   <button
                     type="button"
-                    onClick={() => onSettleBoard(selectedBoard.board_id)}
+                    onClick={() => setIsSettleModalOpen(true)}
                     className="px-3.5 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold text-xs flex items-center gap-1 whitespace-nowrap shrink-0 shadow-lg shadow-emerald-950/30"
                   >
                     <Flag className="w-3.5 h-3.5" />
@@ -503,6 +508,9 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                         placeholder="0"
                         className="w-full bg-transparent text-xl font-mono font-black text-white focus:outline-none"
                       />
+                      <span className="block text-[9px] text-slate-500 mt-1 leading-tight">
+                        💡 巡場有收幣可在此累加；若習慣整版下版才一次清0，此處留空即可，下版時系統會一次結算。
+                      </span>
                     </div>
                   </div>
 
@@ -1145,6 +1153,18 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
           </div>
         </div>
       )}
+
+      {/* 統一整合式下版結清彈窗 (避免二次操作與重複計帳) */}
+      <SettleBoardModal
+        isOpen={isSettleModalOpen}
+        onClose={() => setIsSettleModalOpen(false)}
+        board={selectedBoard}
+        machine={machines.find((m) => m.machine_id === selectedBoard?.machine_id) || null}
+        inventoryItems={inventoryItems}
+        onConfirmSettle={(payload) => {
+          onSettleBoard(payload);
+        }}
+      />
     </div>
   );
 };
