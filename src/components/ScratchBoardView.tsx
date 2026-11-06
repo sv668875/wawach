@@ -143,6 +143,29 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
   const [syncToMachineInventory, setSyncToMachineInventory] = useState<boolean>(false);
   const [formError, setFormError] = useState<string | null>(null);
 
+  // 1. 統計所有進行中刮板已經佔用的倉庫庫存 ID (防呆防重覆選取)
+  const activeAssignedInvIds = useMemo(() => {
+    const ids = new Set<string>();
+    boards
+      .filter((b) => b.status === 'ACTIVE')
+      .forEach((b) => {
+        b.prizes.forEach((p) => {
+          if (p.inventory_item_id) ids.add(p.inventory_item_id);
+        });
+      });
+    return ids;
+  }, [boards]);
+
+  // 2. 僅篩選出真正屬於倉庫備品 (IN_STOCK)、數量 > 0、且尚未被目前台上刮板選走的可用獎項
+  const availableWarehouseItems = useMemo(() => {
+    return inventoryItems.filter(
+      (it) =>
+        it.placement === 'IN_STOCK' &&
+        it.quantity > 0 &&
+        !activeAssignedInvIds.has(it.item_id)
+    );
+  }, [inventoryItems, activeAssignedInvIds]);
+
   // 開獎兌領二擇一彈窗狀態 (拿獎 vs 回錢，需求 8)
   const [choiceModalPrize, setChoiceModalPrize] = useState<{
     item_id: string;
@@ -586,20 +609,27 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                   onSubmit={handleAddPrizeSubmit}
                   className="bg-[#0B0F17] border border-slate-800 rounded-xl p-3.5 space-y-3"
                 >
-                  {/* 倉庫庫存品快速代入 (選填，需求 4) */}
-                  {inventoryItems.length > 0 && (
+                  {/* 倉庫庫存品快速代入 (選填，選中上板後選項立即排除不重覆) */}
+                  {inventoryItems.some((it) => it.placement === 'IN_STOCK') && (
                     <div>
-                      <label className="block text-[11px] text-sky-400 font-bold mb-1 flex items-center gap-1">
-                        <Package className="w-3.5 h-3.5" />
-                        從倉庫獎項庫存快速帶入 (選填)
-                      </label>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-[11px] text-sky-400 font-bold flex items-center gap-1">
+                          <Package className="w-3.5 h-3.5" />
+                          從倉庫獎項庫存快速帶入 (選填)
+                        </label>
+                        <span className="text-[10px] text-slate-500 font-mono">
+                          {availableWarehouseItems.length > 0
+                            ? `可用備品 ${availableWarehouseItems.length} 種`
+                            : '已全數上板'}
+                        </span>
+                      </div>
                       <select
                         value={selectedInventoryId}
                         onChange={(e) => {
                           const id = e.target.value;
                           setSelectedInventoryId(id);
                           if (!id) return;
-                          const found = inventoryItems.find((it) => it.item_id === id);
+                          const found = availableWarehouseItems.find((it) => it.item_id === id);
                           if (found) {
                             setPrizeNameInput(found.name);
                             const costStr = String(found.unit_cost || 0);
@@ -609,10 +639,19 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                             }
                           }
                         }}
-                        className="w-full bg-[#111827] border border-slate-700 rounded-lg px-2.5 py-2 text-xs text-white focus:outline-none focus:border-sky-500"
+                        disabled={availableWarehouseItems.length === 0}
+                        className={`w-full bg-[#111827] border rounded-lg px-2.5 py-2 text-xs text-white focus:outline-none transition-colors ${
+                          availableWarehouseItems.length === 0
+                            ? 'border-slate-800 text-slate-500 cursor-not-allowed opacity-60'
+                            : 'border-slate-700 focus:border-sky-500'
+                        }`}
                       >
-                        <option value="">-- 手動自行填寫 / 非庫存品 --</option>
-                        {inventoryItems.map((it) => (
+                        <option value="">
+                          {availableWarehouseItems.length === 0
+                            ? '-- 倉庫備品已全部上板，無剩餘可用庫存 --'
+                            : '-- 手動自行填寫 / 非庫存品 --'}
+                        </option>
+                        {availableWarehouseItems.map((it) => (
                           <option key={it.item_id} value={it.item_id}>
                             {it.name} (成本 ${it.unit_cost} / 庫存 {it.quantity} 件)
                           </option>

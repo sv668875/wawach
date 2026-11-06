@@ -351,12 +351,69 @@ export default function App() {
     }
   ) => {
     const targetBoard = scratchBoards.find((b) => b.board_id === boardId);
+    const machineId = targetBoard?.machine_id || null;
+    const targetMachine = machines.find((m) => m.machine_id === machineId);
     let assignedInvId = prizeInput.inventoryItemId;
 
-    // 做法 A：若勾選「同步登記為該機台庫存」，自動在庫存中建立 ON_MACHINE 商品 (方便統計壓貨資金)
-    if (prizeInput.syncToInventory && prizeInput.prizeName && prizeInput.prizeCost > 0) {
-      const machineId = targetBoard?.machine_id || null;
-      const targetMachine = machines.find((m) => m.machine_id === machineId);
+    // 1. 若選擇倉庫備品 (prizeInput.inventoryItemId)：自倉庫移轉至該機台庫存，選項隨即排除不重覆
+    if (prizeInput.inventoryItemId) {
+      const warehouseItem = inventoryItems.find(
+        (it) => it.item_id === prizeInput.inventoryItemId
+      );
+      if (warehouseItem) {
+        if (warehouseItem.quantity <= 1) {
+          // 數量僅 1 件：直接移轉為機台庫存 (ON_MACHINE)，倉庫備品中不再可選
+          assignedInvId = warehouseItem.item_id;
+          setInventoryItems((prev) =>
+            prev.map((it) => {
+              if (it.item_id !== warehouseItem.item_id) return it;
+              return {
+                ...it,
+                placement: 'ON_MACHINE',
+                machine_id: machineId,
+                note: `自倉庫移轉至 [${targetMachine?.code || '機台'}] 刮板 #${prizeInput.numberLabel}`,
+                updated_at: new Date().toISOString(),
+              };
+            })
+          );
+        } else {
+          // 數量 > 1 件：倉庫扣除 1 件，並獨立新建 1 件機台庫存
+          const newMachineInvId = `inv_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+          assignedInvId = newMachineInvId;
+          const newOnMachineItem: InventoryItem = {
+            item_id: newMachineInvId,
+            name: warehouseItem.name,
+            category: warehouseItem.category,
+            acquisition_source: warehouseItem.acquisition_source,
+            unit_cost: warehouseItem.unit_cost,
+            quantity: 1,
+            placement: 'ON_MACHINE',
+            machine_id: machineId,
+            note: `自倉庫備品分出 1 件移轉至 [${targetMachine?.code || '機台'}] 刮板 #${prizeInput.numberLabel}`,
+            updated_at: new Date().toISOString(),
+          };
+          setInventoryItems((prev) => [
+            newOnMachineItem,
+            ...prev.map((it) => {
+              if (it.item_id !== warehouseItem.item_id) return it;
+              return {
+                ...it,
+                quantity: Math.max(0, it.quantity - 1),
+                updated_at: new Date().toISOString(),
+              };
+            }),
+          ]);
+        }
+        showToast(
+          `已自倉庫帶入 #${prizeInput.numberLabel} ${warehouseItem.name} (已移轉至機台庫存)`
+        );
+      }
+    } else if (
+      prizeInput.syncToInventory &&
+      prizeInput.prizeName &&
+      prizeInput.prizeCost > 0
+    ) {
+      // 2. 做法 A：若勾選「同步登記為該機台庫存」，自動在庫存中建立 ON_MACHINE 商品 (方便統計壓貨資金)
       const newInvItem: InventoryItem = {
         item_id: `inv_${Date.now()}`,
         name: prizeInput.prizeName.trim(),
@@ -371,7 +428,9 @@ export default function App() {
       };
       assignedInvId = newInvItem.item_id;
       setInventoryItems((prev) => [newInvItem, ...prev]);
-      showToast(`已加入 #${prizeInput.numberLabel} 並登記至 [${targetMachine?.code || '機台'}] 庫存`);
+      showToast(
+        `已加入 #${prizeInput.numberLabel} 並登記至 [${targetMachine?.code || '機台'}] 庫存`
+      );
     } else {
       showToast(`已加入 #${String(prizeInput.numberLabel).padStart(2, '0')}`);
     }
@@ -471,6 +530,25 @@ export default function App() {
   };
 
   const handleDeletePrizeFromBoard = (boardId: string, itemId: string) => {
+    const targetBoard = scratchBoards.find((b) => b.board_id === boardId);
+    const targetPrize = targetBoard?.prizes.find((p) => p.item_id === itemId);
+
+    // 若刪除/取下的獎項有對應的庫存 ID，將該庫存退回倉庫備品 (IN_STOCK)，重現於選單中
+    if (targetPrize?.inventory_item_id) {
+      setInventoryItems((prev) =>
+        prev.map((it) => {
+          if (it.item_id !== targetPrize.inventory_item_id) return it;
+          return {
+            ...it,
+            placement: 'IN_STOCK',
+            machine_id: null,
+            note: `${it.note ? `${it.note} (取下退回倉庫)` : '取下退回倉庫'}`,
+            updated_at: new Date().toISOString(),
+          };
+        })
+      );
+    }
+
     setScratchBoards((prev) =>
       prev.map((b) => {
         if (b.board_id !== boardId) return b;
@@ -490,6 +568,7 @@ export default function App() {
         };
       })
     );
+    showToast(`已從刮板取下獎項 #${targetPrize?.number_label || ''}`);
   };
 
   const handleRecordBatchProgress = (payload: {
@@ -666,19 +745,33 @@ export default function App() {
       );
     }
 
-    // 5. 處理未被刮出的剩餘獎品（若選擇退回倉庫）
-    if (prizesAction === 'RETURN_TO_WAREHOUSE') {
-      const unclaimedPrizes = (targetBoard.prizes || []).filter(
-        (p) => !p.is_claimed
+    // 5. 處理獎品去向：
+    // 5.1 客人已領走實體商品（PHYSICAL）的獎項，正式出庫銷帳，不再計入機台壓貨成本
+    const claimedPhysicalPrizes = (targetBoard.prizes || []).filter(
+      (p) => p.is_claimed && p.claim_type !== 'CASHBACK'
+    );
+    const claimedInvIds = new Set(
+      claimedPhysicalPrizes.map((p) => p.inventory_item_id).filter(Boolean)
+    );
+    if (claimedInvIds.size > 0) {
+      setInventoryItems((prev) =>
+        prev.filter((item) => !claimedInvIds.has(item.item_id))
       );
-      const unclaimedInvIds = new Set(
-        unclaimedPrizes.map((p) => p.inventory_item_id).filter(Boolean)
+    }
+
+    // 5.2 未被刮出或客人選擇折現回錢（實體未出）的獎品，若選擇退回倉庫
+    if (prizesAction === 'RETURN_TO_WAREHOUSE') {
+      const retainedPrizes = (targetBoard.prizes || []).filter(
+        (p) => !p.is_claimed || p.claim_type === 'CASHBACK'
+      );
+      const returnInvIds = new Set(
+        retainedPrizes.map((p) => p.inventory_item_id).filter(Boolean)
       );
 
-      if (unclaimedInvIds.size > 0) {
+      if (returnInvIds.size > 0) {
         setInventoryItems((prev) =>
           prev.map((item) => {
-            if (unclaimedInvIds.has(item.item_id)) {
+            if (returnInvIds.has(item.item_id)) {
               return {
                 ...item,
                 placement: 'IN_STOCK',
