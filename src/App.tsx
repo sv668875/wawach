@@ -342,8 +342,36 @@ export default function App() {
       isCashback: boolean;
       cashbackAmount: number;
       prizeCost: number;
+      syncToInventory?: boolean;
+      inventoryItemId?: string;
     }
   ) => {
+    const targetBoard = scratchBoards.find((b) => b.board_id === boardId);
+    let assignedInvId = prizeInput.inventoryItemId;
+
+    // 做法 A：若勾選「同步登記為該機台庫存」，自動在庫存中建立 ON_MACHINE 商品 (方便統計壓貨資金)
+    if (prizeInput.syncToInventory && prizeInput.prizeName && prizeInput.prizeCost > 0) {
+      const machineId = targetBoard?.machine_id || null;
+      const targetMachine = machines.find((m) => m.machine_id === machineId);
+      const newInvItem: InventoryItem = {
+        item_id: `inv_${Date.now()}`,
+        name: prizeInput.prizeName.trim(),
+        category: '公仔大獎',
+        acquisition_source: '採購',
+        unit_cost: prizeInput.prizeCost,
+        quantity: 1,
+        placement: 'ON_MACHINE',
+        machine_id: machineId,
+        note: `自 [${targetMachine?.code || '機台'}] 刮板 #${prizeInput.numberLabel} 同步建檔`,
+        updated_at: new Date().toISOString(),
+      };
+      assignedInvId = newInvItem.item_id;
+      setInventoryItems((prev) => [newInvItem, ...prev]);
+      showToast(`已加入 #${prizeInput.numberLabel} 並登記至 [${targetMachine?.code || '機台'}] 庫存`);
+    } else {
+      showToast(`已加入 #${String(prizeInput.numberLabel).padStart(2, '0')}`);
+    }
+
     setScratchBoards((prev) =>
       prev.map((b) => {
         if (b.board_id !== boardId) return b;
@@ -357,6 +385,7 @@ export default function App() {
             ? prizeInput.cashbackAmount
             : 0,
           prize_cost: prizeInput.prizeCost || 0,
+          inventory_item_id: assignedInvId,
           is_claimed: false,
         };
         const nextPrizes = [...b.prizes, newPrize].sort(
@@ -377,7 +406,6 @@ export default function App() {
         };
       })
     );
-    showToast(`已加入 #${String(prizeInput.numberLabel).padStart(2, '0')}`);
   };
 
   const handleTogglePrizeClaimed = (
@@ -386,6 +414,26 @@ export default function App() {
     claimType?: 'PHYSICAL' | 'CASHBACK'
   ) => {
     const nowIso = new Date().toISOString();
+
+    // 當客人「拿獎」實體商品出貨時，若有綁定庫存品項，自動扣減庫存數量 1 件
+    if (claimType === 'PHYSICAL') {
+      const targetBoard = scratchBoards.find((b) => b.board_id === boardId);
+      const targetPrize = targetBoard?.prizes.find((p) => p.item_id === itemId);
+      if (targetPrize?.inventory_item_id) {
+        setInventoryItems((prev) =>
+          prev
+            .map((item) => {
+              if (item.item_id !== targetPrize.inventory_item_id) return item;
+              return {
+                ...item,
+                quantity: item.quantity - 1,
+              };
+            })
+            .filter((item) => item.quantity > 0)
+        );
+      }
+    }
+
     setScratchBoards((prev) =>
       prev.map((b) => {
         if (b.board_id !== boardId) return b;

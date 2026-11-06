@@ -36,6 +36,8 @@ interface ScratchBoardViewProps {
       isCashback: boolean;
       cashbackAmount: number;
       prizeCost: number;
+      syncToInventory?: boolean;
+      inventoryItemId?: string;
     }
   ) => void;
   onTogglePrizeClaimed: (
@@ -122,6 +124,7 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
   const [isCashbackInput, setIsCashbackInput] = useState<boolean>(false);
   const [cashbackAmountInput, setCashbackAmountInput] = useState<string>('');
   const [prizeCostInput, setPrizeCostInput] = useState<string>('');
+  const [syncToMachineInventory, setSyncToMachineInventory] = useState<boolean>(false);
   const [formError, setFormError] = useState<string | null>(null);
 
   // 開獎兌領二擇一彈窗狀態 (拿獎 vs 回錢，需求 8)
@@ -200,6 +203,8 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
       isCashback: isCashbackInput,
       cashbackAmount: isCashbackInput ? cbAmount : 0,
       prizeCost: Number(prizeCostInput) || 0,
+      syncToInventory: syncToMachineInventory,
+      inventoryItemId: selectedInventoryId || undefined,
     });
 
     setPrizeNumberInput('');
@@ -207,6 +212,7 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
     setCashbackAmountInput('');
     setPrizeCostInput('');
     setSelectedInventoryId('');
+    setSyncToMachineInventory(false);
   };
 
   const toggleBatchSelectNumber = (num: number) => {
@@ -673,6 +679,21 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                       </div>
                     )}
                   </div>
+
+                  {/* 同步登記機台庫存勾選框 (做法 A：手動自填商品時，可勾選同步登記至該機台庫存) */}
+                  {Number(prizeCostInput) > 0 && prizeNameInput.trim() && !selectedInventoryId && (
+                    <div className="pt-2 border-t border-slate-800">
+                      <label className="flex items-center gap-2 text-xs font-bold text-sky-400 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={syncToMachineInventory}
+                          onChange={(e) => setSyncToMachineInventory(e.target.checked)}
+                          className="w-4 h-4 accent-sky-500 rounded"
+                        />
+                        <span>同步登記為該機台庫存 (在台商品，自動計入壓貨資金)</span>
+                      </label>
+                    </div>
+                  )}
 
                   {/* 貼入獎號按鈕：獨立整列置底 (需求 3) */}
                   <button

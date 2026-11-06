@@ -95,6 +95,21 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
     () => inStockItems.reduce((s, i) => s + i.unit_cost * i.quantity, 0),
     [inStockItems]
   );
+  const grandTotalValue = totalOnMachineValue + totalInStockValue;
+  const onMachineQuantity = useMemo(
+    () => onMachineItems.reduce((s, i) => s + i.quantity, 0),
+    [onMachineItems]
+  );
+  const inStockQuantity = useMemo(
+    () => inStockItems.reduce((s, i) => s + i.quantity, 0),
+    [inStockItems]
+  );
+  const totalQuantity = onMachineQuantity + inStockQuantity;
+  const onMachinePct =
+    grandTotalValue > 0
+      ? Math.round((totalOnMachineValue / grandTotalValue) * 100)
+      : 50;
+  const inStockPct = Math.max(0, 100 - onMachinePct);
 
   const handleCreateCategory = (e: React.FormEvent) => {
     e.preventDefault();
@@ -190,38 +205,84 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
         </button>
       </div>
 
-      {/* 2. 貨值比重小量表 */}
-      <div className="bg-[#111827] border border-[#1E293B] rounded-xl p-3.5 space-y-2">
-        <div className="flex items-center justify-between text-xs">
-          <div className="flex items-center gap-2">
-            <span className="text-amber-400 font-bold">
-              機台 ${totalOnMachineValue.toLocaleString()}
-            </span>
-            <span className="text-slate-600">/</span>
-            <span className="text-emerald-400 font-bold">
-              倉庫 ${totalInStockValue.toLocaleString()}
-            </span>
+      {/* 2. 庫存壓貨資金與資產總覽統計卡 (完整統計所有庫存、機台庫存、倉庫庫存壓貨金額) */}
+      <div className="bg-[#111827] border border-[#1E293B] rounded-2xl p-4 space-y-3.5 shadow-lg">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center">
+              <Package className="w-4 h-4" />
+            </div>
+            <div>
+              <div className="text-xs font-bold text-white">總壓貨資金與庫存統計</div>
+              <div className="text-[10px] text-slate-400">當前所有在庫存與機台上的商品資產總值</div>
+            </div>
           </div>
-          <span className="text-[11px] font-mono text-slate-400">
-            總貨值 ${(totalOnMachineValue + totalInStockValue).toLocaleString()}
-          </span>
+          <div className="text-right">
+            <div className="text-[10px] text-slate-400">全場總壓貨資金</div>
+            <div className="text-lg font-mono font-black text-amber-400">
+              ${grandTotalValue.toLocaleString()}
+            </div>
+          </div>
         </div>
-        <div className="w-full h-2 bg-[#0B0F17] rounded-full overflow-hidden flex border border-slate-800">
-          <div
-            className="h-full bg-amber-500 transition-all"
-            style={{
-              width: `${
-                totalOnMachineValue + totalInStockValue > 0
-                  ? Math.round(
-                      (totalOnMachineValue /
-                        (totalOnMachineValue + totalInStockValue)) *
-                        100
-                    )
-                  : 50
-              }%`,
-            }}
-          />
-          <div className="h-full flex-1 bg-emerald-500" />
+
+        {/* 3 格核心壓貨金額與數量 */}
+        <div className="grid grid-cols-3 gap-2 text-center">
+          {/* 總件數 */}
+          <div className="bg-[#0B0F17] rounded-xl p-2.5 border border-slate-800 space-y-0.5">
+            <div className="text-[10px] text-slate-400">商品總數量</div>
+            <div className="text-sm font-mono font-black text-white">
+              {totalQuantity} <span className="text-[10px] font-normal text-slate-400">件</span>
+            </div>
+            <div className="text-[10px] font-mono text-slate-500">
+              共 {items.length} 個品項
+            </div>
+          </div>
+
+          {/* 機台在台壓貨 */}
+          <div className="bg-[#0B0F17] rounded-xl p-2.5 border border-slate-800 space-y-0.5">
+            <div className="text-[10px] text-amber-400 font-bold flex items-center justify-center gap-1">
+              <Cpu className="w-3 h-3" /> 機台在台壓貨
+            </div>
+            <div className="text-sm font-mono font-black text-amber-400">
+              ${totalOnMachineValue.toLocaleString()}
+            </div>
+            <div className="text-[10px] font-mono text-slate-400">
+              {onMachineQuantity} 件 ({onMachinePct}%)
+            </div>
+          </div>
+
+          {/* 倉庫備品壓貨 */}
+          <div className="bg-[#0B0F17] rounded-xl p-2.5 border border-slate-800 space-y-0.5">
+            <div className="text-[10px] text-emerald-400 font-bold flex items-center justify-center gap-1">
+              <Archive className="w-3 h-3" /> 倉庫備品壓貨
+            </div>
+            <div className="text-sm font-mono font-black text-emerald-400">
+              ${totalInStockValue.toLocaleString()}
+            </div>
+            <div className="text-[10px] font-mono text-slate-400">
+              {inStockQuantity} 件 ({inStockPct}%)
+            </div>
+          </div>
+        </div>
+
+        {/* 貨值比重進度條 */}
+        <div className="space-y-1">
+          <div className="w-full h-2 bg-[#0B0F17] rounded-full overflow-hidden flex border border-slate-800">
+            <div
+              className="h-full bg-amber-500 transition-all"
+              style={{ width: `${onMachinePct}%` }}
+              title="機台在台"
+            />
+            <div
+              className="h-full bg-emerald-500 transition-all"
+              style={{ width: `${inStockPct}%` }}
+              title="倉庫備品"
+            />
+          </div>
+          <div className="flex items-center justify-between text-[10px] font-mono text-slate-500">
+            <span className="text-amber-400/90 font-medium">● 機台在台壓貨 {onMachinePct}%</span>
+            <span className="text-emerald-400/90 font-medium">● 倉庫備品壓貨 {inStockPct}%</span>
+          </div>
         </div>
       </div>
 
