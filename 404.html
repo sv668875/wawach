@@ -26,18 +26,30 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Outfit:wght@500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
-    <script type="module" crossorigin src="./assets/index-cWr78_JH.js"></script>
+    <script type="module" crossorigin src="./assets/index-BOLzli13.js"></script>
     <link rel="stylesheet" crossorigin href="./assets/index-ueTCiQIm.css">
   </head>
   <body class="bg-[#0B0F17] text-slate-100 antialiased selection:bg-amber-500/30 selection:text-amber-200">
     <div id="root"></div>
     <script>
-      // 註冊 Service Worker 實現本地離線快取
+      // 註冊 Service Worker 實現本地離線快取與即時更新
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
           navigator.serviceWorker.register('./sw.js')
             .then((reg) => {
               console.log('ClawOps Service Worker 註冊成功，離線快取已就緒！', reg.scope);
+              reg.update();
+              reg.onupdatefound = () => {
+                const newWorker = reg.installing;
+                if (newWorker) {
+                  newWorker.onstatechange = () => {
+                    if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                      console.log('檢測到新版本，自動刷新升級！');
+                      window.location.reload();
+                    }
+                  };
+                }
+              };
             })
             .catch((err) => {
               console.warn('Service Worker 註冊失敗:', err);
