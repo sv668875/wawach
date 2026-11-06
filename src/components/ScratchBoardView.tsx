@@ -583,7 +583,7 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                           const found = inventoryItems.find((it) => it.item_id === id);
                           if (found) {
                             setPrizeNameInput(found.name);
-                            setPrizeCostInput(String(found.cost_price || 0));
+                            setPrizeCostInput(String(found.unit_cost || 0));
                           }
                         }}
                         className="w-full bg-[#111827] border border-slate-700 rounded-lg px-2.5 py-2 text-xs text-white focus:outline-none focus:border-sky-500"
@@ -591,7 +591,7 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                         <option value="">-- 手動自行填寫 / 非庫存品 --</option>
                         {inventoryItems.map((it) => (
                           <option key={it.item_id} value={it.item_id}>
-                            {it.name} (成本 ${it.cost_price} / 庫存 {it.quantity} 件)
+                            {it.name} (成本 ${it.unit_cost} / 庫存 {it.quantity} 件)
                           </option>
                         ))}
                       </select>

@@ -8,7 +8,7 @@ const files = fs.readdirSync(assetsDir);
 const jsFile = files.find(f => f.endsWith('.js') && f.startsWith('index-'));
 const cssFile = files.find(f => f.endsWith('.css') && f.startsWith('index-'));
 
-const version = `clawops-cache-v4-${Date.now()}`;
+const version = `clawops-cache-v5-${Date.now()}`;
 
 const precacheList = [
   './',
@@ -81,8 +81,8 @@ self.addEventListener('fetch', (event) => {
           return response;
         })
         .catch(() => {
-          return caches.match('./index.html')
-            .then((res) => res || caches.match('./') || caches.match('/index.html') || caches.match('/'));
+          return caches.match(request)
+            .then((res) => res || caches.match('./index.html') || caches.match('./') || caches.match('/index.html') || caches.match('/'));
         })
     );
     return;

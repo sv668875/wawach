@@ -14,7 +14,9 @@ import {
   InventoryItem,
   ItemPlacement,
   Machine,
+  MachineCustomFee,
   MachineModel,
+  MachinePaymentRecord,
   MeterReading,
   ScratchBoard,
 } from './types';
@@ -638,13 +640,13 @@ export default function App() {
     // 4. 清除綁定在該機台的專屬開銷
     setExpenses((prev) => prev.filter((e) => e.machine_id !== machineId));
 
-    // 5. 將原本放置在該機台的庫存物品移回倉庫備品 (STORAGE)
+    // 5. 將原本放置在該機台的庫存物品移回倉庫備品 (IN_STOCK)
     setInventoryItems((prev) =>
       prev.map((item) =>
         item.machine_id === machineId
           ? {
               ...item,
-              placement: 'STORAGE',
+              placement: 'IN_STOCK',
               machine_id: null,
               updated_at: new Date().toISOString(),
             }

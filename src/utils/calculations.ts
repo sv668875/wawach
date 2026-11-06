@@ -83,7 +83,7 @@ export function calculateScratchBoardFinancials(
   netProfit: number;
   claimedCount: number;
 } {
-  const claimedPrizes = prizes.filter((p) => p.is_claimed);
+  const claimedPrizes = (prizes || []).filter((p) => p && p.is_claimed);
 
   // 1. 回錢扣減計算：
   // 只有客人選擇「回錢」(claim_type === 'CASHBACK') 或純回錢獎項時，才計入回錢現金支出
@@ -123,6 +123,7 @@ export function calculateScratchBoardFinancials(
     return sum;
   }, 0);
 
+  const netCoinRevenue = Math.max(0, (Number(grossCoinRevenue) || 0) - totalCashbackDeducted);
   const netProfit =
     netCoinRevenue - claimedPrizeCost - (Number(boardCost) || 0);
 
