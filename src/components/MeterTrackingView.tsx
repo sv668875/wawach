@@ -177,30 +177,10 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
     );
   }, [selectedMachine, coinCounter, prizeCounter, resetMode]);
 
-  const handleExecuteClearRecord = (clearAction: ClearActionType) => {
+  const handleExecuteClearRecord = (clearAction: ClearActionType = 'SEGMENT_CLEAR') => {
     if (!selectedMachine) return;
     const isDigital = selectedMachine.machine_model === 'DIGITAL';
     const currentRevenue = isDigital ? panelAmount : sessionMetrics.revenue;
-
-    // 如果是「下版清0 / 下版結算」，且當前機台有進行中的板面
-    if (clearAction === 'BOARD_CLOSE_CLEAR') {
-      let targetBoard = selectedTargetBoardId
-        ? machineActiveBoards.find((b) => b.board_id === selectedTargetBoardId)
-        : null;
-
-      // 若未特別選定，但機台剛好有 1 個進行中板次，自動以該板為目標
-      if (!targetBoard && machineActiveBoards.length === 1) {
-        targetBoard = machineActiveBoards[0];
-      }
-
-      // 如果有對應的看板，直接呼叫統一的「下版結清」彈窗！一次把錢、錶、獎項、板子一起結清！
-      if (targetBoard) {
-        setModalSettleBoard(targetBoard);
-        setModalPrefilledCash(currentRevenue);
-        setIsSettleModalOpen(true);
-        return;
-      }
-    }
 
     onSaveReading({
       machineId: selectedMachine.machine_id,
@@ -214,9 +194,7 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
       prizeCounter: isDigital ? selectedMachine.last_prize_counter : prizeCounter,
       resetMode,
       targetBoardId: selectedTargetBoardId,
-      notes:
-        notes.trim() ||
-        (clearAction === 'BOARD_CLOSE_CLEAR' ? '下版清0' : '分段清0'),
+      notes: notes.trim() || '分段清0收幣',
     });
 
     setPanelAmount(0);
@@ -809,36 +787,18 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
               className="w-full bg-[#0B0F17] border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-amber-500"
             />
 
-            {/* 兩個核心清0大按鈕 */}
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                type="button"
-                onClick={() => handleExecuteClearRecord('SEGMENT_CLEAR')}
-                className="flex flex-col items-center justify-center p-3.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 transition-all shadow-md"
-              >
-                <div className="flex items-center gap-1.5 font-extrabold text-sm whitespace-nowrap">
-                  <RotateCcw className="w-4 h-4" />
-                  分段清0
-                </div>
-                <span className="text-[11px] font-semibold opacity-80 mt-0.5 whitespace-nowrap">
-                  板續留・累加營收
-                </span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleExecuteClearRecord('BOARD_CLOSE_CLEAR')}
-                className="flex flex-col items-center justify-center p-3.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 transition-all shadow-md"
-              >
-                <div className="flex items-center gap-1.5 font-extrabold text-sm whitespace-nowrap">
-                  <Flag className="w-4 h-4" />
-                  下版清0
-                </div>
-                <span className="text-[11px] font-semibold opacity-80 mt-0.5 whitespace-nowrap">
-                  板已下・結算本版
-                </span>
-              </button>
-            </div>
+            {/* 單一核心收幣大按鈕 (方案 A：純收幣清0，徹底消除誤下板風險) */}
+            <button
+              type="button"
+              onClick={() => handleExecuteClearRecord('SEGMENT_CLEAR')}
+              className="w-full flex items-center justify-center gap-2 py-3.5 px-4 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-sm transition-all shadow-md shadow-amber-950/30"
+            >
+              <RotateCcw className="w-4 h-4" />
+              <span>記錄收幣並清0</span>
+              <span className="text-[11px] font-semibold opacity-75 ml-1">
+                (板面續留・歸零機台)
+              </span>
+            </button>
           </div>
         ) : (
           /* 傳統滾輪錶模式 */
@@ -950,22 +910,18 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                type="button"
-                onClick={() => handleExecuteClearRecord('SEGMENT_CLEAR')}
-                className="py-3 rounded-xl bg-amber-500 text-slate-950 font-extrabold text-xs"
-              >
-                分段紀錄
-              </button>
-              <button
-                type="button"
-                onClick={() => handleExecuteClearRecord('BOARD_CLOSE_CLEAR')}
-                className="py-3 rounded-xl bg-emerald-500 text-slate-950 font-extrabold text-xs"
-              >
-                下版結算
-              </button>
-            </div>
+            {/* 單一核心抄錶收幣大按鈕 (方案 A) */}
+            <button
+              type="button"
+              onClick={() => handleExecuteClearRecord('SEGMENT_CLEAR')}
+              className="w-full flex items-center justify-center gap-2 py-3.5 px-4 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-sm transition-all shadow-md shadow-amber-950/30"
+            >
+              <RotateCcw className="w-4 h-4" />
+              <span>記錄抄錶收幣</span>
+              <span className="text-[11px] font-semibold opacity-75 ml-1">
+                (板面續留・記錄底數)
+              </span>
+            </button>
           </div>
         )}
       </div>
