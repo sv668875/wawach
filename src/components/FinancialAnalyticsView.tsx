@@ -151,25 +151,28 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
     });
   }, [expenses, dateRange]);
 
-  // 台租乘數係數：台租為實收實付之固定成本，週與月均不除以 4，保留真實完整台租 (需求 6)
-  const rentMultiplier = useMemo(() => {
-    if (periodType === 'YEAR') return 12;
-    return 1;
-  }, [periodType]);
+  const currentPeriodMonthStr = useMemo(() => {
+    if (periodType === 'MONTH') {
+      return `${selectedYear}-${String(selectedMonth).padStart(2, '0')}`;
+    }
+    return undefined;
+  }, [periodType, selectedYear, selectedMonth]);
 
   const analytics = useMemo(() => {
-    const rawOverhead = calculateSimpleOverhead(machines, filteredExpenses, 'ALL');
-    const adjustedGrandOverhead =
-      (rawOverhead.totalRent + rawOverhead.totalOtherFixed) * rentMultiplier +
-      rawOverhead.totalConsumableExpenses;
+    const rawOverhead = calculateSimpleOverhead(machines, filteredExpenses, 'ALL', {
+      dateRange,
+      currentPeriodMonth: currentPeriodMonthStr,
+    });
+    const adjustedGrandOverhead = rawOverhead.grandTotalOverhead;
 
     const machineBreakdown = machines.map((m) => {
       const mBoards = filteredBoards.filter((b) => b.machine_id === m.machine_id);
       const mReadings = filteredReadings.filter((r) => r.machine_id === m.machine_id);
-      const mRawOverhead = calculateSimpleOverhead(machines, filteredExpenses, m.machine_id);
-      const mAdjustedOverhead =
-        (mRawOverhead.totalRent + mRawOverhead.totalOtherFixed) * rentMultiplier +
-        mRawOverhead.totalConsumableExpenses;
+      const mRawOverhead = calculateSimpleOverhead(machines, filteredExpenses, m.machine_id, {
+        dateRange,
+        currentPeriodMonth: currentPeriodMonthStr,
+      });
+      const mAdjustedOverhead = mRawOverhead.grandTotalOverhead;
 
       let boardGrossCoin = 0;
       let boardCashbackDeducted = 0;
@@ -210,6 +213,8 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
         netRevenueAfterCashback,
         totalDirectPrizeCost,
         fixedOverhead: mAdjustedOverhead,
+        configuredMonthlyRent: Number(m.rent_monthly) || 0,
+        paidRent: mRawOverhead.totalPaidRent,
         netProfit,
       };
     });
@@ -249,7 +254,7 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
       maxMachineRevenue,
       machineBreakdown,
     };
-  }, [machines, filteredReadings, filteredBoards, filteredExpenses, rentMultiplier]);
+  }, [machines, filteredReadings, filteredBoards, filteredExpenses, dateRange, currentPeriodMonthStr]);
 
   // 計算營收結構百分比 (用於視覺化量表)
   const baseGross = Math.max(1, analytics.totalGrossRevenue);
@@ -309,10 +314,11 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
         }
       });
 
-      const rawOverhead = calculateSimpleOverhead(vMachines, filteredExpenses, 'ALL');
-      const totalOverhead =
-        (rawOverhead.totalRent + rawOverhead.totalOtherFixed) * rentMultiplier +
-        rawOverhead.totalConsumableExpenses;
+      const rawOverhead = calculateSimpleOverhead(vMachines, filteredExpenses, 'ALL', {
+        dateRange,
+        currentPeriodMonth: currentPeriodMonthStr,
+      });
+      const totalOverhead = rawOverhead.grandTotalOverhead;
 
       const netRevenue = Math.max(0, totalGross - totalCashback);
       const netProfit = netRevenue - totalPrizeCost - totalOverhead;
@@ -330,7 +336,7 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
         boardsCount: vBoards.length,
       };
     });
-  }, [uniqueVenues, machines, filteredBoards, filteredReadings, filteredExpenses, rentMultiplier]);
+  }, [uniqueVenues, machines, filteredBoards, filteredReadings, filteredExpenses, dateRange, currentPeriodMonthStr]);
 
   // 需求 10：刮板維度篩選清單
   const displayedBoards = useMemo(() => {
@@ -668,7 +674,7 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
               </div>
 
               <div className="bg-[#0B0F17] rounded-lg p-2.5 border border-slate-800">
-                <div className="text-[10px] text-slate-400 whitespace-nowrap">台租與其他</div>
+                <div className="text-[10px] text-slate-400 whitespace-nowrap">實付台租與開銷</div>
                 <div className="text-base font-mono font-bold text-amber-400">
                   -${(analytics.grandTotalOverhead ?? 0).toLocaleString()}
                 </div>
@@ -782,10 +788,13 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
                         </div>
                       </div>
                       <div>
-                        <div className="text-[10px] text-slate-500 whitespace-nowrap">台租</div>
+                        <div className="text-[10px] text-slate-500 whitespace-nowrap">實付台租</div>
                         <div className="text-xs font-mono font-bold text-amber-400">
-                          -${row.fixedOverhead.toLocaleString()}
+                          {row.paidRent > 0 ? `-$${row.paidRent.toLocaleString()}` : '$0'}
                         </div>
+                        {row.paidRent === 0 && row.configuredMonthlyRent > 0 && (
+                          <div className="text-[9px] text-slate-500 font-mono">待繳 ${row.configuredMonthlyRent.toLocaleString()}</div>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -998,7 +1007,7 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
                             {row.machine.name}
                           </span>
                           <span className="text-[10px] text-slate-500 font-mono">
-                            📍 {row.machine.location || '預設店點'} · 月台租 ${row.fixedOverhead.toLocaleString()}
+                            📍 {row.machine.location || '未分類店點'} · 月租設定 ${row.configuredMonthlyRent.toLocaleString()}
                           </span>
                         </div>
                       </div>
@@ -1054,10 +1063,13 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
                         </div>
                       </div>
                       <div>
-                        <div className="text-[10px] text-slate-500 whitespace-nowrap">台租</div>
+                        <div className="text-[10px] text-slate-500 whitespace-nowrap">實付台租</div>
                         <div className="text-xs font-mono font-bold text-amber-400">
-                          -${row.fixedOverhead.toLocaleString()}
+                          {row.paidRent > 0 ? `-$${row.paidRent.toLocaleString()}` : '$0'}
                         </div>
+                        {row.paidRent === 0 && row.configuredMonthlyRent > 0 && (
+                          <div className="text-[9px] text-slate-500 font-mono">待繳 ${row.configuredMonthlyRent.toLocaleString()}</div>
+                        )}
                       </div>
                     </div>
                   </div>

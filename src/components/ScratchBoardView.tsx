@@ -130,7 +130,7 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
   const machinesByLocation = useMemo(() => {
     const map: Record<string, Machine[]> = {};
     for (const m of machines) {
-      const loc = (m.location || '預設店點').trim();
+      const loc = (m.location || '未分類店點').trim();
       if (!map[loc]) map[loc] = [];
       map[loc].push(m);
     }
@@ -426,53 +426,60 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
               </span>
             </div>
 
-            <div className="space-y-2">
-              {Object.entries(machinesByLocation).map(([locName, locMachines]) => (
-                <div key={locName} className="space-y-1">
-                  <div className="text-[10px] text-slate-400 font-bold flex items-center gap-1">
-                    <span className="text-amber-400">📍</span>
-                    <span>{locName}</span>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    {locMachines.map((m) => {
-                      const isSelected = m.machine_id === currentMachine?.machine_id;
-                      const machineActiveCount = activeBoards.filter(
-                        (b) => b.machine_id === m.machine_id
-                      ).length;
-                      return (
-                        <button
-                          key={m.machine_id}
-                          type="button"
-                          onClick={() => handleSelectMachine(m.machine_id)}
-                          className={`px-3 py-1.5 rounded-lg border text-xs font-bold transition-all flex items-center gap-1.5 ${
-                            isSelected
-                              ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-sm'
-                              : 'bg-[#0B0F17] text-slate-300 border-slate-800 hover:border-slate-700'
-                          }`}
-                        >
-                          <span className="font-mono">{m.code}</span>
-                          <span className="truncate max-w-[90px]">{m.name}</span>
-                          <span
-                            className={`text-[9px] px-1 py-0.2 rounded font-mono ${
+            {machines.length === 0 ? (
+              <div className="bg-[#0B0F17] border border-slate-800 rounded-xl p-5 text-center text-xs text-slate-400">
+                尚未建立任何機台，請先至【收幣】頁面新增場地與機台。
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {Object.entries(machinesByLocation).map(([locName, locMachines]) => (
+                  <div key={locName} className="space-y-1">
+                    <div className="text-[10px] text-slate-400 font-bold flex items-center gap-1">
+                      <span className="text-amber-400">📍</span>
+                      <span>{locName}</span>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {locMachines.map((m) => {
+                        const isSelected = m.machine_id === currentMachine?.machine_id;
+                        const machineActiveCount = activeBoards.filter(
+                          (b) => b.machine_id === m.machine_id
+                        ).length;
+                        return (
+                          <button
+                            key={m.machine_id}
+                            type="button"
+                            onClick={() => handleSelectMachine(m.machine_id)}
+                            className={`px-3 py-1.5 rounded-lg border text-xs font-bold transition-all flex items-center gap-1.5 ${
                               isSelected
-                                ? 'bg-slate-950/30 text-slate-950'
-                                : machineActiveCount > 0
-                                ? 'bg-emerald-500/15 text-emerald-400'
-                                : 'bg-slate-800 text-slate-500'
+                                ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-sm'
+                                : 'bg-[#0B0F17] text-slate-300 border-slate-800 hover:border-slate-700'
                             }`}
                           >
-                            {machineActiveCount > 0 ? `${machineActiveCount}板` : '無板'}
-                          </span>
-                        </button>
-                      );
-                    })}
+                            <span className="font-mono">{m.code}</span>
+                            <span className="truncate max-w-[90px]">{m.name}</span>
+                            <span
+                              className={`text-[9px] px-1 py-0.2 rounded font-mono ${
+                                isSelected
+                                  ? 'bg-slate-950/30 text-slate-950'
+                                  : machineActiveCount > 0
+                                  ? 'bg-emerald-500/15 text-emerald-400'
+                                  : 'bg-slate-800 text-slate-500'
+                              }`}
+                            >
+                              {machineActiveCount > 0 ? `${machineActiveCount}板` : '無板'}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* 2. 選取該機台的進行中刮板 (Step 2: 該機台的板次，需求 2) */}
+          {currentMachine && (
           <div className="bg-[#111827] border border-[#1E293B] rounded-xl p-3.5 space-y-2.5">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-white flex items-center gap-1.5">
@@ -557,6 +564,7 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
               </div>
             )}
           </div>
+          )}
 
           {selectedBoard && (
             <>

@@ -85,11 +85,11 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
   const effectiveMachineId = propSelectedMachineId || internalMachineId;
   const [machineToDelete, setMachineToDelete] = useState<Machine | null>(null);
 
-  // 1. 場地/店點提取與狀態管理 (最上層：先選場或是新增場)
+  // 1. 場地/店點提取與狀態管理 (最上層：先選場或是新增場，絕無任何強制假預設店點)
   const availableLocations = useMemo(() => {
     const locSet = new Set<string>();
     machines.forEach((m) => {
-      const loc = (m.location || '預設店點').trim();
+      const loc = (m.location || '').trim();
       if (loc) locSet.add(loc);
     });
     return Array.from(locSet);
@@ -99,27 +99,34 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
 
   const allLocations = useMemo(() => {
     const set = new Set([...availableLocations, ...customLocations]);
-    const arr = Array.from(set);
-    return arr.length > 0 ? arr : ['西門旗艦店'];
+    return Array.from(set);
   }, [availableLocations, customLocations]);
 
   const [selectedLocation, setSelectedLocation] = useState<string>(() => {
     const found = machines.find((m) => m.machine_id === effectiveMachineId);
-    return found?.location || availableLocations[0] || '西門旗艦店';
+    return found?.location?.trim() || availableLocations[0] || '';
   });
 
   // 當全域機台更換時，自動同步所屬場地
   useEffect(() => {
     const current = machines.find((m) => m.machine_id === effectiveMachineId);
-    if (current && current.location && current.location !== selectedLocation) {
-      setSelectedLocation(current.location);
+    if (current && current.location && current.location.trim() !== selectedLocation) {
+      setSelectedLocation(current.location.trim());
     }
   }, [effectiveMachineId, machines, selectedLocation]);
 
+  // 當場地被刪光或無場地時，自動保持空值，有場地時選中第一個
+  useEffect(() => {
+    if (!selectedLocation && allLocations.length > 0) {
+      setSelectedLocation(allLocations[0]);
+    }
+  }, [allLocations, selectedLocation]);
+
   // 屬於目前選取場地的機台清單
   const venueMachines = useMemo(() => {
+    if (!selectedLocation) return [];
     return machines.filter(
-      (m) => (m.location || '預設店點').trim() === selectedLocation.trim()
+      (m) => (m.location || '').trim() === selectedLocation.trim()
     );
   }, [machines, selectedLocation]);
 
@@ -134,7 +141,7 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
   const handleSelectLocation = (loc: string) => {
     setSelectedLocation(loc);
     const inLoc = machines.filter(
-      (m) => (m.location || '預設店點').trim() === loc.trim()
+      (m) => (m.location || '').trim() === loc.trim()
     );
     if (inLoc.length > 0) {
       handleSelectMachine(inLoc[0]);
@@ -208,7 +215,7 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
   const [newMachineCode, setNewMachineCode] = useState(() => getNextMachineCode(machines));
   const [newMachineName, setNewMachineName] = useState('');
   const [newMachineModel, setNewMachineModel] = useState<MachineModel>('DIGITAL');
-  const [newMachineLocation, setNewMachineLocation] = useState('西門旗艦店');
+  const [newMachineLocation, setNewMachineLocation] = useState('');
   const [newMachineRent, setNewMachineRent] = useState(4500);
   const [newMachineInitialCoin, setNewMachineInitialCoin] = useState(0);
   const [newMachineInitialPrize, setNewMachineInitialPrize] = useState(0);
@@ -356,7 +363,7 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
   const openAddMachineModal = (loc?: string) => {
     setNewMachineCode(getNextMachineCode(machines));
     setNewMachineName('');
-    setNewMachineLocation(loc || selectedLocation || '西門旗艦店');
+    setNewMachineLocation(loc || selectedLocation || allLocations[0] || '');
     setNewMachineRent(4500);
     setNewMachineInitialCoin(0);
     setNewMachineInitialPrize(0);
@@ -381,9 +388,14 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
       return;
     }
 
+    const finalLocation = newMachineLocation.trim() || selectedLocation.trim();
+    if (!finalLocation) {
+      setAddMachineError('請填寫或選擇所屬場地 / 店點名稱！');
+      return;
+    }
+
     const initCoin = Math.max(0, Number(newMachineInitialCoin) || 0);
     const initPrize = Math.max(0, Number(newMachineInitialPrize) || 0);
-    const finalLocation = newMachineLocation.trim() || selectedLocation || '西門旗艦店';
     onAddMachine({
       code: trimmedCode,
       name: newMachineName.trim(),
@@ -482,13 +494,34 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
             </div>
 
             <div>
-              <label className="block text-[11px] text-slate-400 mb-1">場地位置</label>
+              <label className="block text-[11px] text-slate-400 mb-1">所屬場地 / 店點</label>
               <input
                 type="text"
+                required
                 value={newMachineLocation}
                 onChange={(e) => setNewMachineLocation(e.target.value)}
-                className="w-full bg-[#0B0F17] border border-slate-700 rounded-lg px-2.5 py-2 text-xs text-white"
+                placeholder="例如：逢甲夜市店、西門武昌店"
+                className="w-full bg-[#0B0F17] border border-slate-700 rounded-lg px-2.5 py-2 text-xs text-white placeholder-slate-600"
               />
+              {allLocations.length > 0 && (
+                <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                  <span className="text-[10px] text-slate-500">快速填入場地：</span>
+                  {allLocations.map((loc) => (
+                    <button
+                      key={loc}
+                      type="button"
+                      onClick={() => setNewMachineLocation(loc)}
+                      className={`text-[10px] px-2 py-0.5 rounded border transition-colors ${
+                        newMachineLocation === loc
+                          ? 'bg-amber-500 text-slate-950 font-bold border-amber-400'
+                          : 'bg-slate-800 text-slate-300 border-slate-700 hover:border-slate-600'
+                      }`}
+                    >
+                      {loc}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* 二手機台滾輪底數設定 */}
@@ -615,47 +648,17 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
   return (
     <div className="space-y-4">
       {/* 1. 最頂部：先選場地或是新增場地 */}
-      <div className="bg-[#111827] border border-[#1E293B] rounded-xl p-3.5 space-y-2.5">
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-bold text-white flex items-center gap-1.5">
-            <Building className="w-3.5 h-3.5 text-amber-400" />
-            <span>場地 / 店點選擇</span>
-          </span>
-          <span className="text-[10px] text-slate-400 font-mono">
-            當前場地：{selectedLocation}
-          </span>
-        </div>
-
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
-          {allLocations.map((loc) => {
-            const isSelected = loc === selectedLocation;
-            const count = machines.filter(
-              (m) => (m.location || '預設店點').trim() === loc.trim()
-            ).length;
-            return (
-              <button
-                key={loc}
-                type="button"
-                onClick={() => handleSelectLocation(loc)}
-                className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-bold transition-all ${
-                  isSelected
-                    ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-sm'
-                    : 'bg-[#0B0F17] text-slate-300 border-slate-800 hover:border-slate-700'
-                }`}
-              >
-                <MapPin className="w-3 h-3" />
-                <span>{loc}</span>
-                <span
-                  className={`text-[9px] px-1 py-0.2 rounded font-mono ${
-                    isSelected ? 'bg-slate-950/30 text-slate-950' : 'bg-slate-800 text-slate-400'
-                  }`}
-                >
-                  {count}台
-                </span>
-              </button>
-            );
-          })}
-
+      {allLocations.length === 0 ? (
+        <div className="bg-[#111827] border border-[#1E293B] rounded-xl p-6 text-center space-y-3">
+          <div className="w-12 h-12 mx-auto rounded-full bg-amber-500/10 flex items-center justify-center text-amber-400">
+            <Building className="w-6 h-6" />
+          </div>
+          <div className="space-y-1">
+            <div className="text-sm font-bold text-white">尚未建立任何場地 / 店點</div>
+            <p className="text-xs text-slate-400 max-w-md mx-auto">
+              目前尚未建立任何場地。請先點擊下方按鈕新增場地（例如：逢甲夜市店、西門武昌店），接著再建立屬於該場的機台與設定。
+            </p>
+          </div>
           <button
             type="button"
             onClick={() => {
@@ -663,15 +666,72 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
               setAddLocationError(null);
               setIsAddLocationModalOpen(true);
             }}
-            className="shrink-0 flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#0B0F17] border border-dashed border-slate-700 text-slate-400 hover:text-amber-400 text-xs font-bold whitespace-nowrap"
+            className="px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-black inline-flex items-center gap-1.5 shadow-lg shadow-amber-950/30 transition-colors"
           >
-            <Plus className="w-3.5 h-3.5" />
-            <span>新增場</span>
+            <Plus className="w-4 h-4" />
+            新增第一個場地
           </button>
         </div>
-      </div>
+      ) : (
+        <div className="bg-[#111827] border border-[#1E293B] rounded-xl p-3.5 space-y-2.5">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-white flex items-center gap-1.5">
+              <Building className="w-3.5 h-3.5 text-amber-400" />
+              <span>場地 / 店點選擇</span>
+            </span>
+            <span className="text-[10px] text-slate-400 font-mono">
+              當前場地：{selectedLocation || '尚未選取'}
+            </span>
+          </div>
 
-      {/* 2. 第二層：選擇機台或是新增機台 */}
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
+            {allLocations.map((loc) => {
+              const isSelected = loc === selectedLocation;
+              const count = machines.filter(
+                (m) => (m.location || '').trim() === loc.trim()
+              ).length;
+              return (
+                <button
+                  key={loc}
+                  type="button"
+                  onClick={() => handleSelectLocation(loc)}
+                  className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-bold transition-all ${
+                    isSelected
+                      ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-sm'
+                      : 'bg-[#0B0F17] text-slate-300 border-slate-800 hover:border-slate-700'
+                  }`}
+                >
+                  <MapPin className="w-3 h-3" />
+                  <span>{loc}</span>
+                  <span
+                    className={`text-[9px] px-1 py-0.2 rounded font-mono ${
+                      isSelected ? 'bg-slate-950/30 text-slate-950' : 'bg-slate-800 text-slate-400'
+                    }`}
+                  >
+                    {count}台
+                  </span>
+                </button>
+              );
+            })}
+
+            <button
+              type="button"
+              onClick={() => {
+                setNewLocationInput('');
+                setAddLocationError(null);
+                setIsAddLocationModalOpen(true);
+              }}
+              className="shrink-0 flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#0B0F17] border border-dashed border-slate-700 text-slate-400 hover:text-amber-400 text-xs font-bold whitespace-nowrap"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>新增場</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 2. 第二層：選擇機台或是新增機台 (僅在已建立場地時顯示) */}
+      {allLocations.length > 0 && (
       <div className="bg-[#111827] border border-[#1E293B] rounded-xl p-3.5 space-y-2.5">
         <div className="flex items-center justify-between">
           <span className="text-xs font-bold text-white flex items-center gap-1.5">
@@ -752,6 +812,7 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
           </div>
         )}
       </div>
+      )}
 
       {/* 3. 第三層：只有在新增機台並選擇機台後，才會出現其他設定！ */}
       {selectedMachine && (

@@ -96,8 +96,11 @@ export const OverheadExpensesView: React.FC<OverheadExpensesViewProps> = ({
   const [expAmount, setExpAmount] = useState<number>(300);
 
   const overheadSummary = useMemo(
-    () => calculateSimpleOverhead(machines, expenses, 'ALL'),
-    [machines, expenses]
+    () =>
+      calculateSimpleOverhead(machines, expenses, 'ALL', {
+        currentPeriodMonth: currentMonthStr,
+      }),
+    [machines, expenses, currentMonthStr]
   );
 
   const maxMachineCost = useMemo(() => {
@@ -149,11 +152,9 @@ export const OverheadExpensesView: React.FC<OverheadExpensesViewProps> = ({
   };
 
   const grandTotal = Math.max(1, overheadSummary.grandTotalOverhead);
-  const rentPct = Math.round((overheadSummary.totalRent / grandTotal) * 100);
+  const rentPct = Math.round((overheadSummary.totalPaidRent / grandTotal) * 100);
   const otherPct = Math.round(
-    ((overheadSummary.totalOtherFixed + overheadSummary.totalConsumableExpenses) /
-      grandTotal) *
-      100
+    (overheadSummary.totalConsumableExpenses / grandTotal) * 100
   );
 
   return (
@@ -162,33 +163,69 @@ export const OverheadExpensesView: React.FC<OverheadExpensesViewProps> = ({
       <div className="bg-[#111827] border border-[#1E293B] rounded-xl p-4 space-y-3">
         <div className="flex items-center justify-between">
           <div>
-            <div className="text-xs text-slate-400">當月固定總開銷</div>
+            <div className="text-xs text-slate-400">當月固定支出 (已付實扣)</div>
             <div className="text-2xl font-mono font-black text-amber-400">
               ${overheadSummary.grandTotalOverhead.toLocaleString()}
             </div>
+            <div className="text-[11px] text-slate-400 mt-1 flex flex-wrap items-center gap-1.5">
+              <span>本月合約應繳月租：${overheadSummary.totalConfiguredRent.toLocaleString()}</span>
+              {overheadSummary.unpaidRent > 0 ? (
+                <span className="text-amber-400 font-bold bg-amber-500/10 px-1.5 py-0.2 rounded border border-amber-500/20">
+                  尚有待繳 ${overheadSummary.unpaidRent.toLocaleString()}
+                </span>
+              ) : (
+                <span className="text-emerald-400 font-bold bg-emerald-500/10 px-1.5 py-0.2 rounded border border-emerald-500/20">
+                  全數已付結清
+                </span>
+              )}
+            </div>
           </div>
           <div className="text-right text-xs font-mono space-y-0.5">
-            <div className="text-white">
-              台租：${overheadSummary.totalRent.toLocaleString()} ({rentPct}%)
+            <div className="text-emerald-400 font-bold">
+              實付台租：${overheadSummary.totalPaidRent.toLocaleString()}
             </div>
             <div className="text-slate-400">
-              其他/耗材：$
-              {(
-                overheadSummary.totalOtherFixed +
-                overheadSummary.totalConsumableExpenses
-              ).toLocaleString()}{' '}
-              ({otherPct}%)
+              耗材雜支：${overheadSummary.totalConsumableExpenses.toLocaleString()}
             </div>
           </div>
         </div>
 
-        {/* 視覺化成本結構量表 */}
+        {/* 視覺化繳租進度量表 */}
         <div className="w-full h-2.5 bg-[#0B0F17] rounded-full overflow-hidden flex border border-slate-800">
           <div
-            className="h-full bg-amber-500 transition-all"
-            style={{ width: `${rentPct}%` }}
+            className="h-full bg-emerald-500 transition-all"
+            style={{
+              width: `${Math.min(
+                100,
+                Math.round(
+                  (overheadSummary.totalPaidRent /
+                    Math.max(1, overheadSummary.totalConfiguredRent)) *
+                    100
+                )
+              )}%`,
+            }}
+            title="已付租金"
           />
-          <div className="h-full flex-1 bg-sky-500" />
+          <div className="h-full flex-1 bg-slate-800" title="待繳租金" />
+        </div>
+        <div className="flex justify-between text-[10px] font-mono text-slate-500">
+          <span>
+            繳租進度：
+            {Math.min(
+              100,
+              Math.round(
+                (overheadSummary.totalPaidRent /
+                  Math.max(1, overheadSummary.totalConfiguredRent)) *
+                  100
+              )
+            )}
+            %
+          </span>
+          <span className="text-slate-400">
+            {overheadSummary.unpaidRent === 0
+              ? '✅ 本月租金已全數確認扣除'
+              : '💡 點擊下方各機台「登記已付」確認支付後才扣除淨利'}
+          </span>
         </div>
       </div>
 

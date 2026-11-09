@@ -330,28 +330,72 @@ export function computeNumberLuckMatrix(boards: ScratchBoard[]): {
   };
 }
 
+export interface OverheadResult {
+  totalConfiguredRent: number;   // 機台合約設定應繳月租總額 (合約基準)
+  totalPaidRent: number;         // 實際已確認支付之台租與固定費 (自 payment_records)
+  totalRent: number;             // 計入淨利扣除的台租實支出 (等於 totalPaidRent，未付絕不預扣)
+  totalOtherFixed: number;       // 設定之其他固定費 (供台租管理參考)
+  totalConsumableExpenses: number; // 耗材與雜支 (膠帶、爪套、消光膠帶等實質開銷)
+  grandTotalOverhead: number;    // 計入損益的總固定開銷支出 = totalPaidRent + totalConsumableExpenses
+  unpaidRent: number;            // 當前待繳/未付租金 = Math.max(0, totalConfiguredRent - totalPaidRent)
+}
+
 /**
  * 計算機台固定成本 (台租費用 + 其他費用) 與選用耗材費用
+ * 業務規則：新增機台後不預先從淨利扣除月租，必須於「台租」頁面確認支付 (PAID) 後才計入損益扣除，避免誤算！
  */
 export function calculateSimpleOverhead(
   machines: Machine[],
   expenses: Expense[],
-  targetMachineId: string | 'ALL'
-): {
-  totalRent: number;
-  totalOtherFixed: number;
-  totalConsumableExpenses: number;
-  grandTotalOverhead: number;
-} {
+  targetMachineId: string | 'ALL' = 'ALL',
+  options?: {
+    dateRange?: { start: Date; end: Date } | null;
+    currentPeriodMonth?: string;
+  }
+): OverheadResult {
   const targetMachines =
     targetMachineId === 'ALL'
       ? machines
       : machines.filter((m) => m.machine_id === targetMachineId);
 
-  const totalRent = targetMachines.reduce(
+  // 1. 合約設定之月租 (作為待繳與合約基準)
+  const totalConfiguredRent = targetMachines.reduce(
     (s, m) => s + (Number(m.rent_monthly) || 0),
     0
   );
+
+  // 2. 實繳台租：台主必須於台租頁面點擊「登記已付 / 確認記錄已付款」產生的付款紀錄
+  // 嚴格遵守台主業務財務邏輯：未去台租頁面確認支付者，絕不預扣當月租金！
+  const totalPaidRent = targetMachines.reduce((s, m) => {
+    const paidRecords = (m.payment_records || []).filter((r) => {
+      // 狀態為 PAID 或無狀態 (相容舊資料)
+      if (r.status && r.status !== 'PAID') return false;
+
+      // 若指定月份 (例如 "2026-11")
+      if (options?.currentPeriodMonth && r.period_label) {
+        return r.period_label === options.currentPeriodMonth;
+      }
+
+      // 若指定日期範圍 (例如週、年或自訂範圍)
+      if (options?.dateRange) {
+        const t = new Date(r.paid_at || 0).getTime();
+        if (isNaN(t)) return true;
+        return (
+          t >= options.dateRange.start.getTime() &&
+          t <= options.dateRange.end.getTime()
+        );
+      }
+
+      return true;
+    });
+
+    const sumPaid = paidRecords.reduce(
+      (rs, r) => rs + (Number(r.amount) || 0),
+      0
+    );
+    return s + sumPaid;
+  }, 0);
+
   const totalOtherFixed = targetMachines.reduce((s, m) => {
     const customFeesSum = (m.custom_fixed_fees || []).reduce(
       (cfs, f) => cfs + (Number(f.amount) || 0),
@@ -375,11 +419,18 @@ export function calculateSimpleOverhead(
     }
   }
 
+  // 損益扣除額以「實際已確認支付之台租 (totalPaidRent)」加上「實質耗材雜支」
+  const grandTotalOverhead = totalPaidRent + totalConsumableExpenses;
+  const unpaidRent = Math.max(0, totalConfiguredRent - totalPaidRent);
+
   return {
-    totalRent,
+    totalConfiguredRent,
+    totalPaidRent,
+    totalRent: totalPaidRent, // 保留相容性，使原有引用 totalRent 者均使用實付台租
     totalOtherFixed,
     totalConsumableExpenses,
-    grandTotalOverhead: totalRent + totalOtherFixed + totalConsumableExpenses,
+    grandTotalOverhead,
+    unpaidRent,
   };
 }
 
