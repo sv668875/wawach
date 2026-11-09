@@ -1,0 +1,30 @@
+{
+  "name": "ClawOps Pro 娃娃機台主營運管理",
+  "short_name": "娃娃機營運",
+  "description": "娃娃機台主離線優先營運與財務管理系統，支援抄錶計數、刮刮樂追蹤、成本與毛利核算。",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0B0F17",
+  "theme_color": "#0B0F17",
+  "icons": [
+    {
+      "src": "./icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "./icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "./apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    }
+  ]
+}

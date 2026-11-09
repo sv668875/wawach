@@ -70,6 +70,8 @@ export interface ScratchBoardPrize {
   is_claimed: boolean;           // 是否已開出中獎
   claim_type?: 'PHYSICAL' | 'CASHBACK'; // 客人兌領方式：'PHYSICAL' (拿獎) | 'CASHBACK' (回錢)
   claimed_at?: string;
+  claimed_at_scratched_holes?: number; // 開出時已刮開洞數 (例如第 10 刮)
+  claimed_at_revenue?: number;         // 開出時累計幣量 (例如 $500)
 }
 
 // 刮板分批巡場進度紀錄 (每次記錄剩幾洞、哪些獎號出了)
@@ -78,7 +80,12 @@ export interface BoardCheckLog {
   logged_at: string;
   remaining_holes: number;       // 當下剩餘幾個洞
   newly_claimed_numbers: number[]; // 本次新開出的獎項號碼
+  claimed_prize_details?: {
+    number_label: number;
+    claim_type: 'PHYSICAL' | 'CASHBACK';
+  }[];
   recorded_cash_added: number;   // 本次同步記錄的收幣金額
+  cumulative_revenue_snapshot?: number; // 該次開出時的累計總營收快照
   note?: string;
 }
 
@@ -102,6 +109,19 @@ export interface ScratchBoard {
   check_logs: BoardCheckLog[];   // 分批巡場剩餘洞數紀錄
   created_at: string;
   settled_at?: string;
+  settled_remaining_holes?: number; // 下版時確認的真實剩餘洞數 (需求 3，絕不寫死 0)
+  settled_scratched_holes?: number; // 下版時實際被刮開洞數 = total_holes - settled_remaining_holes
+  avg_revenue_per_hole?: number;    // 每洞平均毛投入幣量 = gross_coin_revenue / settled_scratched_holes
+  notes?: string;
+}
+
+// 3.1 完整整合式下版結清參數 (一次完成收幣清0、未開出獎品退庫與板面結算，避免二次操作與重複計帳)
+export interface SettleBoardPayload {
+  boardId: string;
+  finalCollectedCash: number;            // 本次下版清0收幣金額 (若為0表示先前已全數登記過)
+  isCashAlreadyRecorded?: boolean;       // 是否先前已登記過 (若為 true 則不重複將 cash 累加進 gross_coin_revenue)
+  remainingPrizesAction?: 'RETURN_TO_WAREHOUSE' | 'KEEP_ON_MACHINE'; // 未開出獎品去向：退回倉庫備品 vs 留在機台給下一版
+  settledRemainingHoles?: number;        // 下版時確認的剩餘洞數 (需求 3)
   notes?: string;
 }
 
@@ -162,6 +182,9 @@ export interface NumberLuckStat {
   cumulative_board_profit: number; // 該號碼參與結算板之總淨利加總
   total_cashback_given: number;  // 該號碼累計回出去的錢
   last_prize_name: string;
+  direct_exit_profit?: number;   // 該號碼開出時即時損益合計 (開出時累積幣量 - 獎項成本/回錢)
+  early_exit_loss_count?: number;// 該號碼提前開出導致當下虧損(提早下課)的次數
+  avg_exit_hole?: number;        // 平均在第幾洞被刮出開獎
 }
 
 export interface ReadingInput {

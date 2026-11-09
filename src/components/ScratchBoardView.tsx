@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Trophy,
   Plus,
@@ -12,21 +12,26 @@ import {
   Grid,
   Calendar,
   Package,
+  Cpu,
 } from 'lucide-react';
 import {
   InventoryItem,
   Machine,
   ScratchBoard,
+  SettleBoardPayload,
 } from '../types';
 import {
   calculateScratchBoardFinancials,
   computeNumberLuckMatrix,
 } from '../utils/calculations';
+import { SettleBoardModal } from './SettleBoardModal';
 
 interface ScratchBoardViewProps {
   boards: ScratchBoard[];
   machines: Machine[];
   inventoryItems?: InventoryItem[];
+  activeMachineId?: string;
+  onSelectMachine?: (machineId: string) => void;
   onQuickMountBoard: (machineId: string, totalHoles: number) => void;
   onAddPrizeToBoard: (
     boardId: string,
@@ -51,10 +56,16 @@ interface ScratchBoardViewProps {
     remainingHoles: number;
     addedCashRevenue: number;
     newlyClaimedNumbers: number[];
+    claimedPrizeDetails?: {
+      number_label: number;
+      claim_type: 'PHYSICAL' | 'CASHBACK';
+    }[];
     note: string;
   }) => void;
   onUpdateGrossRevenue: (boardId: string, newGrossRevenue: number) => void;
-  onSettleBoard: (boardId: string) => void;
+  onSettleBoard: (payload: SettleBoardPayload | string) => void;
+  targetBoardId?: string | null;
+  onTargetBoardConsumed?: () => void;
 }
 
 const HOLE_PRESETS = [40, 60, 80, 100, 120, 160, 200];
@@ -63,6 +74,8 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
   boards,
   machines,
   inventoryItems = [],
+  activeMachineId: propActiveMachineId,
+  onSelectMachine,
   onQuickMountBoard,
   onAddPrizeToBoard,
   onTogglePrizeClaimed,
@@ -70,10 +83,15 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
   onRecordBatchProgress,
   onUpdateGrossRevenue,
   onSettleBoard,
+  targetBoardId,
+  onTargetBoardConsumed,
 }) => {
   // 分頁切換：進行中刮板 vs 刮板紀錄與統計 (需求 5)
   const [mainTab, setMainTab] = useState<'active' | 'stats'>('active');
   const [statsViewMode, setStatsViewMode] = useState<'history' | 'luck'>('history');
+
+  // 統一整合式下版結清彈窗狀態 (避免二次操作與重複計帳)
+  const [isSettleModalOpen, setIsSettleModalOpen] = useState(false);
 
   // 1. 僅篩選出「進行中」刮板，按英文字母順序排列 (需求 5)
   const activeBoards = useMemo(
@@ -99,22 +117,80 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
     [boards]
   );
 
-  const [selectedBoardId, setSelectedBoardId] = useState<string>(
-    activeBoards[0]?.board_id || ''
-  );
-
-  // 選取的刮板：若目前選取的板已被下版，自動指派第一個進行中的刮板
-  const selectedBoard = useMemo(() => {
-    return (
-      activeBoards.find((b) => b.board_id === selectedBoardId) ||
-      activeBoards[0] ||
-      null
-    );
-  }, [activeBoards, selectedBoardId]);
-
-  const [mountMachineId, setMountMachineId] = useState<string>(
+  // 需求 2 & 9：以場地分組機台，再選刮板
+  const [internalMachineId, setInternalMachineId] = useState<string>(
     machines[0]?.machine_id || ''
   );
+  const currentMachineId = propActiveMachineId || internalMachineId;
+  const currentMachine = useMemo(
+    () => machines.find((m) => m.machine_id === currentMachineId) || machines[0],
+    [machines, currentMachineId]
+  );
+
+  const machinesByLocation = useMemo(() => {
+    const map: Record<string, Machine[]> = {};
+    for (const m of machines) {
+      const loc = (m.location || '未分類店點').trim();
+      if (!map[loc]) map[loc] = [];
+      map[loc].push(m);
+    }
+    return map;
+  }, [machines]);
+
+  const currentMachineActiveBoards = useMemo(() => {
+    if (!currentMachine) return [];
+    return activeBoards.filter((b) => b.machine_id === currentMachine.machine_id);
+  }, [activeBoards, currentMachine]);
+
+  const [selectedBoardId, setSelectedBoardId] = useState<string>(
+    targetBoardId || currentMachineActiveBoards[0]?.board_id || ''
+  );
+
+  useEffect(() => {
+    if (targetBoardId && boards.some((b) => b.board_id === targetBoardId)) {
+      setSelectedBoardId(targetBoardId);
+      const foundTargetBoard = boards.find((b) => b.board_id === targetBoardId);
+      if (foundTargetBoard && foundTargetBoard.machine_id !== currentMachineId) {
+        onSelectMachine?.(foundTargetBoard.machine_id);
+        setInternalMachineId(foundTargetBoard.machine_id);
+      }
+      onTargetBoardConsumed?.();
+    }
+  }, [targetBoardId, boards, currentMachineId, onSelectMachine, onTargetBoardConsumed]);
+
+  // 選取的刮板：嚴格鎖定當前機台的進行中看板（若該機台無進行中刮板則為 null，絕不誤穿透顯示其他機台的板）
+  const selectedBoard = useMemo(() => {
+    if (!currentMachine || currentMachineActiveBoards.length === 0) return null;
+    const match = currentMachineActiveBoards.find((b) => b.board_id === selectedBoardId);
+    if (match) return match;
+    return currentMachineActiveBoards[0] || null;
+  }, [currentMachine, currentMachineActiveBoards, selectedBoardId]);
+
+  // 當切換機台或進行中看板異動時，嚴格同步 selectedBoardId
+  useEffect(() => {
+    if (currentMachineActiveBoards.length > 0) {
+      if (!currentMachineActiveBoards.some((b) => b.board_id === selectedBoardId)) {
+        setSelectedBoardId(currentMachineActiveBoards[0].board_id);
+      }
+    } else {
+      setSelectedBoardId('');
+    }
+  }, [currentMachineActiveBoards, selectedBoardId]);
+
+  const handleSelectMachine = (machineId: string) => {
+    if (onSelectMachine) {
+      onSelectMachine(machineId);
+    } else {
+      setInternalMachineId(machineId);
+    }
+    const machineBoards = activeBoards.filter((b) => b.machine_id === machineId);
+    if (machineBoards.length > 0) {
+      setSelectedBoardId(machineBoards[0].board_id);
+    } else {
+      setSelectedBoardId('');
+    }
+  };
+
   const [mountHoles, setMountHoles] = useState<number>(80);
 
   // 新增獎項表單狀態
@@ -126,6 +202,29 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
   const [prizeCostInput, setPrizeCostInput] = useState<string>('');
   const [syncToMachineInventory, setSyncToMachineInventory] = useState<boolean>(false);
   const [formError, setFormError] = useState<string | null>(null);
+
+  // 1. 統計所有進行中刮板已經佔用的倉庫庫存 ID (防呆防重覆選取)
+  const activeAssignedInvIds = useMemo(() => {
+    const ids = new Set<string>();
+    boards
+      .filter((b) => b.status === 'ACTIVE')
+      .forEach((b) => {
+        b.prizes.forEach((p) => {
+          if (p.inventory_item_id) ids.add(p.inventory_item_id);
+        });
+      });
+    return ids;
+  }, [boards]);
+
+  // 2. 僅篩選出真正屬於倉庫備品 (IN_STOCK)、數量 > 0、且尚未被目前台上刮板選走的可用獎項
+  const availableWarehouseItems = useMemo(() => {
+    return inventoryItems.filter(
+      (it) =>
+        it.placement === 'IN_STOCK' &&
+        it.quantity > 0 &&
+        !activeAssignedInvIds.has(it.item_id)
+    );
+  }, [inventoryItems, activeAssignedInvIds]);
 
   // 開獎兌領二擇一彈窗狀態 (拿獎 vs 回錢，需求 8)
   const [choiceModalPrize, setChoiceModalPrize] = useState<{
@@ -193,7 +292,7 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
       isCashbackInput &&
       (!cashbackAmountInput.trim() || isNaN(cbAmount) || cbAmount <= 0)
     ) {
-      setFormError('勾選回錢時，回錢金額為必填且須大於 0');
+      setFormError('請填寫回錢金額');
       return;
     }
 
@@ -215,25 +314,63 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
     setSyncToMachineInventory(false);
   };
 
+  const [batchClaimChoices, setBatchClaimChoices] = useState<
+    Record<number, 'PHYSICAL' | 'CASHBACK'>
+  >({});
+
   const toggleBatchSelectNumber = (num: number) => {
-    setBatchSelectedNumbers((prev) =>
-      prev.includes(num) ? prev.filter((n) => n !== num) : [...prev, num]
-    );
+    setBatchSelectedNumbers((prev) => {
+      if (prev.includes(num)) {
+        const next = prev.filter((n) => n !== num);
+        setBatchClaimChoices((choices) => {
+          const nextChoices = { ...choices };
+          delete nextChoices[num];
+          return nextChoices;
+        });
+        return next;
+      } else {
+        const p = selectedBoard?.prizes.find((pz) => pz.number_label === num);
+        const defaultChoice: 'PHYSICAL' | 'CASHBACK' =
+          p?.is_cashback && (!p?.prize_cost || p.prize_cost === 0)
+            ? 'CASHBACK'
+            : 'PHYSICAL';
+        setBatchClaimChoices((choices) => ({
+          ...choices,
+          [num]: defaultChoice,
+        }));
+        return [...prev, num];
+      }
+    });
   };
 
   const handleBatchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedBoard) return;
 
+    const claimedPrizeDetails = batchSelectedNumbers.map((num) => {
+      const p = selectedBoard.prizes.find((pz) => pz.number_label === num);
+      const choice =
+        batchClaimChoices[num] ||
+        (p?.is_cashback && (!p?.prize_cost || p.prize_cost === 0)
+          ? 'CASHBACK'
+          : 'PHYSICAL');
+      return {
+        number_label: num,
+        claim_type: choice,
+      };
+    });
+
     onRecordBatchProgress({
       boardId: selectedBoard.board_id,
       remainingHoles: Math.max(0, Number(batchRemainingHoles)),
       addedCashRevenue: Math.max(0, Number(batchAddedCash)),
       newlyClaimedNumbers: batchSelectedNumbers,
+      claimedPrizeDetails,
       note: '分批巡場記錄',
     });
 
     setBatchSelectedNumbers([]);
+    setBatchClaimChoices({});
     setBatchAddedCash(0);
   };
 
@@ -277,92 +414,156 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
 
       {mainTab === 'active' ? (
         <div className="space-y-4">
-          {/* 快速上版操作列 */}
-          <div className="bg-[#111827] border border-[#1E293B] rounded-xl p-3.5 flex flex-wrap items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <select
-                value={mountMachineId}
-                onChange={(e) => setMountMachineId(e.target.value)}
-                className="bg-[#0B0F17] border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs font-bold text-white"
-              >
-                {machines.map((m) => (
-                  <option key={m.machine_id} value={m.machine_id}>
-                    [{m.code}] {m.name}
-                  </option>
-                ))}
-              </select>
-
-              <select
-                value={mountHoles}
-                onChange={(e) => setMountHoles(Number(e.target.value))}
-                className="bg-[#0B0F17] border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs font-mono font-bold text-amber-400"
-              >
-                {HOLE_PRESETS.map((h) => (
-                  <option key={h} value={h}>
-                    {h} 刮
-                  </option>
-                ))}
-              </select>
+          {/* 1. 先選機台 (依場地/店點分組，需求 2 & 9) */}
+          <div className="bg-[#111827] border border-[#1E293B] rounded-xl p-3.5 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                <Cpu className="w-3.5 h-3.5 text-amber-400" />
+                <span>機台選擇 (依場地分組 · 全域同步)</span>
+              </span>
+              <span className="text-[10px] text-slate-400 font-mono">
+                當前機台：[{currentMachine?.code}] {currentMachine?.name}
+              </span>
             </div>
 
-            <button
-              type="button"
-              onClick={() => onQuickMountBoard(mountMachineId, mountHoles)}
-              className="px-3.5 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-xs flex items-center gap-1 whitespace-nowrap"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              一鍵上版
-            </button>
+            {machines.length === 0 ? (
+              <div className="bg-[#0B0F17] border border-slate-800 rounded-xl p-5 text-center text-xs text-slate-400">
+                尚未建立任何機台，請先至【收幣】頁面新增場地與機台。
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {Object.entries(machinesByLocation).map(([locName, locMachines]) => (
+                  <div key={locName} className="space-y-1">
+                    <div className="text-[10px] text-slate-400 font-bold flex items-center gap-1">
+                      <span className="text-amber-400">📍</span>
+                      <span>{locName}</span>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {locMachines.map((m) => {
+                        const isSelected = m.machine_id === currentMachine?.machine_id;
+                        const machineActiveCount = activeBoards.filter(
+                          (b) => b.machine_id === m.machine_id
+                        ).length;
+                        return (
+                          <button
+                            key={m.machine_id}
+                            type="button"
+                            onClick={() => handleSelectMachine(m.machine_id)}
+                            className={`px-3 py-1.5 rounded-lg border text-xs font-bold transition-all flex items-center gap-1.5 ${
+                              isSelected
+                                ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-sm'
+                                : 'bg-[#0B0F17] text-slate-300 border-slate-800 hover:border-slate-700'
+                            }`}
+                          >
+                            <span className="font-mono">{m.code}</span>
+                            <span className="truncate max-w-[90px]">{m.name}</span>
+                            <span
+                              className={`text-[9px] px-1 py-0.2 rounded font-mono ${
+                                isSelected
+                                  ? 'bg-slate-950/30 text-slate-950'
+                                  : machineActiveCount > 0
+                                  ? 'bg-emerald-500/15 text-emerald-400'
+                                  : 'bg-slate-800 text-slate-500'
+                              }`}
+                            >
+                              {machineActiveCount > 0 ? `${machineActiveCount}板` : '無板'}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
-          {/* 進行中刮板橫向切換列 (僅顯示台上 ACTIVE 板，依英文字母順序排列，需求 5) */}
-          {activeBoards.length === 0 ? (
-            <div className="bg-[#111827] border border-[#1E293B] rounded-xl p-6 text-center space-y-2">
-              <Grid className="w-8 h-8 mx-auto text-slate-600" />
-              <div className="text-white text-xs font-bold">目前無任何機台上架刮板</div>
-              <p className="text-slate-400 text-[11px]">
-                請使用上方「一鍵上版」按鈕，為機台掛上新刮板（將自動從 A板 開始編號）。
-              </p>
+          {/* 2. 選取該機台的進行中刮板 (Step 2: 該機台的板次，需求 2) */}
+          {currentMachine && (
+          <div className="bg-[#111827] border border-[#1E293B] rounded-xl p-3.5 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                <Grid className="w-3.5 h-3.5 text-amber-400" />
+                <span>[{currentMachine?.code}] 進行中刮板</span>
+              </span>
+              <div className="flex items-center gap-2">
+                <select
+                  value={mountHoles}
+                  onChange={(e) => setMountHoles(Number(e.target.value))}
+                  className="bg-[#0B0F17] border border-slate-700 rounded-lg px-2 py-1 text-xs font-mono font-bold text-amber-400"
+                >
+                  {HOLE_PRESETS.map((h) => (
+                    <option key={h} value={h}>
+                      {h} 刮
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={() => currentMachine && onQuickMountBoard(currentMachine.machine_id, mountHoles)}
+                  className="px-2.5 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs flex items-center gap-1 shadow-sm whitespace-nowrap"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  上新板
+                </button>
+              </div>
             </div>
-          ) : (
-            <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
-              {activeBoards.map((b) => {
-                const isSelected = selectedBoard?.board_id === b.board_id;
-                const m = machines.find((mc) => mc.machine_id === b.machine_id);
-                return (
-                  <button
-                    key={b.board_id}
-                    type="button"
-                    onClick={() => handleSelectBoard(b)}
-                    className={`shrink-0 px-3.5 py-2.5 rounded-xl border text-left transition-all ${
-                      isSelected
-                        ? 'bg-amber-500/15 border-amber-500 text-white'
-                        : 'bg-[#111827] border-[#1E293B] text-slate-400'
-                    }`}
-                  >
-                    <div className="flex items-center gap-1.5 text-xs font-bold whitespace-nowrap">
-                      <span className="font-mono text-amber-400">[{m?.code}]</span>
-                      <span className="text-white font-black">
-                        {b.board_letter || 'A'}板 ({b.total_holes}刮)
-                      </span>
-                      <span className="text-[10px] text-emerald-400">● 進行中</span>
-                    </div>
-                    <div className="flex items-center justify-between gap-3 text-[10px] font-mono text-slate-400 mt-1 whitespace-nowrap">
-                      <span>
-                        剩 {b.remaining_holes} 洞 · 獎{' '}
-                        {b.prizes.filter((p) => p.is_claimed).length}/{b.prizes.length}
-                      </span>
-                      <span className="text-slate-500">
-                        {new Date(b.created_at).toLocaleDateString([], {
-                          month: '2-digit',
-                          day: '2-digit',
-                        })}
-                      </span>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
+
+            {currentMachineActiveBoards.length === 0 ? (
+              <div className="bg-[#0B0F17] border border-slate-800/80 rounded-xl p-4 text-center space-y-2">
+                <div className="text-xs text-slate-400 font-bold">
+                  機台 [{currentMachine?.code} {currentMachine?.name}] 目前尚無進行中刮板
+                </div>
+                <div className="flex flex-wrap items-center justify-center gap-1.5 pt-1">
+                  {HOLE_PRESETS.map((h) => (
+                    <button
+                      key={h}
+                      type="button"
+                      onClick={() =>
+                        currentMachine && onQuickMountBoard(currentMachine.machine_id, h)
+                      }
+                      className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-amber-500 hover:text-slate-950 text-amber-300 border border-slate-700 text-xs font-mono font-bold transition-all"
+                    >
+                      + {h} 刮
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
+                {currentMachineActiveBoards.map((b) => {
+                  const isSelected = selectedBoard?.board_id === b.board_id;
+                  return (
+                    <button
+                      key={b.board_id}
+                      type="button"
+                      onClick={() => handleSelectBoard(b)}
+                      className={`shrink-0 px-3.5 py-2.5 rounded-xl border text-left transition-all ${
+                        isSelected
+                          ? 'bg-amber-500/15 border-amber-500 text-white shadow-sm'
+                          : 'bg-[#0B0F17] border-slate-800 text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      <div className="flex items-center gap-1.5 text-xs font-bold whitespace-nowrap">
+                        <span className="font-mono text-amber-400">{b.board_letter || 'A'}板</span>
+                        <span className="text-white font-black">{b.total_holes}刮</span>
+                        <span className="text-[10px] text-emerald-400">● 進行中</span>
+                      </div>
+                      <div className="flex items-center justify-between gap-3 text-[10px] font-mono text-slate-400 mt-1 whitespace-nowrap">
+                        <span>
+                          剩 {b.remaining_holes} 洞 · 獎{' '}
+                          {b.prizes.filter((p) => p.is_claimed).length}/{b.prizes.length}
+                        </span>
+                        <span className="text-amber-400 font-bold">
+                          收 ${b.gross_coin_revenue.toLocaleString()}
+                        </span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
           )}
 
           {selectedBoard && (
@@ -393,7 +594,7 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
 
                   <button
                     type="button"
-                    onClick={() => onSettleBoard(selectedBoard.board_id)}
+                    onClick={() => setIsSettleModalOpen(true)}
                     className="px-3.5 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold text-xs flex items-center gap-1 whitespace-nowrap shrink-0 shadow-lg shadow-emerald-950/30"
                   >
                     <Flag className="w-3.5 h-3.5" />
@@ -503,6 +704,9 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                         placeholder="0"
                         className="w-full bg-transparent text-xl font-mono font-black text-white focus:outline-none"
                       />
+                      <span className="block text-[9px] text-slate-500 mt-1 leading-tight">
+                        💡 巡場有收幣可在此累加；若習慣整版下版才一次清0，此處留空即可，下版時系統會一次結算。
+                      </span>
                     </div>
                   </div>
 
@@ -538,6 +742,96 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                             );
                           })}
                       </div>
+
+                      {/* 需求 1 & 6：開出獎項兌領方式明確選擇 (拿獎 vs 回錢)，避免二次操作與預設錯誤 */}
+                      {batchSelectedNumbers.length > 0 && (
+                        <div className="bg-[#0B0F17] rounded-xl p-3 border border-slate-800 space-y-2 mt-2.5">
+                          <div className="text-[11px] font-bold text-sky-400 flex items-center justify-between">
+                            <span>本次開出獎項兌領確認 (拿獎 vs 回錢)</span>
+                            <span className="text-[10px] text-slate-500 font-normal">
+                              共選 {batchSelectedNumbers.length} 個獎
+                            </span>
+                          </div>
+
+                          <div className="space-y-1.5">
+                            {batchSelectedNumbers.map((num) => {
+                              const p = selectedBoard.prizes.find((pz) => pz.number_label === num);
+                              if (!p) return null;
+                              const currentChoice =
+                                batchClaimChoices[num] ||
+                                (p.is_cashback && (!p.prize_cost || p.prize_cost === 0)
+                                  ? 'CASHBACK'
+                                  : 'PHYSICAL');
+                              const canChooseBoth = p.is_cashback && p.prize_cost > 0;
+
+                              return (
+                                <div
+                                  key={num}
+                                  className="flex items-center justify-between p-2 rounded-lg bg-[#111827] border border-slate-800 text-xs"
+                                >
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <span className="font-mono font-bold text-amber-400 shrink-0">
+                                      #{num}
+                                    </span>
+                                    <span className="text-white font-medium truncate">
+                                      {p.prize_name || (p.is_cashback ? '回錢獎' : '大獎')}
+                                    </span>
+                                  </div>
+
+                                  {canChooseBoth ? (
+                                    <div className="flex items-center gap-1 shrink-0">
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          setBatchClaimChoices((prev) => ({
+                                            ...prev,
+                                            [num]: 'PHYSICAL',
+                                          }))
+                                        }
+                                        className={`px-2 py-1 rounded-md text-[11px] font-bold transition-all ${
+                                          currentChoice === 'PHYSICAL'
+                                            ? 'bg-emerald-500 text-slate-950 shadow-sm'
+                                            : 'bg-slate-800 text-slate-400 hover:text-slate-200'
+                                        }`}
+                                      >
+                                        🎁 拿獎 (${p.prize_cost})
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          setBatchClaimChoices((prev) => ({
+                                            ...prev,
+                                            [num]: 'CASHBACK',
+                                          }))
+                                        }
+                                        className={`px-2 py-1 rounded-md text-[11px] font-bold transition-all ${
+                                          currentChoice === 'CASHBACK'
+                                            ? 'bg-amber-500 text-slate-950 shadow-sm'
+                                            : 'bg-slate-800 text-slate-400 hover:text-slate-200'
+                                        }`}
+                                      >
+                                        💵 回錢 (${p.cashback_amount})
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <span className="text-[11px] font-mono shrink-0">
+                                      {p.is_cashback ? (
+                                        <span className="text-amber-400 font-bold">
+                                          💵 回錢 -${p.cashback_amount}
+                                        </span>
+                                      ) : (
+                                        <span className="text-emerald-400 font-bold">
+                                          🎁 拿獎 (成本 ${p.prize_cost})
+                                        </span>
+                                      )}
+                                    </span>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -567,31 +861,51 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                   onSubmit={handleAddPrizeSubmit}
                   className="bg-[#0B0F17] border border-slate-800 rounded-xl p-3.5 space-y-3"
                 >
-                  {/* 倉庫庫存品快速代入 (選填，需求 4) */}
-                  {inventoryItems.length > 0 && (
+                  {/* 倉庫庫存品快速代入 (選填，選中上板後選項立即排除不重覆) */}
+                  {inventoryItems.some((it) => it.placement === 'IN_STOCK') && (
                     <div>
-                      <label className="block text-[11px] text-sky-400 font-bold mb-1 flex items-center gap-1">
-                        <Package className="w-3.5 h-3.5" />
-                        從倉庫獎項庫存快速帶入 (選填)
-                      </label>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-[11px] text-sky-400 font-bold flex items-center gap-1">
+                          <Package className="w-3.5 h-3.5" />
+                          從倉庫獎項庫存快速帶入 (選填)
+                        </label>
+                        <span className="text-[10px] text-slate-500 font-mono">
+                          {availableWarehouseItems.length > 0
+                            ? `可用備品 ${availableWarehouseItems.length} 種`
+                            : '已全數上板'}
+                        </span>
+                      </div>
                       <select
                         value={selectedInventoryId}
                         onChange={(e) => {
                           const id = e.target.value;
                           setSelectedInventoryId(id);
                           if (!id) return;
-                          const found = inventoryItems.find((it) => it.item_id === id);
+                          const found = availableWarehouseItems.find((it) => it.item_id === id);
                           if (found) {
                             setPrizeNameInput(found.name);
-                            setPrizeCostInput(String(found.cost_price || 0));
+                            const costStr = String(found.unit_cost || 0);
+                            setPrizeCostInput(costStr);
+                            if (isCashbackInput && (!cashbackAmountInput || Number(cashbackAmountInput) === 0)) {
+                              setCashbackAmountInput(costStr);
+                            }
                           }
                         }}
-                        className="w-full bg-[#111827] border border-slate-700 rounded-lg px-2.5 py-2 text-xs text-white focus:outline-none focus:border-sky-500"
+                        disabled={availableWarehouseItems.length === 0}
+                        className={`w-full bg-[#111827] border rounded-lg px-2.5 py-2 text-xs text-white focus:outline-none transition-colors ${
+                          availableWarehouseItems.length === 0
+                            ? 'border-slate-800 text-slate-500 cursor-not-allowed opacity-60'
+                            : 'border-slate-700 focus:border-sky-500'
+                        }`}
                       >
-                        <option value="">-- 手動自行填寫 / 非庫存品 --</option>
-                        {inventoryItems.map((it) => (
+                        <option value="">
+                          {availableWarehouseItems.length === 0
+                            ? '-- 倉庫備品已全部上板，無剩餘可用庫存 --'
+                            : '-- 手動自行填寫 / 非庫存品 --'}
+                        </option>
+                        {availableWarehouseItems.map((it) => (
                           <option key={it.item_id} value={it.item_id}>
-                            {it.name} (成本 ${it.cost_price} / 庫存 {it.quantity} 件)
+                            {it.name} (成本 ${it.unit_cost} / 庫存 {it.quantity} 件)
                           </option>
                         ))}
                       </select>
@@ -641,23 +955,38 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                           if (e.target.value === '0') e.target.value = '';
                           e.target.select();
                         }}
-                        onChange={(e) => setPrizeCostInput(e.target.value)}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setPrizeCostInput(val);
+                          if (isCashbackInput && (!cashbackAmountInput || Number(cashbackAmountInput) === 0)) {
+                            setCashbackAmountInput(val);
+                          }
+                        }}
                         placeholder="0"
                         className="w-full bg-[#111827] border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs font-mono text-white focus:outline-none focus:border-amber-500"
                       />
                     </div>
                   </div>
 
-                  {/* 回錢勾選與必填金額 (按鈕獨立往下，徹底解決擠壓問題 - 需求 3) */}
+                  {/* 回錢勾選與金額 (勾選自動預設帶入成本，提供同成本快捷鍵) */}
                   <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-800">
                     <label className="flex items-center gap-2 text-xs font-bold text-amber-300 cursor-pointer">
                       <input
                         type="checkbox"
                         checked={isCashbackInput}
-                        onChange={(e) => setIsCashbackInput(e.target.checked)}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          setIsCashbackInput(checked);
+                          if (checked) {
+                            const cost = Number(prizeCostInput);
+                            if (cost > 0 && (!cashbackAmountInput || Number(cashbackAmountInput) === 0)) {
+                              setCashbackAmountInput(String(cost));
+                            }
+                          }
+                        }}
                         className="w-4 h-4 accent-amber-500 rounded"
                       />
-                      可回錢 (中獎退現金扣收幣)
+                      可回錢
                     </label>
 
                     {isCashbackInput && (
@@ -666,6 +995,7 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                         <input
                           type="number"
                           min={10}
+                          step={10}
                           required
                           value={cashbackAmountInput === '0' ? '' : cashbackAmountInput}
                           onFocus={(e) => {
@@ -673,9 +1003,23 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                             e.target.select();
                           }}
                           onChange={(e) => setCashbackAmountInput(e.target.value)}
-                          placeholder="回錢金額 (必填)*"
-                          className="w-36 bg-[#111827] border border-amber-500 rounded-lg px-2.5 py-1.5 text-xs font-mono font-bold text-amber-300 focus:outline-none"
+                          placeholder="回錢金額"
+                          className="w-28 bg-[#111827] border border-amber-500 rounded-lg px-2.5 py-1.5 text-xs font-mono font-bold text-amber-300 focus:outline-none"
                         />
+                        {Number(prizeCostInput) > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => setCashbackAmountInput(prizeCostInput)}
+                            className={`px-2 py-1.5 rounded-lg border text-[11px] font-bold whitespace-nowrap transition-colors ${
+                              cashbackAmountInput === prizeCostInput
+                                ? 'bg-amber-500/25 border-amber-500/50 text-amber-300'
+                                : 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-300'
+                            }`}
+                            title={`帶入成本金額 $${prizeCostInput}`}
+                          >
+                            同成本
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>
@@ -853,6 +1197,20 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                   );
                   const claimedPrizes = board.prizes.filter((p) => p.is_claimed);
 
+                  // 需求 3 & 7：計算下版真實剩餘洞數、實際被刮洞數與每洞均投
+                  const remHoles =
+                    board.settled_remaining_holes !== undefined
+                      ? board.settled_remaining_holes
+                      : (board.remaining_holes || 0);
+                  const scratchedCount =
+                    board.settled_scratched_holes !== undefined
+                      ? board.settled_scratched_holes
+                      : Math.max(0, board.total_holes - remHoles);
+                  const avgRevenuePerHole =
+                    board.avg_revenue_per_hole !== undefined
+                      ? board.avg_revenue_per_hole
+                      : (scratchedCount > 0 ? Math.round(fin.grossCoinRevenue / scratchedCount) : 0);
+
                   return (
                     <div
                       key={board.board_id}
@@ -864,7 +1222,7 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                             [{m?.code || '機台'}] {board.board_letter || 'A'}板
                           </span>
                           <span className="text-xs font-bold text-white truncate">
-                            {board.total_holes} 刮 (全結算)
+                            {board.total_holes} 刮 (被刮 {scratchedCount} 洞 · 剩 {remHoles} 洞)
                           </span>
                         </div>
 
@@ -904,8 +1262,8 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                         </span>
                       </div>
 
-                      {/* 財務摘要 */}
-                      <div className="grid grid-cols-3 gap-2 text-center text-xs font-mono">
+                      {/* 需求 3 & 7：4 格核心指標 (含被刮洞數與每洞均出) */}
+                      <div className="grid grid-cols-4 gap-2 text-center text-xs font-mono">
                         <div className="bg-[#0B0F17] p-2 rounded-lg border border-slate-800/60">
                           <div className="text-[10px] text-slate-500">面板總收幣</div>
                           <div className="font-bold text-white">
@@ -913,9 +1271,15 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                           </div>
                         </div>
                         <div className="bg-[#0B0F17] p-2 rounded-lg border border-slate-800/60">
-                          <div className="text-[10px] text-slate-500">回錢支出</div>
+                          <div className="text-[10px] text-slate-500">實際刮開</div>
                           <div className="font-bold text-amber-400">
-                            -${fin.totalCashbackDeducted.toLocaleString()}
+                            {scratchedCount} 洞
+                          </div>
+                        </div>
+                        <div className="bg-[#0B0F17] p-2 rounded-lg border border-slate-800/60">
+                          <div className="text-[10px] text-slate-500">每洞均投</div>
+                          <div className="font-bold text-sky-400">
+                            ${avgRevenuePerHole}/洞
                           </div>
                         </div>
                         <div className="bg-[#0B0F17] p-2 rounded-lg border border-slate-800/60">
@@ -926,24 +1290,43 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                         </div>
                       </div>
 
-                      {/* 開出獎項紀錄 */}
+                      {/* 開出獎項紀錄 (需求 7：顯示開出時機與即時賺賠) */}
                       {claimedPrizes.length > 0 && (
                         <div className="space-y-1.5 pt-1">
                           <div className="text-[10px] text-slate-400">開出獎項 ({claimedPrizes.length} 個)：</div>
                           <div className="flex flex-wrap gap-1.5">
-                            {claimedPrizes.map((p) => (
-                              <span
-                                key={p.item_id}
-                                className="px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/30 text-[10px] font-mono text-emerald-300"
-                              >
-                                #{p.number_label} {p.prize_name || '大獎'}{' '}
-                                {p.is_cashback
-                                  ? `(回錢 $${p.cashback_amount})`
-                                  : p.prize_cost > 0
-                                  ? `(成本 $${p.prize_cost})`
-                                  : ''}
-                              </span>
-                            ))}
+                            {claimedPrizes.map((p) => {
+                              const costOrCb = p.claim_type === 'CASHBACK' ? (p.cashback_amount || 0) : (p.prize_cost || 0);
+                              const exitRev = p.claimed_at_revenue !== undefined ? p.claimed_at_revenue : fin.grossCoinRevenue;
+                              const exitProfit = exitRev - costOrCb;
+                              return (
+                                <span
+                                  key={p.item_id}
+                                  className="px-2.5 py-1 rounded bg-[#0B0F17] border border-slate-800 text-[10px] font-mono text-slate-300 flex items-center gap-1.5"
+                                >
+                                  <span className="font-bold text-amber-400">#{p.number_label}</span>
+                                  <span className="text-white">{p.prize_name || '大獎'}</span>
+                                  <span
+                                    className={`px-1 rounded text-[9px] font-bold ${
+                                      p.claim_type === 'CASHBACK'
+                                        ? 'bg-amber-500/20 text-amber-300'
+                                        : 'bg-emerald-500/20 text-emerald-300'
+                                    }`}
+                                  >
+                                    {p.claim_type === 'CASHBACK' ? `💵 回錢 $${p.cashback_amount}` : `🎁 拿獎 $${p.prize_cost}`}
+                                  </span>
+                                  {p.claimed_at_scratched_holes !== undefined && (
+                                    <span className="text-[9px] text-slate-400">
+                                      (第 {p.claimed_at_scratched_holes} 刮出 · 幣量 ${exitRev} ·{' '}
+                                      <span className={exitProfit >= 0 ? 'text-emerald-400 font-bold' : 'text-rose-400 font-bold'}>
+                                        {exitProfit >= 0 ? '+' : ''}${exitProfit}
+                                      </span>
+                                      )
+                                    </span>
+                                  )}
+                                </span>
+                              );
+                            })}
                           </div>
                         </div>
                       )}
@@ -978,8 +1361,16 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                               <div className="text-xs font-bold text-white">
                                 選用 {stat.times_selected} 次 · 開出 {stat.times_claimed} 次
                               </div>
-                              <div className="text-[11px] font-mono text-slate-400">
-                                {stat.win_boards_count} 勝 (賺) / {stat.loss_boards_count} 敗 (賠)
+                              <div className="text-[10px] font-mono text-slate-400 space-x-1.5 mt-0.5">
+                                <span>{stat.win_boards_count} 勝 / {stat.loss_boards_count} 敗</span>
+                                {stat.avg_exit_hole !== undefined && (
+                                  <span>· 均在第 {stat.avg_exit_hole} 刮開</span>
+                                )}
+                                {stat.early_exit_loss_count ? (
+                                  <span className="text-rose-400 font-bold">
+                                    · {stat.early_exit_loss_count} 次提早虧損
+                                  </span>
+                                ) : null}
                               </div>
                             </div>
                           </div>
@@ -987,16 +1378,16 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                           <div className="text-right">
                             <div
                               className={`text-sm font-mono font-bold ${
-                                stat.cumulative_board_profit >= 0
+                                (stat.direct_exit_profit || 0) >= 0
                                   ? 'text-emerald-400'
                                   : 'text-rose-400'
                               }`}
                             >
-                              {stat.cumulative_board_profit >= 0 ? '+' : ''}$
-                              {stat.cumulative_board_profit.toLocaleString()}
+                              {(stat.direct_exit_profit || 0) >= 0 ? '+' : ''}$
+                              {(stat.direct_exit_profit || 0).toLocaleString()}
                             </div>
                             <div className="text-[10px] font-mono text-slate-500">
-                              勝率 {stat.win_rate_pct}%
+                              即時出貨損益 · 勝率 {stat.win_rate_pct}%
                             </div>
                           </div>
                         </div>
@@ -1022,7 +1413,7 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                   <div className="bg-[#111827] border border-emerald-500/30 rounded-xl p-4 space-y-2.5">
                     <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-400">
                       <Flame className="w-4 h-4" />
-                      帶財神號 TOP 5
+                      帶財神號 TOP 5 (出貨即時損益)
                     </div>
                     {luckStats.profitLeaders.slice(0, 5).map((s) => (
                       <div
@@ -1035,11 +1426,17 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                           </span>
                           <span className="text-xs text-slate-300">
                             選 {s.times_selected} 次 ({s.win_boards_count}賺/{s.loss_boards_count}賠)
+                            {s.avg_exit_hole ? ` · 均刮${s.avg_exit_hole}洞` : ''}
                           </span>
                         </div>
-                        <span className="text-xs font-mono font-bold text-emerald-400">
-                          +${s.cumulative_board_profit.toLocaleString()}
-                        </span>
+                        <div className="text-right">
+                          <span className="text-xs font-mono font-bold text-emerald-400 block">
+                            +${(s.direct_exit_profit !== undefined ? s.direct_exit_profit : s.cumulative_board_profit).toLocaleString()}
+                          </span>
+                          <span className="text-[9px] text-slate-500 font-mono">
+                            出貨即時損益
+                          </span>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -1047,7 +1444,7 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                   <div className="bg-[#111827] border border-rose-500/30 rounded-xl p-4 space-y-2.5">
                     <div className="flex items-center gap-1.5 text-xs font-bold text-rose-400">
                       <AlertTriangle className="w-4 h-4" />
-                      虧損注意號
+                      虧損注意號 (提早下課地雷)
                     </div>
                     {luckStats.lossTrapList.length === 0 ? (
                       <div className="text-xs text-slate-500 py-2">目前無虧損紀錄</div>
@@ -1065,10 +1462,15 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                               選 {s.times_selected} 次 ({s.loss_boards_count} 版虧損)
                             </span>
                           </div>
-                          <span className="text-xs font-mono font-bold text-rose-400">
-                            {s.cumulative_board_profit >= 0 ? '+' : ''}$
-                            {s.cumulative_board_profit.toLocaleString()}
-                          </span>
+                          <div className="text-right">
+                            <span className="text-xs font-mono font-bold text-rose-400 block">
+                              {((s.direct_exit_profit !== undefined ? s.direct_exit_profit : s.cumulative_board_profit)) >= 0 ? '+' : ''}$
+                              {((s.direct_exit_profit !== undefined ? s.direct_exit_profit : s.cumulative_board_profit)).toLocaleString()}
+                            </span>
+                            <span className="text-[9px] text-slate-500 font-mono">
+                              {s.early_exit_loss_count ? `${s.early_exit_loss_count} 次提早下課` : '板面虧損'}
+                            </span>
+                          </div>
                         </div>
                       ))
                     )}
@@ -1145,6 +1547,18 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
           </div>
         </div>
       )}
+
+      {/* 統一整合式下版結清彈窗 (避免二次操作與重複計帳) */}
+      <SettleBoardModal
+        isOpen={isSettleModalOpen}
+        onClose={() => setIsSettleModalOpen(false)}
+        board={selectedBoard}
+        machine={machines.find((m) => m.machine_id === selectedBoard?.machine_id) || null}
+        inventoryItems={inventoryItems}
+        onConfirmSettle={(payload) => {
+          onSettleBoard(payload);
+        }}
+      />
     </div>
   );
 };

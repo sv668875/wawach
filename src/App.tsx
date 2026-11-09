@@ -6,6 +6,7 @@ import {
   Wrench,
   BarChart3,
   Cpu,
+  RotateCcw,
 } from 'lucide-react';
 import {
   ClearActionType,
@@ -14,9 +15,12 @@ import {
   InventoryItem,
   ItemPlacement,
   Machine,
+  MachineCustomFee,
   MachineModel,
+  MachinePaymentRecord,
   MeterReading,
   ScratchBoard,
+  SettleBoardPayload,
 } from './types';
 import {
   INITIAL_CATEGORIES,
@@ -39,6 +43,21 @@ import { FinancialAnalyticsView } from './components/FinancialAnalyticsView';
 import { ErrorBoundary } from './components/ErrorBoundary';
 
 type TabKey = 'meter' | 'scratch' | 'inventory' | 'overhead' | 'analytics';
+
+interface UndoSnapshot {
+  id: string;
+  description: string;
+  timestamp: string;
+  state: {
+    machines: Machine[];
+    scratchBoards: ScratchBoard[];
+    readings: MeterReading[];
+    inventoryItems: InventoryItem[];
+    expenses: Expense[];
+    categories: string[];
+    activeMachineId: string;
+  };
+}
 
 const STORAGE_KEYS = {
   MACHINES: 'clawops_v3_machines',
@@ -81,7 +100,56 @@ export default function App() {
     loadFromStorage(STORAGE_KEYS.EXPENSES, INITIAL_EXPENSES)
   );
 
+  // 全域同步機台選取（收幣、刮板、損益跨頁面同步鎖定同一機台）
+  const [activeMachineId, setActiveMachineId] = useState<string>(
+    () => machines[0]?.machine_id || ''
+  );
+
+  useEffect(() => {
+    if (machines.length > 0 && !machines.some((m) => m.machine_id === activeMachineId)) {
+      setActiveMachineId(machines[0].machine_id);
+    }
+  }, [machines, activeMachineId]);
+
+  // 操作防呆與返回復原堆疊 (Undo stack)
+  const [undoStack, setUndoStack] = useState<UndoSnapshot[]>([]);
+
+  const pushUndo = (description: string) => {
+    const snapshot: UndoSnapshot = {
+      id: `undo_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      description,
+      timestamp: new Date().toISOString(),
+      state: {
+        machines: JSON.parse(JSON.stringify(machines)),
+        scratchBoards: JSON.parse(JSON.stringify(scratchBoards)),
+        readings: JSON.parse(JSON.stringify(readings)),
+        inventoryItems: JSON.parse(JSON.stringify(inventoryItems)),
+        expenses: JSON.parse(JSON.stringify(expenses)),
+        categories: [...categories],
+        activeMachineId,
+      },
+    };
+    setUndoStack((prev) => [snapshot, ...prev.slice(0, 19)]);
+  };
+
+  const handleUndo = () => {
+    if (undoStack.length === 0) return;
+    const [latest, ...rest] = undoStack;
+    setMachines(latest.state.machines);
+    setScratchBoards(latest.state.scratchBoards);
+    setReadings(latest.state.readings);
+    setInventoryItems(latest.state.inventoryItems);
+    setExpenses(latest.state.expenses);
+    setCategories(latest.state.categories);
+    if (latest.state.activeMachineId) {
+      setActiveMachineId(latest.state.activeMachineId);
+    }
+    setUndoStack(rest);
+    showToast(`↩️ 已復原上一步：${latest.description}`);
+  };
+
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [targetScratchBoardId, setTargetScratchBoardId] = useState<string | null>(null);
 
   useEffect(() => {
     try {
@@ -155,6 +223,7 @@ export default function App() {
     notes: string;
     targetBoardId?: string | null;
   }) => {
+    pushUndo('記錄收幣');
     const targetMachine = machines.find(
       (m) => m.machine_id === payload.machineId
     );
@@ -249,7 +318,7 @@ export default function App() {
     setMachines((prev) =>
       prev.map((m) => {
         if (m.machine_id !== targetMachine.machine_id) return m;
-        // 如果是下版清0，只清掉該特定版，若還有其他版則自動保留
+        // 如果是結算下版，只清掉該特定版，若還有其他版則自動保留
         let updatedActiveBoardId = m.active_board_id;
         if (payload.clearAction === 'BOARD_CLOSE_CLEAR' && activeBoardId) {
           if (m.active_board_id === activeBoardId) {
@@ -274,8 +343,8 @@ export default function App() {
 
     showToast(
       payload.clearAction === 'BOARD_CLOSE_CLEAR'
-        ? `[${targetMachine.code}] 下版清0 +$${cashAdded.toLocaleString()}`
-        : `[${targetMachine.code}] 分段清0 +$${cashAdded.toLocaleString()}`
+        ? `[${targetMachine.code}] 結算下版 +$${cashAdded.toLocaleString()}`
+        : `[${targetMachine.code}] 記錄收幣 +$${cashAdded.toLocaleString()}`
     );
   };
 
@@ -284,6 +353,7 @@ export default function App() {
     totalHoles: number,
     customTitle?: string
   ) => {
+    pushUndo('上架新刮板');
     const targetMachine = machines.find((m) => m.machine_id === machineId);
     if (!targetMachine) return;
 
@@ -346,13 +416,71 @@ export default function App() {
       inventoryItemId?: string;
     }
   ) => {
+    pushUndo('新增獎項');
     const targetBoard = scratchBoards.find((b) => b.board_id === boardId);
+    const machineId = targetBoard?.machine_id || null;
+    const targetMachine = machines.find((m) => m.machine_id === machineId);
     let assignedInvId = prizeInput.inventoryItemId;
 
-    // 做法 A：若勾選「同步登記為該機台庫存」，自動在庫存中建立 ON_MACHINE 商品 (方便統計壓貨資金)
-    if (prizeInput.syncToInventory && prizeInput.prizeName && prizeInput.prizeCost > 0) {
-      const machineId = targetBoard?.machine_id || null;
-      const targetMachine = machines.find((m) => m.machine_id === machineId);
+    // 1. 若選擇倉庫備品 (prizeInput.inventoryItemId)：自倉庫移轉至該機台庫存，選項隨即排除不重覆
+    if (prizeInput.inventoryItemId) {
+      const warehouseItem = inventoryItems.find(
+        (it) => it.item_id === prizeInput.inventoryItemId
+      );
+      if (warehouseItem) {
+        if (warehouseItem.quantity <= 1) {
+          // 數量僅 1 件：直接移轉為機台庫存 (ON_MACHINE)，倉庫備品中不再可選
+          assignedInvId = warehouseItem.item_id;
+          setInventoryItems((prev) =>
+            prev.map((it) => {
+              if (it.item_id !== warehouseItem.item_id) return it;
+              return {
+                ...it,
+                placement: 'ON_MACHINE',
+                machine_id: machineId,
+                note: `自倉庫移轉至 [${targetMachine?.code || '機台'}] 刮板 #${prizeInput.numberLabel}`,
+                updated_at: new Date().toISOString(),
+              };
+            })
+          );
+        } else {
+          // 數量 > 1 件：倉庫扣除 1 件，並獨立新建 1 件機台庫存
+          const newMachineInvId = `inv_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+          assignedInvId = newMachineInvId;
+          const newOnMachineItem: InventoryItem = {
+            item_id: newMachineInvId,
+            name: warehouseItem.name,
+            category: warehouseItem.category,
+            acquisition_source: warehouseItem.acquisition_source,
+            unit_cost: warehouseItem.unit_cost,
+            quantity: 1,
+            placement: 'ON_MACHINE',
+            machine_id: machineId,
+            note: `自倉庫備品分出 1 件移轉至 [${targetMachine?.code || '機台'}] 刮板 #${prizeInput.numberLabel}`,
+            updated_at: new Date().toISOString(),
+          };
+          setInventoryItems((prev) => [
+            newOnMachineItem,
+            ...prev.map((it) => {
+              if (it.item_id !== warehouseItem.item_id) return it;
+              return {
+                ...it,
+                quantity: Math.max(0, it.quantity - 1),
+                updated_at: new Date().toISOString(),
+              };
+            }),
+          ]);
+        }
+        showToast(
+          `已自倉庫帶入 #${prizeInput.numberLabel} ${warehouseItem.name} (已移轉至機台庫存)`
+        );
+      }
+    } else if (
+      prizeInput.syncToInventory &&
+      prizeInput.prizeName &&
+      prizeInput.prizeCost > 0
+    ) {
+      // 2. 做法 A：若勾選「同步登記為該機台庫存」，自動在庫存中建立 ON_MACHINE 商品 (方便統計壓貨資金)
       const newInvItem: InventoryItem = {
         item_id: `inv_${Date.now()}`,
         name: prizeInput.prizeName.trim(),
@@ -367,7 +495,9 @@ export default function App() {
       };
       assignedInvId = newInvItem.item_id;
       setInventoryItems((prev) => [newInvItem, ...prev]);
-      showToast(`已加入 #${prizeInput.numberLabel} 並登記至 [${targetMachine?.code || '機台'}] 庫存`);
+      showToast(
+        `已加入 #${prizeInput.numberLabel} 並登記至 [${targetMachine?.code || '機台'}] 庫存`
+      );
     } else {
       showToast(`已加入 #${String(prizeInput.numberLabel).padStart(2, '0')}`);
     }
@@ -413,23 +543,41 @@ export default function App() {
     itemId: string,
     claimType?: 'PHYSICAL' | 'CASHBACK'
   ) => {
+    pushUndo('變更中獎狀態');
     const nowIso = new Date().toISOString();
+    const targetBoard = scratchBoards.find((b) => b.board_id === boardId);
+    const targetPrize = targetBoard?.prizes.find((p) => p.item_id === itemId);
+    const willBeClaimed = !targetPrize?.is_claimed;
+
+    const scratchedHolesSnapshot = targetBoard
+      ? Math.max(0, targetBoard.total_holes - targetBoard.remaining_holes)
+      : undefined;
+    const revenueSnapshot = targetBoard?.gross_coin_revenue;
 
     // 當客人「拿獎」實體商品出貨時，若有綁定庫存品項，自動扣減庫存數量 1 件
-    if (claimType === 'PHYSICAL') {
-      const targetBoard = scratchBoards.find((b) => b.board_id === boardId);
-      const targetPrize = targetBoard?.prizes.find((p) => p.item_id === itemId);
-      if (targetPrize?.inventory_item_id) {
+    // 反之，若取消中獎且原為實體，則補回 1 件
+    if (targetPrize?.inventory_item_id) {
+      if (willBeClaimed && claimType === 'PHYSICAL') {
         setInventoryItems((prev) =>
           prev
             .map((item) => {
               if (item.item_id !== targetPrize.inventory_item_id) return item;
               return {
                 ...item,
-                quantity: item.quantity - 1,
+                quantity: Math.max(0, item.quantity - 1),
               };
             })
             .filter((item) => item.quantity > 0)
+        );
+      } else if (!willBeClaimed && targetPrize.claim_type === 'PHYSICAL') {
+        setInventoryItems((prev) =>
+          prev.map((item) => {
+            if (item.item_id !== targetPrize.inventory_item_id) return item;
+            return {
+              ...item,
+              quantity: item.quantity + 1,
+            };
+          })
         );
       }
     }
@@ -439,14 +587,16 @@ export default function App() {
         if (b.board_id !== boardId) return b;
         const nextPrizes = b.prizes.map((p) => {
           if (p.item_id !== itemId) return p;
-          const willBeClaimed = !p.is_claimed;
+          const chosenType = willBeClaimed
+            ? claimType || (p.is_cashback && (!p.prize_cost || p.prize_cost === 0) ? 'CASHBACK' : 'PHYSICAL')
+            : undefined;
           return {
             ...p,
             is_claimed: willBeClaimed,
-            claim_type: willBeClaimed
-              ? claimType || (p.is_cashback && (!p.prize_cost || p.prize_cost === 0) ? 'CASHBACK' : 'PHYSICAL')
-              : undefined,
+            claim_type: chosenType,
             claimed_at: willBeClaimed ? nowIso : undefined,
+            claimed_at_scratched_holes: willBeClaimed ? scratchedHolesSnapshot : undefined,
+            claimed_at_revenue: willBeClaimed ? revenueSnapshot : undefined,
           };
         });
         const fin = calculateScratchBoardFinancials(
@@ -467,6 +617,26 @@ export default function App() {
   };
 
   const handleDeletePrizeFromBoard = (boardId: string, itemId: string) => {
+    pushUndo('取下獎項');
+    const targetBoard = scratchBoards.find((b) => b.board_id === boardId);
+    const targetPrize = targetBoard?.prizes.find((p) => p.item_id === itemId);
+
+    // 若刪除/取下的獎項有對應的庫存 ID，將該庫存退回倉庫備品 (IN_STOCK)，重現於選單中
+    if (targetPrize?.inventory_item_id) {
+      setInventoryItems((prev) =>
+        prev.map((it) => {
+          if (it.item_id !== targetPrize.inventory_item_id) return it;
+          return {
+            ...it,
+            placement: 'IN_STOCK',
+            machine_id: null,
+            note: `${it.note ? `${it.note} (取下退回倉庫)` : '取下退回倉庫'}`,
+            updated_at: new Date().toISOString(),
+          };
+        })
+      );
+    }
+
     setScratchBoards((prev) =>
       prev.map((b) => {
         if (b.board_id !== boardId) return b;
@@ -486,6 +656,7 @@ export default function App() {
         };
       })
     );
+    showToast(`已從刮板取下獎項 #${targetPrize?.number_label || ''}`);
   };
 
   const handleRecordBatchProgress = (payload: {
@@ -493,26 +664,84 @@ export default function App() {
     remainingHoles: number;
     addedCashRevenue: number;
     newlyClaimedNumbers: number[];
+    claimedPrizeDetails?: {
+      number_label: number;
+      claim_type: 'PHYSICAL' | 'CASHBACK';
+    }[];
     note: string;
   }) => {
+    pushUndo('分批巡場紀錄');
     const nowIso = new Date().toISOString();
+    const targetBoard = scratchBoards.find((b) => b.board_id === payload.boardId);
+    if (!targetBoard) return;
+
+    const scratchedHolesSnapshot = Math.max(
+      0,
+      targetBoard.total_holes - payload.remainingHoles
+    );
+    const nextGross =
+      targetBoard.gross_coin_revenue + (Number(payload.addedCashRevenue) || 0);
+
+    // 1. 若有勾選新開出實體獎項（拿獎 PHYSICAL），即時扣減機台庫存
+    const physicalInvIdsToDeduct: string[] = [];
+    if (payload.claimedPrizeDetails && payload.claimedPrizeDetails.length > 0) {
+      payload.claimedPrizeDetails.forEach((detail) => {
+        if (detail.claim_type === 'PHYSICAL') {
+          const prize = targetBoard.prizes.find(
+            (p) => p.number_label === detail.number_label
+          );
+          if (prize?.inventory_item_id && !prize.is_claimed) {
+            physicalInvIdsToDeduct.push(prize.inventory_item_id);
+          }
+        }
+      });
+    }
+
+    if (physicalInvIdsToDeduct.length > 0) {
+      setInventoryItems((prev) =>
+        prev
+          .map((item) => {
+            const count = physicalInvIdsToDeduct.filter((id) => id === item.item_id).length;
+            if (count === 0) return item;
+            return {
+              ...item,
+              quantity: Math.max(0, item.quantity - count),
+            };
+          })
+          .filter((item) => item.quantity > 0)
+      );
+    }
+
+    // 2. 更新刮板獎項資料（登記出獎時機洞數與累積幣量）
     setScratchBoards((prev) =>
       prev.map((b) => {
         if (b.board_id !== payload.boardId) return b;
 
         const nextPrizes = b.prizes.map((p) => {
           if (payload.newlyClaimedNumbers.includes(p.number_label)) {
+            const detail = payload.claimedPrizeDetails?.find(
+              (d) => d.number_label === p.number_label
+            );
+            const resolvedClaimType =
+              detail?.claim_type ||
+              p.claim_type ||
+              (p.is_cashback && (!p.prize_cost || p.prize_cost === 0)
+                ? 'CASHBACK'
+                : 'PHYSICAL');
+
             return {
               ...p,
               is_claimed: true,
+              claim_type: resolvedClaimType,
               claimed_at: p.claimed_at || nowIso,
+              claimed_at_scratched_holes:
+                p.claimed_at_scratched_holes ?? scratchedHolesSnapshot,
+              claimed_at_revenue: p.claimed_at_revenue ?? nextGross,
             };
           }
           return p;
         });
 
-        const nextGross =
-          b.gross_coin_revenue + (Number(payload.addedCashRevenue) || 0);
         const fin = calculateScratchBoardFinancials(
           b.board_cost,
           nextGross,
@@ -524,6 +753,8 @@ export default function App() {
           logged_at: nowIso,
           remaining_holes: payload.remainingHoles,
           newly_claimed_numbers: payload.newlyClaimedNumbers,
+          claimed_prize_details: payload.claimedPrizeDetails,
+          cumulative_revenue_snapshot: nextGross,
           recorded_cash_added: Number(payload.addedCashRevenue) || 0,
           note: payload.note,
         };
@@ -542,13 +773,14 @@ export default function App() {
       })
     );
 
-    showToast(`已更新：剩 ${payload.remainingHoles} 洞`);
+    showToast(`已更新：剩 ${payload.remainingHoles} 洞 (巡場出幣 +$${Number(payload.addedCashRevenue || 0).toLocaleString()})`);
   };
 
   const handleUpdateGrossRevenue = (
     boardId: string,
     newGrossRevenue: number
   ) => {
+    pushUndo('更新收幣金額');
     setScratchBoards((prev) =>
       prev.map((b) => {
         if (b.board_id !== boardId) return b;
@@ -570,11 +802,59 @@ export default function App() {
     showToast('已更新收幣金額');
   };
 
-  const handleSettleBoard = (boardId: string) => {
+  const handleSettleBoard = (payload: SettleBoardPayload | string) => {
+    pushUndo('結算下版');
+    const boardId = typeof payload === 'string' ? payload : payload.boardId;
+    const finalCash =
+      typeof payload === 'string'
+        ? 0
+        : Math.max(0, Number(payload.finalCollectedCash) || 0);
+    const isAlreadyRecorded =
+      typeof payload === 'string' ? false : !!payload.isCashAlreadyRecorded;
+    const prizesAction =
+      typeof payload === 'string'
+        ? 'KEEP_ON_MACHINE'
+        : payload.remainingPrizesAction || 'RETURN_TO_WAREHOUSE';
+    const customNotes = typeof payload === 'string' ? '' : payload.notes || '';
+
     const nowIso = new Date().toISOString();
     const targetBoard = scratchBoards.find((b) => b.board_id === boardId);
     if (!targetBoard) return;
 
+    const targetMachine = machines.find(
+      (m) => m.machine_id === targetBoard.machine_id
+    );
+
+    // 1. 計算下版時剩餘洞數與實際被刮掉洞數（不再強制寫死 0 洞！）
+    const settledRemHoles =
+      typeof payload === 'string'
+        ? targetBoard.remaining_holes
+        : payload.settledRemainingHoles !== undefined
+        ? Math.max(0, Number(payload.settledRemainingHoles))
+        : targetBoard.remaining_holes;
+    const settledScratchedHoles = Math.max(
+      0,
+      targetBoard.total_holes - settledRemHoles
+    );
+
+    // 2. 計算最終總收幣 (防呆：若先前已登記過，則不額外累加，避免二次記帳重複計算！)
+    const addedCash = !isAlreadyRecorded && finalCash > 0 ? finalCash : 0;
+    const finalGrossRevenue = targetBoard.gross_coin_revenue + addedCash;
+
+    // 3. 計算平均每洞出資額 (均出 = 總幣量 / 實際刮掉洞數)
+    const avgRevenuePerHole =
+      settledScratchedHoles > 0
+        ? Math.round(finalGrossRevenue / settledScratchedHoles)
+        : 0;
+
+    // 4. 重新計算該板最終損益
+    const fin = calculateScratchBoardFinancials(
+      targetBoard.board_cost,
+      finalGrossRevenue,
+      targetBoard.prizes || []
+    );
+
+    // 5. 更新看板狀態為 SETTLED 並存入最終結算數據與下版洞數
     setScratchBoards((prev) =>
       prev.map((b) =>
         b.board_id === boardId
@@ -582,12 +862,102 @@ export default function App() {
               ...b,
               status: 'SETTLED',
               settled_at: nowIso,
-              remaining_holes: 0,
+              remaining_holes: settledRemHoles,
+              settled_remaining_holes: settledRemHoles,
+              settled_scratched_holes: settledScratchedHoles,
+              avg_revenue_per_hole: avgRevenuePerHole,
+              gross_coin_revenue: fin.grossCoinRevenue,
+              total_cashback_deducted: fin.totalCashbackDeducted,
+              net_coin_revenue: fin.netCoinRevenue,
+              total_prize_cost: fin.claimedPrizeCost,
+              net_profit: fin.netProfit,
             }
           : b
       )
     );
 
+    // 6. 若本次有收幣，自動建立一筆「結算下版 (BOARD_CLOSE_CLEAR)」紀錄
+    // (確保收幣歷史有這筆紀錄，且 board_id 正確關聯，不會變成 standaloneCoin 造成二次重複計算！)
+    if (finalCash > 0) {
+      const coinUnit = targetMachine?.coin_unit_value || 10;
+      const coinsDelta = Math.round(finalCash / coinUnit);
+      const newReading: MeterReading = {
+        reading_id: `read_${Date.now()}`,
+        machine_id: targetBoard.machine_id,
+        board_id: targetBoard.board_id,
+        entry_mode: targetMachine?.machine_model || 'DIGITAL',
+        clear_action: 'BOARD_CLOSE_CLEAR',
+        read_at: nowIso,
+        panel_amount: finalCash,
+        cash_collected: finalCash,
+        last_coin_counter: targetMachine?.last_coin_counter || 0,
+        coin_counter: (targetMachine?.last_coin_counter || 0) + coinsDelta,
+        last_prize_counter: targetMachine?.last_prize_counter || 0,
+        prize_counter: targetMachine?.last_prize_counter || 0,
+        reset_mode: 'NORMAL',
+        coins_delta: coinsDelta,
+        prizes_delta: 0,
+        notes:
+          customNotes.trim() ||
+          `[${targetBoard.board_letter ? `${targetBoard.board_letter}板` : ''}結算下版] 實收 $${finalCash.toLocaleString()}`,
+      };
+      setReadings((prev) => [newReading, ...prev]);
+
+      // 更新機台最新抄錶狀態
+      setMachines((prev) =>
+        prev.map((m) => {
+          if (m.machine_id !== targetBoard.machine_id) return m;
+          return {
+            ...m,
+            last_coin_counter: newReading.coin_counter,
+            last_read_at: nowIso,
+          };
+        })
+      );
+    }
+
+    // 7. 處理獎品去向：
+    // 7.1 客人已領走實體商品（PHYSICAL）的獎項，正式出庫銷帳，不再計入機台壓貨成本
+    const claimedPhysicalPrizes = (targetBoard.prizes || []).filter(
+      (p) => p.is_claimed && p.claim_type === 'PHYSICAL'
+    );
+    const claimedInvIds = new Set(
+      claimedPhysicalPrizes.map((p) => p.inventory_item_id).filter(Boolean)
+    );
+    if (claimedInvIds.size > 0) {
+      setInventoryItems((prev) =>
+        prev.filter((item) => !claimedInvIds.has(item.item_id))
+      );
+    }
+
+    // 7.2 未被刮出或客人選擇折現回錢（實體未出）的獎品，若選擇退回倉庫
+    if (prizesAction === 'RETURN_TO_WAREHOUSE') {
+      const retainedPrizes = (targetBoard.prizes || []).filter(
+        (p) => !p.is_claimed || p.claim_type === 'CASHBACK'
+      );
+      const returnInvIds = new Set(
+        retainedPrizes.map((p) => p.inventory_item_id).filter(Boolean)
+      );
+
+      if (returnInvIds.size > 0) {
+        setInventoryItems((prev) =>
+          prev.map((item) => {
+            if (returnInvIds.has(item.item_id)) {
+              return {
+                ...item,
+                placement: 'IN_STOCK',
+                machine_id: null,
+                updated_at: nowIso,
+                note: item.note ? `${item.note} (下版退回倉庫)` : '下版退回倉庫',
+              };
+            }
+            return item;
+          })
+        );
+      }
+    }
+
+    // 8. 機台看板交接：若該機台目前 active_board_id 為本板，自動切換至同一機台的其他進行中板次
     setMachines((prev) =>
       prev.map((m) => {
         if (m.machine_id !== targetBoard.machine_id) return m;
@@ -607,25 +977,46 @@ export default function App() {
       })
     );
 
-    showToast(`已下版結算「${targetBoard.title}」`);
+    const profitSign = fin.netProfit >= 0 ? '+$' : '-$';
+    const profitAbs = Math.abs(fin.netProfit).toLocaleString();
+    showToast(
+      `[${targetMachine?.code || '機台'}] ${targetBoard.title} 已完成下版結清！總收幣 $${fin.grossCoinRevenue.toLocaleString()}，均出 $${avgRevenuePerHole}/洞，淨利 ${profitSign}${profitAbs}`
+    );
   };
 
   const handleAddMachine = (
     newMachine: Omit<Machine, 'machine_id' | 'last_read_at'>
   ) => {
+    const trimmedCode = (newMachine.code || '').trim();
+    if (!trimmedCode) {
+      showToast('⚠️ 請輸入機台代號！');
+      return;
+    }
+    const duplicate = machines.some(
+      (m) => m.code.trim().toLowerCase() === trimmedCode.toLowerCase()
+    );
+    if (duplicate) {
+      showToast(`⚠️ 機台代號 [${trimmedCode}] 已存在，請使用不同代號！`);
+      return;
+    }
+
+    pushUndo(`新增機台 [${trimmedCode}]`);
     const created: Machine = {
       ...newMachine,
+      code: trimmedCode,
       machine_id: `m_${Date.now()}`,
       last_read_at: new Date().toISOString(),
     };
     setMachines((prev) => [...prev, created]);
-    showToast(`已新增 [${created.code}]`);
+    setActiveMachineId(created.machine_id);
+    showToast(`已新增機台 [${created.code}]`);
   };
 
   const handleDeleteMachine = (machineId: string) => {
     const target = machines.find((m) => m.machine_id === machineId);
     if (!target) return;
 
+    pushUndo(`刪除機台 [${target.code}]`);
     // 1. 刪除機台本體
     setMachines((prev) => prev.filter((m) => m.machine_id !== machineId));
 
@@ -638,13 +1029,13 @@ export default function App() {
     // 4. 清除綁定在該機台的專屬開銷
     setExpenses((prev) => prev.filter((e) => e.machine_id !== machineId));
 
-    // 5. 將原本放置在該機台的庫存物品移回倉庫備品 (STORAGE)
+    // 5. 將原本放置在該機台的庫存物品移回倉庫備品 (IN_STOCK)
     setInventoryItems((prev) =>
       prev.map((item) =>
         item.machine_id === machineId
           ? {
               ...item,
-              placement: 'STORAGE',
+              placement: 'IN_STOCK',
               machine_id: null,
               updated_at: new Date().toISOString(),
             }
@@ -664,6 +1055,7 @@ export default function App() {
     const target = machines.find((m) => m.machine_id === machineId);
     if (!target) return;
 
+    pushUndo(`校準 [${target.code}] 滾輪計數`);
     setMachines((prev) =>
       prev.map((m) =>
         m.machine_id === machineId
@@ -833,6 +1225,7 @@ export default function App() {
   const handleAddItem = (
     payload: Omit<InventoryItem, 'item_id' | 'updated_at'>
   ) => {
+    pushUndo(`新增商品「${payload.name}」`);
     const created: InventoryItem = {
       ...payload,
       item_id: `inv_${Date.now()}`,
@@ -847,6 +1240,7 @@ export default function App() {
     targetPlacement: ItemPlacement,
     targetMachineId: string | null
   ) => {
+    pushUndo('變更庫存存放位置');
     const nowIso = new Date().toISOString();
     setInventoryItems((prev) =>
       prev.map((item) =>
@@ -873,6 +1267,8 @@ export default function App() {
   };
 
   const handleDeleteItem = (itemId: string) => {
+    const targetItem = inventoryItems.find((i) => i.item_id === itemId);
+    pushUndo(`刪除商品「${targetItem?.name || ''}」`);
     setInventoryItems((prev) => prev.filter((i) => i.item_id !== itemId));
     showToast('已刪除');
   };
@@ -881,6 +1277,7 @@ export default function App() {
     machineId: string,
     updates: Pick<Machine, 'rent_monthly' | 'other_fixed_fee' | 'other_fee_note'>
   ) => {
+    pushUndo('修改台租費用');
     setMachines((prev) =>
       prev.map((m) => (m.machine_id === machineId ? { ...m, ...updates } : m))
     );
@@ -888,6 +1285,7 @@ export default function App() {
   };
 
   const handleAddExpense = (payload: Omit<Expense, 'expense_id'>) => {
+    pushUndo(`新增開銷「${payload.title}」`);
     const created: Expense = {
       ...payload,
       expense_id: `exp_${Date.now()}`,
@@ -897,6 +1295,8 @@ export default function App() {
   };
 
   const handleDeleteExpense = (expenseId: string) => {
+    const targetExpense = expenses.find((e) => e.expense_id === expenseId);
+    pushUndo(`刪除開銷「${targetExpense?.title || ''}」`);
     setExpenses((prev) => prev.filter((e) => e.expense_id !== expenseId));
     showToast('已刪除');
   };
@@ -1006,14 +1406,25 @@ export default function App() {
       {/* Top Bar */}
       <header className="sticky top-0 z-30 bg-[#0B0F17]/95 backdrop-blur border-b border-[#1E293B] pt-safe">
         <div className="max-w-3xl mx-auto px-4 h-14 flex items-center justify-between gap-2">
-          {/* Brand */}
-          <div className="flex items-center gap-2">
+          {/* Brand & Undo Button */}
+          <div className="flex items-center gap-2 sm:gap-3">
             <div className="w-8 h-8 rounded-lg bg-amber-500 flex items-center justify-center text-slate-950 font-black">
               <Cpu className="w-4 h-4" />
             </div>
             <span className="text-sm font-extrabold tracking-tight text-white">
               ClawOps
             </span>
+            {undoStack.length > 0 && (
+              <button
+                type="button"
+                onClick={handleUndo}
+                className="w-8 h-8 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 text-amber-400 border border-amber-500/40 flex items-center justify-center transition-all shadow-sm active:scale-95"
+                title={`復原上一步：${undoStack[0].description}`}
+                aria-label="復原上一步"
+              >
+                <RotateCcw className="w-4 h-4" />
+              </button>
+            )}
           </div>
 
           {/* Desktop Nav */}
@@ -1075,14 +1486,18 @@ export default function App() {
             machines={machines}
             readings={readings}
             scratchBoards={scratchBoards}
+            selectedMachineId={activeMachineId}
+            onSelectMachine={setActiveMachineId}
             onSaveReading={handleSaveReading}
             onQuickMountBoard={handleQuickMountBoard}
             onAddMachine={handleAddMachine}
             onDeleteMachine={handleDeleteMachine}
             onCalibrateCounters={handleCalibrateMachineCounters}
             onSwitchMachineModel={handleSwitchMachineModel}
-            onJumpToScratchBoard={() => setActiveTab('scratch')}
-            onSettleBoard={handleSettleBoard}
+            onJumpToScratchBoard={(boardId) => {
+              if (boardId) setTargetScratchBoardId(boardId);
+              setActiveTab('scratch');
+            }}
           />
         )}
 
@@ -1091,6 +1506,10 @@ export default function App() {
             boards={scratchBoards}
             machines={machines}
             inventoryItems={inventoryItems}
+            activeMachineId={activeMachineId}
+            onSelectMachine={setActiveMachineId}
+            targetBoardId={targetScratchBoardId}
+            onTargetBoardConsumed={() => setTargetScratchBoardId(null)}
             onQuickMountBoard={handleQuickMountBoard}
             onAddPrizeToBoard={handleAddPrizeToBoard}
             onTogglePrizeClaimed={handleTogglePrizeClaimed}
@@ -1134,6 +1553,8 @@ export default function App() {
             scratchBoards={scratchBoards}
             inventoryItems={inventoryItems}
             expenses={expenses}
+            activeMachineId={activeMachineId}
+            onSelectMachine={setActiveMachineId}
             onExportCSV={handleExportCSV}
             onExportJSON={handleExportJSON}
             onImportJSON={handleImportJSON}

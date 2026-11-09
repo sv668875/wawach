@@ -83,7 +83,7 @@ export function calculateScratchBoardFinancials(
   netProfit: number;
   claimedCount: number;
 } {
-  const claimedPrizes = prizes.filter((p) => p.is_claimed);
+  const claimedPrizes = (prizes || []).filter((p) => p && p.is_claimed);
 
   // 1. 回錢扣減計算：
   // 只有客人選擇「回錢」(claim_type === 'CASHBACK') 或純回錢獎項時，才計入回錢現金支出
@@ -123,6 +123,7 @@ export function calculateScratchBoardFinancials(
     return sum;
   }, 0);
 
+  const netCoinRevenue = Math.max(0, (Number(grossCoinRevenue) || 0) - totalCashbackDeducted);
   const netProfit =
     netCoinRevenue - claimedPrizeCost - (Number(boardCost) || 0);
 
@@ -137,7 +138,41 @@ export function calculateScratchBoardFinancials(
 }
 
 /**
+ * 自動產生下一個不重複的機台代號 (如 A01 -> A02, B01 -> B02)
+ */
+export function getNextMachineCode(machines: Machine[]): string {
+  if (!machines || machines.length === 0) return 'A01';
+
+  const regex = /^([A-Za-z]*)(\d+)$/;
+  let maxPrefix = 'A';
+  let maxNum = 0;
+  let digitsLength = 2;
+
+  for (const m of machines) {
+    const code = (m.code || '').trim();
+    const match = code.match(regex);
+    if (match) {
+      const prefix = (match[1] || 'A').toUpperCase();
+      const num = parseInt(match[2], 10);
+      digitsLength = Math.max(digitsLength, match[2].length);
+      if (prefix > maxPrefix || (prefix === maxPrefix && num > maxNum)) {
+        maxPrefix = prefix;
+        maxNum = num;
+      }
+    }
+  }
+
+  if (maxNum === 0) {
+    return `A${String(machines.length + 1).padStart(2, '0')}`;
+  }
+
+  const nextNum = maxNum + 1;
+  return `${maxPrefix}${String(nextNum).padStart(digitsLength, '0')}`;
+}
+
+/**
  * 樂趣功能：統計每個號碼被台主選了幾次當獎項號碼，以及每版下版後總結是「賺錢」還是「虧損」
+ * 包含需求 7：個別號碼出貨時機、直接損益 (開出時幣量 - 獎項成本/回錢) 與提前下課虧損統計
  */
 export function computeNumberLuckMatrix(boards: ScratchBoard[]): {
   favoriteAndWinList: NumberLuckStat[];
@@ -145,7 +180,15 @@ export function computeNumberLuckMatrix(boards: ScratchBoard[]): {
   lossTrapList: NumberLuckStat[];
   allStats: NumberLuckStat[];
 } {
-  const map: Record<number, NumberLuckStat> = {};
+  const map: Record<
+    number,
+    NumberLuckStat & {
+      directExitProfitSum: number;
+      earlyLossCount: number;
+      exitHolesSum: number;
+      exitHolesCount: number;
+    }
+  > = {};
 
   for (const board of boards) {
     const fin = calculateScratchBoardFinancials(
@@ -171,6 +214,10 @@ export function computeNumberLuckMatrix(boards: ScratchBoard[]): {
           last_prize_name:
             prize.prize_name ||
             (prize.is_cashback ? `回錢 $${prize.cashback_amount}` : '大獎'),
+          directExitProfitSum: 0,
+          earlyLossCount: 0,
+          exitHolesSum: 0,
+          exitHolesCount: 0,
         };
       }
 
@@ -186,6 +233,31 @@ export function computeNumberLuckMatrix(boards: ScratchBoard[]): {
         if (prize.is_cashback) {
           map[num].total_cashback_given += Number(prize.cashback_amount) || 0;
         }
+
+        // 需求 7：號碼出貨當下損益分析 (開出時幣量 - 獎品成本或回錢金額)
+        const costOrCashback =
+          prize.claim_type === 'CASHBACK'
+            ? Number(prize.cashback_amount) || 0
+            : Number(prize.prize_cost) || 0;
+        const revenueAtExit =
+          prize.claimed_at_revenue !== undefined
+            ? prize.claimed_at_revenue
+            : board.gross_coin_revenue;
+        const exitProfit = revenueAtExit - costOrCashback;
+        map[num].directExitProfitSum += exitProfit;
+
+        if (exitProfit < 0) {
+          map[num].earlyLossCount += 1;
+        }
+
+        const holesAtExit =
+          prize.claimed_at_scratched_holes !== undefined
+            ? prize.claimed_at_scratched_holes
+            : Math.max(0, board.total_holes - board.remaining_holes);
+        if (holesAtExit > 0) {
+          map[num].exitHolesSum += holesAtExit;
+          map[num].exitHolesCount += 1;
+        }
       }
 
       // 統計該板總結是賺錢還是虧損
@@ -198,13 +270,24 @@ export function computeNumberLuckMatrix(boards: ScratchBoard[]): {
     }
   }
 
-  const allStats = Object.values(map).map((s) => {
+  const allStats: NumberLuckStat[] = Object.values(map).map((s) => {
     const totalBoards = s.win_boards_count + s.loss_boards_count;
     const winRate =
       totalBoards > 0 ? Math.round((s.win_boards_count / totalBoards) * 100) : 0;
     return {
-      ...s,
+      number_label: s.number_label,
+      times_selected: s.times_selected,
+      times_claimed: s.times_claimed,
+      win_boards_count: s.win_boards_count,
+      loss_boards_count: s.loss_boards_count,
       win_rate_pct: winRate,
+      cumulative_board_profit: s.cumulative_board_profit,
+      total_cashback_given: s.total_cashback_given,
+      last_prize_name: s.last_prize_name,
+      direct_exit_profit: s.directExitProfitSum,
+      early_exit_loss_count: s.earlyLossCount,
+      avg_exit_hole:
+        s.exitHolesCount > 0 ? Math.round(s.exitHolesSum / s.exitHolesCount) : undefined,
     };
   });
 
@@ -215,15 +298,29 @@ export function computeNumberLuckMatrix(boards: ScratchBoard[]): {
       b.cumulative_board_profit - a.cumulative_board_profit
   );
 
-  // 2. 帶財神號榜 (依總賺錢金額排序)
+  // 2. 帶財神號榜 (依直接損益與總賺錢金額排序)
   const profitLeaders = allStats
-    .filter((s) => s.cumulative_board_profit > 0)
-    .sort((a, b) => b.cumulative_board_profit - a.cumulative_board_profit);
+    .filter((s) => (s.direct_exit_profit || 0) > 0 || s.cumulative_board_profit > 0)
+    .sort(
+      (a, b) =>
+        (b.direct_exit_profit || 0) - (a.direct_exit_profit || 0) ||
+        b.cumulative_board_profit - a.cumulative_board_profit
+    );
 
-  // 3. 虧損地雷號 (有敗場或總結虧損的號碼)
+  // 3. 虧損地雷號 (有提早被下課或總結虧損的號碼)
   const lossTrapList = allStats
-    .filter((s) => s.loss_boards_count > 0 || s.cumulative_board_profit < 0)
-    .sort((a, b) => a.cumulative_board_profit - b.cumulative_board_profit);
+    .filter(
+      (s) =>
+        (s.early_exit_loss_count || 0) > 0 ||
+        (s.direct_exit_profit || 0) < 0 ||
+        s.loss_boards_count > 0 ||
+        s.cumulative_board_profit < 0
+    )
+    .sort(
+      (a, b) =>
+        (a.direct_exit_profit || 0) - (b.direct_exit_profit || 0) ||
+        a.cumulative_board_profit - b.cumulative_board_profit
+    );
 
   return {
     favoriteAndWinList,
@@ -233,28 +330,72 @@ export function computeNumberLuckMatrix(boards: ScratchBoard[]): {
   };
 }
 
+export interface OverheadResult {
+  totalConfiguredRent: number;   // 機台合約設定應繳月租總額 (合約基準)
+  totalPaidRent: number;         // 實際已確認支付之台租與固定費 (自 payment_records)
+  totalRent: number;             // 計入淨利扣除的台租實支出 (等於 totalPaidRent，未付絕不預扣)
+  totalOtherFixed: number;       // 設定之其他固定費 (供台租管理參考)
+  totalConsumableExpenses: number; // 耗材與雜支 (膠帶、爪套、消光膠帶等實質開銷)
+  grandTotalOverhead: number;    // 計入損益的總固定開銷支出 = totalPaidRent + totalConsumableExpenses
+  unpaidRent: number;            // 當前待繳/未付租金 = Math.max(0, totalConfiguredRent - totalPaidRent)
+}
+
 /**
  * 計算機台固定成本 (台租費用 + 其他費用) 與選用耗材費用
+ * 業務規則：新增機台後不預先從淨利扣除月租，必須於「台租」頁面確認支付 (PAID) 後才計入損益扣除，避免誤算！
  */
 export function calculateSimpleOverhead(
   machines: Machine[],
   expenses: Expense[],
-  targetMachineId: string | 'ALL'
-): {
-  totalRent: number;
-  totalOtherFixed: number;
-  totalConsumableExpenses: number;
-  grandTotalOverhead: number;
-} {
+  targetMachineId: string | 'ALL' = 'ALL',
+  options?: {
+    dateRange?: { start: Date; end: Date } | null;
+    currentPeriodMonth?: string;
+  }
+): OverheadResult {
   const targetMachines =
     targetMachineId === 'ALL'
       ? machines
       : machines.filter((m) => m.machine_id === targetMachineId);
 
-  const totalRent = targetMachines.reduce(
+  // 1. 合約設定之月租 (作為待繳與合約基準)
+  const totalConfiguredRent = targetMachines.reduce(
     (s, m) => s + (Number(m.rent_monthly) || 0),
     0
   );
+
+  // 2. 實繳台租：台主必須於台租頁面點擊「登記已付 / 確認記錄已付款」產生的付款紀錄
+  // 嚴格遵守台主業務財務邏輯：未去台租頁面確認支付者，絕不預扣當月租金！
+  const totalPaidRent = targetMachines.reduce((s, m) => {
+    const paidRecords = (m.payment_records || []).filter((r) => {
+      // 狀態為 PAID 或無狀態 (相容舊資料)
+      if (r.status && r.status !== 'PAID') return false;
+
+      // 若指定月份 (例如 "2026-11")
+      if (options?.currentPeriodMonth && r.period_label) {
+        return r.period_label === options.currentPeriodMonth;
+      }
+
+      // 若指定日期範圍 (例如週、年或自訂範圍)
+      if (options?.dateRange) {
+        const t = new Date(r.paid_at || 0).getTime();
+        if (isNaN(t)) return true;
+        return (
+          t >= options.dateRange.start.getTime() &&
+          t <= options.dateRange.end.getTime()
+        );
+      }
+
+      return true;
+    });
+
+    const sumPaid = paidRecords.reduce(
+      (rs, r) => rs + (Number(r.amount) || 0),
+      0
+    );
+    return s + sumPaid;
+  }, 0);
+
   const totalOtherFixed = targetMachines.reduce((s, m) => {
     const customFeesSum = (m.custom_fixed_fees || []).reduce(
       (cfs, f) => cfs + (Number(f.amount) || 0),
@@ -278,11 +419,18 @@ export function calculateSimpleOverhead(
     }
   }
 
+  // 損益扣除額以「實際已確認支付之台租 (totalPaidRent)」加上「實質耗材雜支」
+  const grandTotalOverhead = totalPaidRent + totalConsumableExpenses;
+  const unpaidRent = Math.max(0, totalConfiguredRent - totalPaidRent);
+
   return {
-    totalRent,
+    totalConfiguredRent,
+    totalPaidRent,
+    totalRent: totalPaidRent, // 保留相容性，使原有引用 totalRent 者均使用實付台租
     totalOtherFixed,
     totalConsumableExpenses,
-    grandTotalOverhead: totalRent + totalOtherFixed + totalConsumableExpenses,
+    grandTotalOverhead,
+    unpaidRent,
   };
 }
 
