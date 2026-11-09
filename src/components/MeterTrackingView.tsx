@@ -495,32 +495,28 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
 
             <div>
               <label className="block text-[11px] text-slate-400 mb-1">所屬場地 / 店點</label>
-              <input
-                type="text"
-                required
-                value={newMachineLocation}
-                onChange={(e) => setNewMachineLocation(e.target.value)}
-                placeholder="例如：逢甲夜市店、西門武昌店"
-                className="w-full bg-[#0B0F17] border border-slate-700 rounded-lg px-2.5 py-2 text-xs text-white placeholder-slate-600"
-              />
-              {allLocations.length > 0 && (
-                <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
-                  <span className="text-[10px] text-slate-500">快速填入場地：</span>
-                  {allLocations.map((loc) => (
-                    <button
-                      key={loc}
-                      type="button"
-                      onClick={() => setNewMachineLocation(loc)}
-                      className={`text-[10px] px-2 py-0.5 rounded border transition-colors ${
-                        newMachineLocation === loc
-                          ? 'bg-amber-500 text-slate-950 font-bold border-amber-400'
-                          : 'bg-slate-800 text-slate-300 border-slate-700 hover:border-slate-600'
-                      }`}
-                    >
-                      {loc}
-                    </button>
-                  ))}
+              {(selectedLocation || newMachineLocation) ? (
+                <div>
+                  <div className="w-full bg-slate-900/80 border border-slate-800 rounded-lg px-2.5 py-2 text-xs font-bold text-slate-400 flex items-center justify-between cursor-not-allowed select-none">
+                    <span className="flex items-center gap-1.5 text-slate-300">
+                      <MapPin className="w-3.5 h-3.5 text-amber-400/70" />
+                      <span>{newMachineLocation || selectedLocation}</span>
+                    </span>
+                    <span className="text-[10px] text-slate-500 font-mono">（鎖定當前場地）</span>
+                  </div>
+                  <p className="text-[10px] text-slate-500 mt-1">
+                    📍 新增機台將直接歸屬於當前選定的「{newMachineLocation || selectedLocation}」場地
+                  </p>
                 </div>
+              ) : (
+                <input
+                  type="text"
+                  required
+                  value={newMachineLocation}
+                  onChange={(e) => setNewMachineLocation(e.target.value)}
+                  placeholder="例如：逢甲夜市店、西門武昌店"
+                  className="w-full bg-[#0B0F17] border border-slate-700 rounded-lg px-2.5 py-2 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-amber-500"
+                />
               )}
             </div>
 
