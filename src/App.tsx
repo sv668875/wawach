@@ -1418,14 +1418,11 @@ export default function App() {
               <button
                 type="button"
                 onClick={handleUndo}
-                className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 text-amber-400 border border-amber-500/40 text-xs font-bold transition-all shadow-sm active:scale-95"
+                className="w-8 h-8 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 text-amber-400 border border-amber-500/40 flex items-center justify-center transition-all shadow-sm active:scale-95"
                 title={`復原上一步：${undoStack[0].description}`}
+                aria-label="復原上一步"
               >
-                <RotateCcw className="w-3.5 h-3.5" />
-                <span>復原</span>
-                <span className="text-[10px] text-amber-300/70 hidden sm:inline max-w-[120px] truncate">
-                  ({undoStack[0].description})
-                </span>
+                <RotateCcw className="w-4 h-4" />
               </button>
             )}
           </div>

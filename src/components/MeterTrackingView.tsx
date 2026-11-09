@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import {
   Camera,
   CheckCircle2,
@@ -19,6 +19,8 @@ import {
   Trash2,
   SlidersHorizontal,
   Layers,
+  Building,
+  MapPin,
 } from 'lucide-react';
 import {
   ClearActionType,
@@ -83,10 +85,85 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
   const effectiveMachineId = propSelectedMachineId || internalMachineId;
   const [machineToDelete, setMachineToDelete] = useState<Machine | null>(null);
 
-  const selectedMachine = useMemo(
-    () => machines.find((m) => m.machine_id === effectiveMachineId) || machines[0],
-    [machines, effectiveMachineId]
-  );
+  // 1. 場地/店點提取與狀態管理 (最上層：先選場或是新增場)
+  const availableLocations = useMemo(() => {
+    const locSet = new Set<string>();
+    machines.forEach((m) => {
+      const loc = (m.location || '預設店點').trim();
+      if (loc) locSet.add(loc);
+    });
+    return Array.from(locSet);
+  }, [machines]);
+
+  const [customLocations, setCustomLocations] = useState<string[]>([]);
+
+  const allLocations = useMemo(() => {
+    const set = new Set([...availableLocations, ...customLocations]);
+    const arr = Array.from(set);
+    return arr.length > 0 ? arr : ['西門旗艦店'];
+  }, [availableLocations, customLocations]);
+
+  const [selectedLocation, setSelectedLocation] = useState<string>(() => {
+    const found = machines.find((m) => m.machine_id === effectiveMachineId);
+    return found?.location || availableLocations[0] || '西門旗艦店';
+  });
+
+  // 當全域機台更換時，自動同步所屬場地
+  useEffect(() => {
+    const current = machines.find((m) => m.machine_id === effectiveMachineId);
+    if (current && current.location && current.location !== selectedLocation) {
+      setSelectedLocation(current.location);
+    }
+  }, [effectiveMachineId, machines, selectedLocation]);
+
+  // 屬於目前選取場地的機台清單
+  const venueMachines = useMemo(() => {
+    return machines.filter(
+      (m) => (m.location || '預設店點').trim() === selectedLocation.trim()
+    );
+  }, [machines, selectedLocation]);
+
+  // 目前選中的機台（必須屬於目前場地，無則為 null）
+  const selectedMachine = useMemo(() => {
+    if (venueMachines.length === 0) return null;
+    const match = venueMachines.find((m) => m.machine_id === effectiveMachineId);
+    return match || venueMachines[0] || null;
+  }, [venueMachines, effectiveMachineId]);
+
+  // 切換場地時自動選中該場第一台機台
+  const handleSelectLocation = (loc: string) => {
+    setSelectedLocation(loc);
+    const inLoc = machines.filter(
+      (m) => (m.location || '預設店點').trim() === loc.trim()
+    );
+    if (inLoc.length > 0) {
+      handleSelectMachine(inLoc[0]);
+    }
+  };
+
+  // 新增場地彈窗狀態
+  const [isAddLocationModalOpen, setIsAddLocationModalOpen] = useState(false);
+  const [newLocationInput, setNewLocationInput] = useState('');
+  const [addLocationError, setAddLocationError] = useState<string | null>(null);
+
+  const handleCreateLocationSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = newLocationInput.trim();
+    if (!trimmed) {
+      setAddLocationError('請輸入場地名稱');
+      return;
+    }
+    if (allLocations.some((l) => l.toLowerCase() === trimmed.toLowerCase())) {
+      setAddLocationError(`場地「${trimmed}」已存在`);
+      return;
+    }
+    setCustomLocations((prev) => [...prev, trimmed]);
+    setSelectedLocation(trimmed);
+    setIsAddLocationModalOpen(false);
+    setNewLocationInput('');
+    setAddLocationError(null);
+    openAddMachineModal(trimmed);
+  };
 
   // 需求 4：數位機台記錄收幣後提示拿鑰匙歸零面板彈窗狀態
   const [isZeroReminderModalOpen, setIsZeroReminderModalOpen] = useState(false);
@@ -276,9 +353,10 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
     reader.readAsDataURL(file);
   };
 
-  const openAddMachineModal = () => {
+  const openAddMachineModal = (loc?: string) => {
     setNewMachineCode(getNextMachineCode(machines));
     setNewMachineName('');
+    setNewMachineLocation(loc || selectedLocation || '西門旗艦店');
     setNewMachineRent(4500);
     setNewMachineInitialCoin(0);
     setNewMachineInitialPrize(0);
@@ -305,11 +383,12 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
 
     const initCoin = Math.max(0, Number(newMachineInitialCoin) || 0);
     const initPrize = Math.max(0, Number(newMachineInitialPrize) || 0);
+    const finalLocation = newMachineLocation.trim() || selectedLocation || '西門旗艦店';
     onAddMachine({
       code: trimmedCode,
       name: newMachineName.trim(),
       machine_model: newMachineModel,
-      location: newMachineLocation.trim() || '預設場地',
+      location: finalLocation,
       rent_monthly: Number(newMachineRent) || 4500,
       other_fixed_fee: 0,
       other_fee_note: '',
@@ -321,6 +400,7 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
       active_board_id: null,
       is_active: true,
     });
+    setSelectedLocation(finalLocation);
     setNewMachineName('');
     setNewMachineInitialCoin(0);
     setNewMachineInitialPrize(0);
@@ -460,88 +540,222 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
     );
   };
 
-  if (!selectedMachine) {
+  const renderAddLocationModal = () => {
+    if (!isAddLocationModalOpen) return null;
     return (
-      <div className="space-y-4">
-        <div className="bg-[#111827] border border-[#1E293B] rounded-2xl p-8 text-center space-y-4">
-          <div className="w-14 h-14 rounded-2xl bg-amber-500/15 text-amber-400 mx-auto flex items-center justify-center">
-            <Cpu className="w-7 h-7" />
+      <div className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4">
+        <div className="bg-[#111827] border border-slate-700 rounded-2xl max-w-xs w-full p-5 space-y-4 shadow-xl">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-bold text-white flex items-center gap-1.5">
+              <MapPin className="w-4 h-4 text-amber-400" />
+              新增場地 / 店點
+            </h3>
+            <button
+              type="button"
+              onClick={() => {
+                setIsAddLocationModalOpen(false);
+                setAddLocationError(null);
+              }}
+              className="text-slate-400 hover:text-white"
+            >
+              <X className="w-4 h-4" />
+            </button>
           </div>
-          <div>
-            <h3 className="text-base font-bold text-white">目前尚未建立任何機台</h3>
-            <p className="text-xs text-slate-400 mt-1">
-              點擊下方按鈕新增您的第一台娃娃機，即可開始收幣抄錶與刮板管理。
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={openAddMachineModal}
-            className="px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-extrabold inline-flex items-center gap-1.5 shadow-md"
-          >
-            <Plus className="w-4 h-4" />
-            新增第一台機台
-          </button>
+
+          {addLocationError && (
+            <div className="text-xs text-rose-400 bg-rose-500/10 border border-rose-500/30 rounded-lg p-2 flex items-center gap-1.5">
+              <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+              <span>{addLocationError}</span>
+            </div>
+          )}
+
+          <form onSubmit={handleCreateLocationSubmit} className="space-y-3">
+            <div>
+              <label className="block text-[11px] text-slate-400 mb-1">場地名稱</label>
+              <input
+                type="text"
+                required
+                autoFocus
+                value={newLocationInput}
+                onChange={(e) => setNewLocationInput(e.target.value)}
+                placeholder="例如：台中一中店、逢甲夜市二店"
+                className="w-full bg-[#0B0F17] border border-slate-700 rounded-lg px-2.5 py-2 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-amber-500"
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsAddLocationModalOpen(false);
+                  setAddLocationError(null);
+                }}
+                className="px-3 py-1.5 rounded-lg border border-slate-700 text-xs font-bold text-slate-400 hover:text-white"
+              >
+                取消
+              </button>
+              <button
+                type="submit"
+                className="px-4 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold shadow-md"
+              >
+                建立並新增機台
+              </button>
+            </div>
+          </form>
         </div>
-        {renderAddMachineModal()}
       </div>
     );
-  }
+  };
 
-  const isDigitalMode = selectedMachine.machine_model === 'DIGITAL';
-  const machineReadings = readings
-    .filter((r) => r.machine_id === selectedMachine.machine_id)
-    .slice(0, 6);
+  const isDigitalMode = selectedMachine?.machine_model === 'DIGITAL';
+  const machineReadings = selectedMachine
+    ? readings.filter((r) => r.machine_id === selectedMachine.machine_id).slice(0, 6)
+    : [];
 
   return (
     <div className="space-y-4">
-      {/* 1. 機台橫向快選列 */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
-        {machines.map((m) => {
-          const isSelected = m.machine_id === selectedMachine.machine_id;
-          const hasBoard = scratchBoards.some(
-            (b) => b.machine_id === m.machine_id && b.status === 'ACTIVE'
-          );
-          return (
-            <button
-              key={m.machine_id}
-              type="button"
-              onClick={() => handleSelectMachine(m)}
-              className={`shrink-0 flex items-center gap-2 px-3.5 py-2.5 rounded-xl border text-left transition-all ${
-                isSelected
-                  ? 'bg-amber-500/15 border-amber-500 text-white shadow-sm'
-                  : 'bg-[#111827] border-[#1E293B] text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <span
-                className={`font-mono font-bold text-xs px-1.5 py-0.5 rounded ${
+      {/* 1. 最頂部：先選場地或是新增場地 */}
+      <div className="bg-[#111827] border border-[#1E293B] rounded-xl p-3.5 space-y-2.5">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-bold text-white flex items-center gap-1.5">
+            <Building className="w-3.5 h-3.5 text-amber-400" />
+            <span>場地 / 店點選擇</span>
+          </span>
+          <span className="text-[10px] text-slate-400 font-mono">
+            當前場地：{selectedLocation}
+          </span>
+        </div>
+
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
+          {allLocations.map((loc) => {
+            const isSelected = loc === selectedLocation;
+            const count = machines.filter(
+              (m) => (m.location || '預設店點').trim() === loc.trim()
+            ).length;
+            return (
+              <button
+                key={loc}
+                type="button"
+                onClick={() => handleSelectLocation(loc)}
+                className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-bold transition-all ${
                   isSelected
-                    ? 'bg-amber-500 text-slate-950'
-                    : 'bg-slate-800 text-slate-300'
+                    ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-sm'
+                    : 'bg-[#0B0F17] text-slate-300 border-slate-800 hover:border-slate-700'
                 }`}
               >
-                {m.code}
-              </span>
-              <div>
-                <div className="text-xs font-bold whitespace-nowrap">{m.name}</div>
-                <div className="text-[10px] font-mono flex items-center gap-1.5 mt-0.5">
-                  <span className={hasBoard ? 'text-emerald-400' : 'text-slate-500'}>
-                    {hasBoard ? '● 有版' : '○ 無版'}
-                  </span>
-                </div>
-              </div>
-            </button>
-          );
-        })}
+                <MapPin className="w-3 h-3" />
+                <span>{loc}</span>
+                <span
+                  className={`text-[9px] px-1 py-0.2 rounded font-mono ${
+                    isSelected ? 'bg-slate-950/30 text-slate-950' : 'bg-slate-800 text-slate-400'
+                  }`}
+                >
+                  {count}台
+                </span>
+              </button>
+            );
+          })}
 
-        <button
-          type="button"
-          onClick={openAddMachineModal}
-          className="shrink-0 flex items-center gap-1 px-3 py-2.5 rounded-xl bg-[#111827] border border-dashed border-slate-700 text-slate-400 hover:text-amber-400 text-xs font-bold whitespace-nowrap"
-        >
-          <Plus className="w-4 h-4" />
-          新機台
-        </button>
+          <button
+            type="button"
+            onClick={() => {
+              setNewLocationInput('');
+              setAddLocationError(null);
+              setIsAddLocationModalOpen(true);
+            }}
+            className="shrink-0 flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#0B0F17] border border-dashed border-slate-700 text-slate-400 hover:text-amber-400 text-xs font-bold whitespace-nowrap"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>新增場</span>
+          </button>
+        </div>
       </div>
+
+      {/* 2. 第二層：選擇機台或是新增機台 */}
+      <div className="bg-[#111827] border border-[#1E293B] rounded-xl p-3.5 space-y-2.5">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-bold text-white flex items-center gap-1.5">
+            <Cpu className="w-3.5 h-3.5 text-amber-400" />
+            <span>[{selectedLocation}] 機台選擇</span>
+          </span>
+          {selectedMachine && (
+            <span className="text-[10px] text-slate-400 font-mono">
+              已選定：[{selectedMachine.code}] {selectedMachine.name}
+            </span>
+          )}
+        </div>
+
+        {venueMachines.length === 0 ? (
+          <div className="bg-[#0B0F17] border border-slate-800/80 rounded-xl p-5 text-center space-y-2.5">
+            <div className="text-xs font-bold text-slate-300">
+              📍 場地 [{selectedLocation}] 目前尚無機台
+            </div>
+            <p className="text-[11px] text-slate-500">
+              請先在此場地新增機台，選定機台後將自動載入該台的收幣與刮板設定。
+            </p>
+            <button
+              type="button"
+              onClick={() => openAddMachineModal(selectedLocation)}
+              className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-extrabold inline-flex items-center gap-1.5 shadow-md"
+            >
+              <Plus className="w-4 h-4" />
+              新增此場第一台機台
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
+            {venueMachines.map((m) => {
+              const isSelected = m.machine_id === selectedMachine?.machine_id;
+              const hasBoard = scratchBoards.some(
+                (b) => b.machine_id === m.machine_id && b.status === 'ACTIVE'
+              );
+              return (
+                <button
+                  key={m.machine_id}
+                  type="button"
+                  onClick={() => handleSelectMachine(m)}
+                  className={`shrink-0 flex items-center gap-2 px-3.5 py-2.5 rounded-xl border text-left transition-all ${
+                    isSelected
+                      ? 'bg-amber-500/15 border-amber-500 text-white shadow-sm'
+                      : 'bg-[#0B0F17] border-[#1E293B] text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <span
+                    className={`font-mono font-bold text-xs px-1.5 py-0.5 rounded ${
+                      isSelected
+                        ? 'bg-amber-500 text-slate-950'
+                        : 'bg-slate-800 text-slate-300'
+                    }`}
+                  >
+                    {m.code}
+                  </span>
+                  <div>
+                    <div className="text-xs font-bold whitespace-nowrap">{m.name}</div>
+                    <div className="text-[10px] font-mono flex items-center gap-1.5 mt-0.5">
+                      <span className={hasBoard ? 'text-emerald-400' : 'text-slate-500'}>
+                        {hasBoard ? '● 有版' : '○ 無版'}
+                      </span>
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+
+            <button
+              type="button"
+              onClick={() => openAddMachineModal(selectedLocation)}
+              className="shrink-0 flex items-center gap-1 px-3 py-2.5 rounded-xl bg-[#0B0F17] border border-dashed border-slate-700 text-slate-400 hover:text-amber-400 text-xs font-bold whitespace-nowrap"
+            >
+              <Plus className="w-4 h-4" />
+              新機台
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* 3. 第三層：只有在新增機台並選擇機台後，才會出現其他設定！ */}
+      {selectedMachine && (
+        <>
 
       {/* 2. 刮板狀態卡片 (支援同機台多板並存、個別下版) */}
       {machineActiveBoards.length === 0 ? (
@@ -1294,6 +1508,11 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
           </div>
         </div>
       )}
+        </>
+      )}
+
+      {renderAddMachineModal()}
+      {renderAddLocationModal()}
 
       {/* 數位面板歸零提醒彈窗 (需求 4：數位機台記錄收幣後，彈窗提醒台主轉機板鑰匙清0，滾輪機台不跳) */}
       {isZeroReminderModalOpen && (

@@ -143,7 +143,7 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
   }, [activeBoards, currentMachine]);
 
   const [selectedBoardId, setSelectedBoardId] = useState<string>(
-    targetBoardId || currentMachineActiveBoards[0]?.board_id || activeBoards[0]?.board_id || ''
+    targetBoardId || currentMachineActiveBoards[0]?.board_id || ''
   );
 
   useEffect(() => {
@@ -158,12 +158,24 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
     }
   }, [targetBoardId, boards, currentMachineId, onSelectMachine, onTargetBoardConsumed]);
 
-  // 選取的刮板：優先選取當前機台的進行中看板
+  // 選取的刮板：嚴格鎖定當前機台的進行中看板（若該機台無進行中刮板則為 null，絕不誤穿透顯示其他機台的板）
   const selectedBoard = useMemo(() => {
+    if (!currentMachine || currentMachineActiveBoards.length === 0) return null;
     const match = currentMachineActiveBoards.find((b) => b.board_id === selectedBoardId);
     if (match) return match;
-    return currentMachineActiveBoards[0] || activeBoards[0] || null;
-  }, [currentMachineActiveBoards, activeBoards, selectedBoardId]);
+    return currentMachineActiveBoards[0] || null;
+  }, [currentMachine, currentMachineActiveBoards, selectedBoardId]);
+
+  // 當切換機台或進行中看板異動時，嚴格同步 selectedBoardId
+  useEffect(() => {
+    if (currentMachineActiveBoards.length > 0) {
+      if (!currentMachineActiveBoards.some((b) => b.board_id === selectedBoardId)) {
+        setSelectedBoardId(currentMachineActiveBoards[0].board_id);
+      }
+    } else {
+      setSelectedBoardId('');
+    }
+  }, [currentMachineActiveBoards, selectedBoardId]);
 
   const handleSelectMachine = (machineId: string) => {
     if (onSelectMachine) {
@@ -174,6 +186,8 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
     const machineBoards = activeBoards.filter((b) => b.machine_id === machineId);
     if (machineBoards.length > 0) {
       setSelectedBoardId(machineBoards[0].board_id);
+    } else {
+      setSelectedBoardId('');
     }
   };
 
