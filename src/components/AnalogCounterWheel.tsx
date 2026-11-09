@@ -52,29 +52,29 @@ export const AnalogCounterWheel: React.FC<AnalogCounterWheelProps> = ({
 
   return (
     <div className="bg-[#111827] border border-slate-800 rounded-xl p-4 sm:p-5">
-      {/* Header row */}
-      <div className="flex flex-wrap items-baseline justify-between gap-2 mb-3">
-        <div>
-          <h3 className={`text-base font-semibold tracking-tight ${accentText}`}>
-            {label}
-          </h3>
-          <p className="text-xs text-slate-400 mt-0.5">
-            {subLabel} <span aria-hidden="true">·</span> 上次讀數{' '}
-            <span className="font-mono tabular-nums text-slate-200 font-medium">
-              {lastFormatted}
-            </span>
-          </p>
-        </div>
+      {/* 標題列：左側標題，右側「同前次讀數」按鈕，固定單行對齊，絕不被擠落 */}
+      <div className="flex items-center justify-between gap-2 mb-1.5">
+        <h3 className={`text-base font-bold tracking-tight ${accentText} truncate`}>
+          {label}
+        </h3>
 
         <button
           type="button"
           onClick={() => onChange(lastValue)}
-          className="min-h-[36px] px-2.5 py-1 text-xs font-medium text-slate-300 bg-slate-800/80 hover:bg-slate-700 border border-slate-700 rounded-lg flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0"
+          className="h-8 px-2.5 text-xs font-medium text-slate-300 bg-slate-800/90 hover:bg-slate-700 border border-slate-700 rounded-lg flex items-center gap-1.5 transition-all active:scale-95 whitespace-nowrap shrink-0 shadow-sm"
           title="還原為上次抄錶讀數"
         >
           <RotateCcw className="w-3.5 h-3.5" />
-          同前次讀數
+          <span>同前次讀數</span>
         </button>
+      </div>
+
+      {/* 說明與上次底數狀態徽章：獨立一行，清晰呈現 */}
+      <div className="flex items-center justify-between text-xs text-slate-400 mb-3 font-mono">
+        <span className="truncate">{subLabel}</span>
+        <span className="shrink-0 text-slate-300 font-medium">
+          上次讀數 <strong className="text-white font-bold">{lastFormatted}</strong>
+        </span>
       </div>
 
       {/* 6-Digit Mechanical Roller Casing */}
@@ -119,30 +119,45 @@ export const AnalogCounterWheel: React.FC<AnalogCounterWheelProps> = ({
           })}
         </div>
 
-        {/* Direct Numeric Input + Single-Hand Quick Step Buttons */}
-        <div className="mt-3 pt-3 border-t border-slate-800/80 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
-          <div className="flex items-center gap-2 flex-1">
-            <label className="text-xs text-slate-400 whitespace-nowrap shrink-0">
-              鍵盤快輸:
-            </label>
+        {/* 直接輸入刻度數字 (Full Width 全寬寬敞輸入) + 4顆快捷按鈕均分整列 */}
+        <div className="mt-3 pt-3 border-t border-slate-800/80 space-y-2.5">
+          {/* 第一層：鍵盤直接輸入刻度數字 (寬敞大輸入框) */}
+          <div className="flex items-center gap-2 bg-[#05070A] border border-slate-700/80 rounded-xl px-3 py-2 focus-within:border-amber-500/80 transition-colors">
+            <span className="text-xs text-slate-400 font-bold whitespace-nowrap shrink-0">
+              直接輸入刻度:
+            </span>
             <input
               type="text"
               inputMode="numeric"
-              value={value}
+              value={value === 0 ? '' : value}
+              onFocus={(e) => {
+                if (e.target.value === '0') e.target.value = '';
+                e.target.select();
+              }}
               onChange={handleDirectInput}
-              className={`w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm font-mono tabular-nums text-white focus:outline-none focus:ring-2 ${accentRing}`}
-              placeholder="輸入 0~999999"
+              placeholder="0 (輸入 0~999999)"
+              className="w-full bg-transparent text-base font-mono tabular-nums font-bold text-white focus:outline-none placeholder-slate-600"
             />
+            {value > 0 && (
+              <button
+                type="button"
+                onClick={() => onChange(0)}
+                className="text-[11px] text-slate-500 hover:text-slate-300 font-mono px-1.5 py-0.5 rounded bg-slate-800 shrink-0"
+              >
+                歸零
+              </button>
+            )}
           </div>
 
-          <div className="flex items-center gap-1.5 flex-wrap">
+          {/* 第二層：快捷步進加數按鈕 (四格均分整列，絕不換行擠壓) */}
+          <div className="grid grid-cols-4 gap-1.5">
             {(accentColor === 'amber' ? [10, 50, 100, 500] : [1, 2, 5, 10]).map(
               (step) => (
                 <button
                   key={step}
                   type="button"
                   onClick={() => handleQuickAdd(step)}
-                  className="min-h-[40px] px-2.5 py-1.5 text-xs font-mono tabular-nums font-medium bg-slate-900 hover:bg-slate-800 active:scale-95 text-slate-200 border border-slate-700/80 rounded-lg transition-all whitespace-nowrap shrink-0"
+                  className="h-9 rounded-lg bg-slate-900 hover:bg-slate-800 active:scale-95 text-slate-200 border border-slate-700/80 text-xs font-mono font-bold transition-all flex items-center justify-center shadow-sm"
                 >
                   +{step}
                 </button>
