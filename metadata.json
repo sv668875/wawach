@@ -1,6 +1,0 @@
-{
-  "name": "ClawOps Pro 娃娃機台主營運管理系統",
-  "description": "專為夾娃娃機台主打造的離線優先營運與財務分析系統，整合 6 位數類比計數器抄錶、AI 錶頭辨識、FIFO/加權平均庫存成本核算、爪套耗材攤提與毛利異常預警。",
-  "requestFramePermissions": ["camera"],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}
