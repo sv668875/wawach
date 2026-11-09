@@ -16,6 +16,8 @@ import {
   X,
   Trash2,
   Layers,
+  Building,
+  Filter,
 } from 'lucide-react';
 import {
   Expense,
@@ -35,6 +37,8 @@ interface FinancialAnalyticsViewProps {
   scratchBoards: ScratchBoard[];
   inventoryItems: InventoryItem[];
   expenses: Expense[];
+  activeMachineId?: string;
+  onSelectMachine?: (machineId: string) => void;
   onExportCSV: () => void;
   onExportJSON: () => void;
   onImportJSON: (jsonData: any, mode: 'OVERWRITE' | 'MERGE') => void;
@@ -43,6 +47,7 @@ interface FinancialAnalyticsViewProps {
 }
 
 type PeriodType = 'ALL' | 'WEEK' | 'MONTH' | 'YEAR';
+type AnalyticsDimension = 'OVERVIEW' | 'VENUE' | 'MACHINE' | 'BOARD';
 
 function getWeekRange(refDate: Date) {
   const d = new Date(refDate);
@@ -76,6 +81,15 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
   const [weekOffset, setWeekOffset] = useState<number>(0);
   const [selectedYear, setSelectedYear] = useState<number>(now.getFullYear());
   const [selectedMonth, setSelectedMonth] = useState<number>(now.getMonth() + 1);
+
+  // 需求 10：多面向損益維度 (全場總覽、依場地、依機台、依刮板)
+  const [analyticsDimension, setAnalyticsDimension] =
+    useState<AnalyticsDimension>('OVERVIEW');
+  const [selectedVenueFilter, setSelectedVenueFilter] = useState<string>('ALL');
+  const [selectedMachineFilter, setSelectedMachineFilter] = useState<string>('ALL');
+  const [boardStatusFilter, setBoardStatusFilter] = useState<
+    'ALL' | 'ACTIVE' | 'SETTLED'
+  >('ALL');
 
   // 需求 8：匯入 JSON 預覽與確認狀態
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -256,8 +270,184 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
     100 - cashbackPct - prizeCostPct - rentPct
   );
 
+  // 需求 10：全場獨立店點/場地列表
+  const uniqueVenues = useMemo(() => {
+    const set = new Set<string>();
+    machines.forEach((m) => {
+      if (m.location && m.location.trim()) {
+        set.add(m.location.trim());
+      }
+    });
+    return Array.from(set);
+  }, [machines]);
+
+  // 需求 10：依場地/店點統計損益
+  const venueBreakdown = useMemo(() => {
+    return uniqueVenues.map((venueName) => {
+      const vMachines = machines.filter(
+        (m) => (m.location || '').trim() === venueName
+      );
+      const vMachineIds = new Set(vMachines.map((m) => m.machine_id));
+
+      const vBoards = filteredBoards.filter((b) => vMachineIds.has(b.machine_id));
+      const vReadings = filteredReadings.filter((r) => vMachineIds.has(r.machine_id));
+
+      let totalGross = 0;
+      let totalCashback = 0;
+      let totalPrizeCost = 0;
+
+      vBoards.forEach((b) => {
+        const fin = calculateScratchBoardFinancials(b.board_cost, b.gross_coin_revenue, b.prizes);
+        totalGross += fin.grossCoinRevenue;
+        totalCashback += fin.totalCashbackDeducted;
+        totalPrizeCost += fin.claimedPrizeCost;
+      });
+
+      vReadings.forEach((r) => {
+        if (!r.board_id && r.cash_collected > 0) {
+          totalGross += r.cash_collected;
+        }
+      });
+
+      const rawOverhead = calculateSimpleOverhead(vMachines, filteredExpenses, 'ALL');
+      const totalOverhead =
+        (rawOverhead.totalRent + rawOverhead.totalOtherFixed) * rentMultiplier +
+        rawOverhead.totalConsumableExpenses;
+
+      const netRevenue = Math.max(0, totalGross - totalCashback);
+      const netProfit = netRevenue - totalPrizeCost - totalOverhead;
+
+      return {
+        venueName,
+        machinesCount: vMachines.length,
+        totalGross,
+        totalCashback,
+        totalPrizeCost,
+        totalOverhead,
+        netRevenue,
+        netProfit,
+        machines: vMachines,
+        boardsCount: vBoards.length,
+      };
+    });
+  }, [uniqueVenues, machines, filteredBoards, filteredReadings, filteredExpenses, rentMultiplier]);
+
+  // 需求 10：刮板維度篩選清單
+  const displayedBoards = useMemo(() => {
+    return filteredBoards.filter((b) => {
+      const m = machines.find((mc) => mc.machine_id === b.machine_id);
+      if (selectedVenueFilter !== 'ALL' && (m?.location || '').trim() !== selectedVenueFilter) {
+        return false;
+      }
+      if (selectedMachineFilter !== 'ALL' && b.machine_id !== selectedMachineFilter) {
+        return false;
+      }
+      if (boardStatusFilter !== 'ALL' && b.status !== boardStatusFilter) {
+        return false;
+      }
+      return true;
+    });
+  }, [filteredBoards, machines, selectedVenueFilter, selectedMachineFilter, boardStatusFilter]);
+
   return (
     <div className="space-y-4">
+      {/* 多面向損益維度切換列 (需求 10：全場總覽 / 依場地 / 依機台 / 刮板明細) */}
+      <div className="flex items-center bg-[#111827] p-1 rounded-xl border border-[#1E293B]">
+        <button
+          type="button"
+          onClick={() => setAnalyticsDimension('OVERVIEW')}
+          className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-bold transition-all ${
+            analyticsDimension === 'OVERVIEW'
+              ? 'bg-amber-500 text-slate-950 shadow-sm'
+              : 'text-slate-400 hover:text-white'
+          }`}
+        >
+          <TrendingUp className="w-3.5 h-3.5" />
+          全場總覽
+        </button>
+        <button
+          type="button"
+          onClick={() => setAnalyticsDimension('VENUE')}
+          className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-bold transition-all ${
+            analyticsDimension === 'VENUE'
+              ? 'bg-amber-500 text-slate-950 shadow-sm'
+              : 'text-slate-400 hover:text-white'
+          }`}
+        >
+          <Building className="w-3.5 h-3.5" />
+          依場地店點 ({uniqueVenues.length})
+        </button>
+        <button
+          type="button"
+          onClick={() => setAnalyticsDimension('MACHINE')}
+          className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-bold transition-all ${
+            analyticsDimension === 'MACHINE'
+              ? 'bg-amber-500 text-slate-950 shadow-sm'
+              : 'text-slate-400 hover:text-white'
+          }`}
+        >
+          <BarChart3 className="w-3.5 h-3.5" />
+          個別機台 ({machines.length})
+        </button>
+        <button
+          type="button"
+          onClick={() => setAnalyticsDimension('BOARD')}
+          className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-bold transition-all ${
+            analyticsDimension === 'BOARD'
+              ? 'bg-amber-500 text-slate-950 shadow-sm'
+              : 'text-slate-400 hover:text-white'
+          }`}
+        >
+          <Grid className="w-3.5 h-3.5" />
+          刮板明細 ({scratchBoards.length})
+        </button>
+      </div>
+
+      {/* 條件篩選列 */}
+      <div className="bg-[#111827] border border-[#1E293B] rounded-xl p-3 flex flex-wrap items-center gap-2">
+        <div className="flex items-center gap-1 text-xs text-slate-400 font-bold">
+          <Filter className="w-3.5 h-3.5 text-amber-400" />
+          <span>標記篩選：</span>
+        </div>
+        <select
+          value={selectedVenueFilter}
+          onChange={(e) => setSelectedVenueFilter(e.target.value)}
+          className="bg-[#0B0F17] border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-white"
+        >
+          <option value="ALL">全部店點/場地</option>
+          {uniqueVenues.map((v) => (
+            <option key={v} value={v}>
+              📍 {v}
+            </option>
+          ))}
+        </select>
+
+        <select
+          value={selectedMachineFilter}
+          onChange={(e) => setSelectedMachineFilter(e.target.value)}
+          className="bg-[#0B0F17] border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-white"
+        >
+          <option value="ALL">全部機台</option>
+          {machines.map((m) => (
+            <option key={m.machine_id} value={m.machine_id}>
+              [{m.code}] {m.name}
+            </option>
+          ))}
+        </select>
+
+        {analyticsDimension === 'BOARD' && (
+          <select
+            value={boardStatusFilter}
+            onChange={(e) => setBoardStatusFilter(e.target.value as any)}
+            className="bg-[#0B0F17] border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-white"
+          >
+            <option value="ALL">全部看板狀態</option>
+            <option value="ACTIVE">進行中看板</option>
+            <option value="SETTLED">已結算看板</option>
+          </select>
+        )}
+      </div>
+
       {/* 0. 時間區間篩選控制列 (需求 7) */}
       <div className="bg-[#111827] border border-[#1E293B] rounded-xl p-3.5 space-y-2.5">
         <div className="flex items-center justify-between">
@@ -393,278 +583,594 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
         )}
       </div>
 
-      {/* 1. 核心總損益與營收結構量表 (Gauge & Stacked Chart) */}
-      <div className="bg-[#111827] border border-[#1E293B] rounded-xl p-4 space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <PieChart className="w-4 h-4 text-amber-400" />
-            <span className="text-xs font-bold text-white">全場損益總覽</span>
-          </div>
-          <div
-            className={`text-lg font-mono font-black ${
-              analytics.trueNetProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'
-            }`}
-          >
-            淨利 {analytics.trueNetProfit >= 0 ? '+' : ''}$
-            {analytics.trueNetProfit.toLocaleString()}
-          </div>
-        </div>
+      {/* 維度 1：全場損益總覽 (OVERVIEW) */}
+      {analyticsDimension === 'OVERVIEW' && (
+        <>
+          {/* 1. 核心總損益與營收結構量表 (Gauge & Stacked Chart) */}
+          <div className="bg-[#111827] border border-[#1E293B] rounded-xl p-4 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <PieChart className="w-4 h-4 text-amber-400" />
+                <span className="text-xs font-bold text-white">全場損益總覽</span>
+              </div>
+              <div
+                className={`text-lg font-mono font-black ${
+                  analytics.trueNetProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                }`}
+              >
+                淨利 {analytics.trueNetProfit >= 0 ? '+' : ''}$
+                {analytics.trueNetProfit.toLocaleString()}
+              </div>
+            </div>
 
-        {/* 4 色結構量表 */}
-        <div className="space-y-1.5">
-          <div className="w-full h-3.5 bg-[#0B0F17] rounded-full overflow-hidden flex border border-slate-800">
-            <div
-              className="h-full bg-emerald-500 transition-all"
-              style={{ width: `${profitPct}%` }}
-              title="淨利"
-            />
-            <div
-              className="h-full bg-amber-500 transition-all"
-              style={{ width: `${rentPct}%` }}
-              title="台租費用"
-            />
-            <div
-              className="h-full bg-sky-500 transition-all"
-              style={{ width: `${prizeCostPct}%` }}
-              title="獎品成本"
-            />
-            <div
-              className="h-full bg-rose-500 transition-all"
-              style={{ width: `${cashbackPct}%` }}
-              title="回錢扣減"
-            />
-          </div>
+            {/* 4 色結構量表 */}
+            <div className="space-y-1.5">
+              <div className="w-full h-3.5 bg-[#0B0F17] rounded-full overflow-hidden flex border border-slate-800">
+                <div
+                  className="h-full bg-emerald-500 transition-all"
+                  style={{ width: `${profitPct}%` }}
+                  title="淨利"
+                />
+                <div
+                  className="h-full bg-amber-500 transition-all"
+                  style={{ width: `${rentPct}%` }}
+                  title="台租費用"
+                />
+                <div
+                  className="h-full bg-sky-500 transition-all"
+                  style={{ width: `${prizeCostPct}%` }}
+                  title="獎品成本"
+                />
+                <div
+                  className="h-full bg-rose-500 transition-all"
+                  style={{ width: `${cashbackPct}%` }}
+                  title="回錢扣減"
+                />
+              </div>
 
-          <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] font-mono">
-            <span className="flex items-center gap-1 text-emerald-400">
-              ● 淨利 {profitPct}%
-            </span>
-            <span className="flex items-center gap-1 text-amber-400">
-              ● 台租 {rentPct}%
-            </span>
-            <span className="flex items-center gap-1 text-sky-400">
-              ● 獎品 {prizeCostPct}%
-            </span>
-            <span className="flex items-center gap-1 text-rose-400">
-              ● 回錢 {cashbackPct}%
-            </span>
-          </div>
-        </div>
+              <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] font-mono">
+                <span className="flex items-center gap-1 text-emerald-400">
+                  ● 淨利 {profitPct}%
+                </span>
+                <span className="flex items-center gap-1 text-amber-400">
+                  ● 台租 {rentPct}%
+                </span>
+                <span className="flex items-center gap-1 text-sky-400">
+                  ● 獎品 {prizeCostPct}%
+                </span>
+                <span className="flex items-center gap-1 text-rose-400">
+                  ● 回錢 {cashbackPct}%
+                </span>
+              </div>
+            </div>
 
-        {/* 4 格重點指標 */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-          <div className="bg-[#0B0F17] rounded-lg p-2.5 border border-slate-800">
-            <div className="text-[10px] text-slate-400 whitespace-nowrap">面板總收幣</div>
-            <div className="text-base font-mono font-bold text-white">
-              ${analytics.totalGrossRevenue.toLocaleString()}
+            {/* 4 格重點指標 */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              <div className="bg-[#0B0F17] rounded-lg p-2.5 border border-slate-800">
+                <div className="text-[10px] text-slate-400 whitespace-nowrap">面板總收幣</div>
+                <div className="text-base font-mono font-bold text-white">
+                  ${analytics.totalGrossRevenue.toLocaleString()}
+                </div>
+              </div>
+
+              <div className="bg-[#0B0F17] rounded-lg p-2.5 border border-slate-800">
+                <div className="text-[10px] text-slate-400 whitespace-nowrap">回錢扣減</div>
+                <div className="text-base font-mono font-bold text-rose-400">
+                  -${analytics.totalCashbackDeducted.toLocaleString()}
+                </div>
+              </div>
+
+              <div className="bg-[#0B0F17] rounded-lg p-2.5 border border-slate-800">
+                <div className="text-[10px] text-slate-400 whitespace-nowrap">獎品總成本</div>
+                <div className="text-base font-mono font-bold text-sky-400">
+                  -${analytics.totalPrizeCost.toLocaleString()}
+                </div>
+              </div>
+
+              <div className="bg-[#0B0F17] rounded-lg p-2.5 border border-slate-800">
+                <div className="text-[10px] text-slate-400 whitespace-nowrap">台租與其他</div>
+                <div className="text-base font-mono font-bold text-amber-400">
+                  -${(analytics.grandTotalOverhead ?? 0).toLocaleString()}
+                </div>
+              </div>
             </div>
           </div>
 
-          <div className="bg-[#0B0F17] rounded-lg p-2.5 border border-slate-800">
-            <div className="text-[10px] text-slate-400 whitespace-nowrap">回錢扣減</div>
-            <div className="text-base font-mono font-bold text-rose-400">
-              -${analytics.totalCashbackDeducted.toLocaleString()}
+          {/* 2. 各機台損益圖表與卡片 */}
+          <div className="bg-[#111827] border border-[#1E293B] rounded-xl p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5 text-xs font-bold text-white">
+                <BarChart3 className="w-4 h-4 text-amber-400" />
+                各機台損益排行
+              </div>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={onExportCSV}
+                  className="px-2.5 py-1 rounded-lg bg-slate-800 text-[11px] font-bold text-slate-200 flex items-center gap-1 whitespace-nowrap"
+                >
+                  <Download className="w-3 h-3 text-amber-400" />
+                  CSV
+                </button>
+                <button
+                  type="button"
+                  onClick={onExportJSON}
+                  className="px-2.5 py-1 rounded-lg bg-slate-800 text-[11px] font-bold text-slate-200 flex items-center gap-1 whitespace-nowrap"
+                >
+                  <Download className="w-3 h-3 text-emerald-400" />
+                  備份
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              {analytics.machineBreakdown.map((row) => {
+                const revBarPct = Math.min(
+                  100,
+                  Math.round((row.grossRevenue / analytics.maxMachineRevenue) * 100)
+                );
+                const costTotal =
+                  row.cashbackDeducted + row.totalDirectPrizeCost + row.fixedOverhead;
+                const costBarPct = Math.min(
+                  100,
+                  Math.round((costTotal / analytics.maxMachineRevenue) * 100)
+                );
+
+                return (
+                  <div
+                    key={row.machine.machine_id}
+                    className="p-3.5 rounded-xl bg-[#0B0F17] border border-slate-800 space-y-2.5"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="font-mono font-bold text-xs px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400 shrink-0">
+                          {row.machine.code}
+                        </span>
+                        <span className="text-xs font-bold text-white truncate">
+                          {row.machine.name}
+                        </span>
+                      </div>
+
+                      <div
+                        className={`text-sm font-mono font-black shrink-0 ${
+                          row.netProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                        }`}
+                      >
+                        {row.netProfit >= 0 ? '+' : ''}$
+                        {row.netProfit.toLocaleString()}
+                      </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] text-slate-400 w-8 shrink-0">收幣</span>
+                        <div className="flex-1 h-2 bg-slate-900 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-emerald-400 rounded-full"
+                            style={{ width: `${revBarPct}%` }}
+                          />
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] text-slate-400 w-8 shrink-0">支出</span>
+                        <div className="flex-1 h-2 bg-slate-900 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-amber-500 rounded-full"
+                            style={{ width: `${costBarPct}%` }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-4 gap-1.5 pt-2 border-t border-slate-800/80 text-center">
+                      <div>
+                        <div className="text-[10px] text-slate-500 whitespace-nowrap">收幣</div>
+                        <div className="text-xs font-mono font-bold text-white">
+                          ${row.grossRevenue.toLocaleString()}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-[10px] text-slate-500 whitespace-nowrap">回錢</div>
+                        <div className="text-xs font-mono font-bold text-rose-400">
+                          -${row.cashbackDeducted.toLocaleString()}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-[10px] text-slate-500 whitespace-nowrap">獎品</div>
+                        <div className="text-xs font-mono font-bold text-sky-400">
+                          -${row.totalDirectPrizeCost.toLocaleString()}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-[10px] text-slate-500 whitespace-nowrap">台租</div>
+                        <div className="text-xs font-mono font-bold text-amber-400">
+                          -${row.fixedOverhead.toLocaleString()}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
 
-          <div className="bg-[#0B0F17] rounded-lg p-2.5 border border-slate-800">
-            <div className="text-[10px] text-slate-400 whitespace-nowrap">獎品總成本</div>
-            <div className="text-base font-mono font-bold text-sky-400">
-              -${analytics.totalPrizeCost.toLocaleString()}
+          {/* 3. 各版刮刮樂結算小卡 */}
+          <div className="bg-[#111827] border border-[#1E293B] rounded-xl p-4 space-y-3">
+            <div className="flex items-center gap-1.5 text-xs font-bold text-white">
+              <Grid className="w-4 h-4 text-amber-400" />
+              各版刮刮樂損益 ({scratchBoards.length} 版)
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              {scratchBoards.map((board) => {
+                const m = machines.find((mc) => mc.machine_id === board.machine_id);
+                const fin = calculateScratchBoardFinancials(
+                  board.board_cost,
+                  board.gross_coin_revenue,
+                  board.prizes
+                );
+                const holePct = Math.round(
+                  ((board.total_holes - board.remaining_holes) /
+                    Math.max(1, board.total_holes)) *
+                    100
+                );
+
+                return (
+                  <div
+                    key={board.board_id}
+                    className="p-3 rounded-xl bg-[#0B0F17] border border-slate-800 space-y-2"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="font-mono text-xs font-bold text-amber-400 shrink-0">
+                          [{m?.code}]
+                        </span>
+                        <span className="text-xs font-bold text-white truncate">
+                          {board.total_holes}刮 (剩{board.remaining_holes}洞)
+                        </span>
+                      </div>
+                      <span
+                        className={`text-xs font-mono font-bold shrink-0 ${
+                          fin.netProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                        }`}
+                      >
+                        {fin.netProfit >= 0 ? '+' : ''}$
+                        {fin.netProfit.toLocaleString()}
+                      </span>
+                    </div>
+
+                    <div className="w-full h-1.5 bg-slate-900 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-amber-500"
+                        style={{ width: `${holePct}%` }}
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-between text-[11px] font-mono text-slate-400">
+                      <span>收幣 ${fin.grossCoinRevenue.toLocaleString()}</span>
+                      <span>回錢 -${fin.totalCashbackDeducted.toLocaleString()}</span>
+                      <span>實收 ${fin.netCoinRevenue.toLocaleString()}</span>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
+        </>
+      )}
 
-          <div className="bg-[#0B0F17] rounded-lg p-2.5 border border-slate-800">
-            <div className="text-[10px] text-slate-400 whitespace-nowrap">台租與其他</div>
-            <div className="text-base font-mono font-bold text-amber-400">
-              -${(analytics.grandTotalOverhead ?? 0).toLocaleString()}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* 2. 各機台損益圖表與卡片 (無窄表格、不擠壓成直排) */}
-      <div className="bg-[#111827] border border-[#1E293B] rounded-xl p-4 space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-1.5 text-xs font-bold text-white">
-            <BarChart3 className="w-4 h-4 text-amber-400" />
-            各機台損益排行
-          </div>
-          <div className="flex items-center gap-1.5">
-            <button
-              type="button"
-              onClick={onExportCSV}
-              className="px-2.5 py-1 rounded-lg bg-slate-800 text-[11px] font-bold text-slate-200 flex items-center gap-1 whitespace-nowrap"
-            >
-              <Download className="w-3 h-3 text-amber-400" />
-              CSV
-            </button>
-            <button
-              type="button"
-              onClick={onExportJSON}
-              className="px-2.5 py-1 rounded-lg bg-slate-800 text-[11px] font-bold text-slate-200 flex items-center gap-1 whitespace-nowrap"
-            >
-              <Download className="w-3 h-3 text-emerald-400" />
-              備份
-            </button>
-          </div>
-        </div>
-
+      {/* 維度 2：依場地店點損益 (VENUE) */}
+      {analyticsDimension === 'VENUE' && (
         <div className="space-y-3">
-          {analytics.machineBreakdown.map((row) => {
-            const revBarPct = Math.min(
-              100,
-              Math.round((row.grossRevenue / analytics.maxMachineRevenue) * 100)
-            );
-            const costTotal =
-              row.cashbackDeducted + row.totalDirectPrizeCost + row.fixedOverhead;
-            const costBarPct = Math.min(
-              100,
-              Math.round((costTotal / analytics.maxMachineRevenue) * 100)
-            );
+          <div className="text-xs font-bold text-white flex items-center justify-between">
+            <span className="flex items-center gap-1.5">
+              <Building className="w-4 h-4 text-amber-400" />
+              <span>各店點場地損益統計 ({venueBreakdown.length} 個場地)</span>
+            </span>
+          </div>
 
-            return (
-              <div
-                key={row.machine.machine_id}
-                className="p-3.5 rounded-xl bg-[#0B0F17] border border-slate-800 space-y-2.5"
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className="font-mono font-bold text-xs px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400 shrink-0">
-                      {row.machine.code}
-                    </span>
-                    <span className="text-xs font-bold text-white truncate">
-                      {row.machine.name}
-                    </span>
+          {venueBreakdown.length === 0 ? (
+            <div className="bg-[#111827] border border-slate-800 rounded-xl p-8 text-center text-xs text-slate-500">
+              尚無場地數據
+            </div>
+          ) : (
+            venueBreakdown
+              .filter((v) => selectedVenueFilter === 'ALL' || v.venueName === selectedVenueFilter)
+              .map((v) => (
+                <div
+                  key={v.venueName}
+                  className="bg-[#111827] border border-[#1E293B] rounded-xl p-4 space-y-3"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="w-9 h-9 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-400 flex items-center justify-center font-bold text-sm">
+                        📍
+                      </span>
+                      <div>
+                        <h3 className="text-sm font-bold text-white">{v.venueName}</h3>
+                        <div className="text-[11px] font-mono text-slate-400">
+                          {v.machinesCount} 台機台 · {v.boardsCount} 版刮板
+                        </div>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div
+                        className={`text-base font-mono font-black ${
+                          v.netProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                        }`}
+                      >
+                        {v.netProfit >= 0 ? '+' : ''}${v.netProfit.toLocaleString()}
+                      </div>
+                      <div className="text-[10px] text-slate-500 font-mono">
+                        場地淨利 (利潤率 {v.totalGross > 0 ? Math.round((v.netProfit / v.totalGross) * 100) : 0}%)
+                      </div>
+                    </div>
                   </div>
 
-                  <div
-                    className={`text-sm font-mono font-black shrink-0 ${
-                      row.netProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'
-                    }`}
-                  >
-                    {row.netProfit >= 0 ? '+' : ''}$
-                    {row.netProfit.toLocaleString()}
+                  <div className="grid grid-cols-4 gap-1.5 pt-2 border-t border-slate-800 text-center">
+                    <div>
+                      <div className="text-[10px] text-slate-500 whitespace-nowrap">總投幣</div>
+                      <div className="text-xs font-mono font-bold text-white">
+                        ${v.totalGross.toLocaleString()}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] text-slate-500 whitespace-nowrap">回錢</div>
+                      <div className="text-xs font-mono font-bold text-rose-400">
+                        -${v.totalCashback.toLocaleString()}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] text-slate-500 whitespace-nowrap">獎品成本</div>
+                      <div className="text-xs font-mono font-bold text-sky-400">
+                        -${v.totalPrizeCost.toLocaleString()}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] text-slate-500 whitespace-nowrap">場租雜支</div>
+                      <div className="text-xs font-mono font-bold text-amber-400">
+                        -${v.totalOverhead.toLocaleString()}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="pt-1 flex flex-wrap items-center gap-1.5">
+                    {v.machines.map((mc) => (
+                      <span
+                        key={mc.machine_id}
+                        className="px-2 py-0.5 rounded bg-[#0B0F17] border border-slate-800 text-[10px] font-mono text-slate-400"
+                      >
+                        [{mc.code}] {mc.name}
+                      </span>
+                    ))}
                   </div>
                 </div>
+              ))
+          )}
+        </div>
+      )}
 
-                {/* 雙量表對比：總收幣 vs 總成本(台租+獎品+回錢) */}
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] text-slate-400 w-8 shrink-0">收幣</span>
-                    <div className="flex-1 h-2 bg-slate-900 rounded-full overflow-hidden">
+      {/* 維度 3：個別機台損益 (MACHINE) */}
+      {analyticsDimension === 'MACHINE' && (
+        <div className="bg-[#111827] border border-[#1E293B] rounded-xl p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5 text-xs font-bold text-white">
+              <BarChart3 className="w-4 h-4 text-amber-400" />
+              個別機台損益詳情
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            {analytics.machineBreakdown
+              .filter((row) => {
+                if (selectedVenueFilter !== 'ALL' && (row.machine.location || '').trim() !== selectedVenueFilter) {
+                  return false;
+                }
+                if (selectedMachineFilter !== 'ALL' && row.machine.machine_id !== selectedMachineFilter) {
+                  return false;
+                }
+                return true;
+              })
+              .map((row) => {
+                const revBarPct = Math.min(
+                  100,
+                  Math.round((row.grossRevenue / analytics.maxMachineRevenue) * 100)
+                );
+                const costTotal =
+                  row.cashbackDeducted + row.totalDirectPrizeCost + row.fixedOverhead;
+                const costBarPct = Math.min(
+                  100,
+                  Math.round((costTotal / analytics.maxMachineRevenue) * 100)
+                );
+
+                return (
+                  <div
+                    key={row.machine.machine_id}
+                    className="p-3.5 rounded-xl bg-[#0B0F17] border border-slate-800 space-y-2.5"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="font-mono font-bold text-xs px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400 shrink-0">
+                          {row.machine.code}
+                        </span>
+                        <div>
+                          <span className="text-xs font-bold text-white block truncate">
+                            {row.machine.name}
+                          </span>
+                          <span className="text-[10px] text-slate-500 font-mono">
+                            📍 {row.machine.location || '預設店點'} · 月台租 ${row.fixedOverhead.toLocaleString()}
+                          </span>
+                        </div>
+                      </div>
+
                       <div
-                        className="h-full bg-emerald-400 rounded-full"
-                        style={{ width: `${revBarPct}%` }}
+                        className={`text-sm font-mono font-black shrink-0 ${
+                          row.netProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                        }`}
+                      >
+                        {row.netProfit >= 0 ? '+' : ''}$
+                        {row.netProfit.toLocaleString()}
+                      </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] text-slate-400 w-8 shrink-0">收幣</span>
+                        <div className="flex-1 h-2 bg-slate-900 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-emerald-400 rounded-full"
+                            style={{ width: `${revBarPct}%` }}
+                          />
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] text-slate-400 w-8 shrink-0">支出</span>
+                        <div className="flex-1 h-2 bg-slate-900 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-amber-500 rounded-full"
+                            style={{ width: `${costBarPct}%` }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-4 gap-1.5 pt-2 border-t border-slate-800/80 text-center">
+                      <div>
+                        <div className="text-[10px] text-slate-500 whitespace-nowrap">收幣</div>
+                        <div className="text-xs font-mono font-bold text-white">
+                          ${row.grossRevenue.toLocaleString()}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-[10px] text-slate-500 whitespace-nowrap">回錢</div>
+                        <div className="text-xs font-mono font-bold text-rose-400">
+                          -${row.cashbackDeducted.toLocaleString()}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-[10px] text-slate-500 whitespace-nowrap">獎品</div>
+                        <div className="text-xs font-mono font-bold text-sky-400">
+                          -${row.totalDirectPrizeCost.toLocaleString()}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-[10px] text-slate-500 whitespace-nowrap">台租</div>
+                        <div className="text-xs font-mono font-bold text-amber-400">
+                          -${row.fixedOverhead.toLocaleString()}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+          </div>
+        </div>
+      )}
+
+      {/* 維度 4：刮板明細損益 (BOARD) */}
+      {analyticsDimension === 'BOARD' && (
+        <div className="bg-[#111827] border border-[#1E293B] rounded-xl p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5 text-xs font-bold text-white">
+              <Grid className="w-4 h-4 text-amber-400" />
+              <span>個別刮板明細與均出統計 ({displayedBoards.length} 版)</span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            {displayedBoards.length === 0 ? (
+              <div className="col-span-full py-8 text-center text-xs text-slate-500">
+                符合篩選條件的刮板為 0 版
+              </div>
+            ) : (
+              displayedBoards.map((board) => {
+                const m = machines.find((mc) => mc.machine_id === board.machine_id);
+                const fin = calculateScratchBoardFinancials(
+                  board.board_cost,
+                  board.gross_coin_revenue,
+                  board.prizes
+                );
+                const remHoles =
+                  board.settled_remaining_holes !== undefined
+                    ? board.settled_remaining_holes
+                    : board.remaining_holes;
+                const scratchedCount =
+                  board.settled_scratched_holes !== undefined
+                    ? board.settled_scratched_holes
+                    : Math.max(0, board.total_holes - remHoles);
+                const avgPerHole =
+                  board.avg_revenue_per_hole !== undefined
+                    ? board.avg_revenue_per_hole
+                    : (scratchedCount > 0 ? Math.round(fin.grossCoinRevenue / scratchedCount) : 0);
+                const holePct = Math.round(
+                  (scratchedCount / Math.max(1, board.total_holes)) * 100
+                );
+
+                return (
+                  <div
+                    key={board.board_id}
+                    className="p-3 rounded-xl bg-[#0B0F17] border border-slate-800 space-y-2.5"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="font-mono text-xs font-bold px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400 shrink-0">
+                          [{m?.code}] {board.board_letter || 'A'}板
+                        </span>
+                        <span className="text-xs font-bold text-white truncate">
+                          {board.total_holes}刮 (刮{scratchedCount}/剩{remHoles}洞)
+                        </span>
+                        <span
+                          className={`text-[9px] px-1 rounded font-bold shrink-0 ${
+                            board.status === 'ACTIVE'
+                              ? 'bg-emerald-500/20 text-emerald-400'
+                              : 'bg-slate-800 text-slate-400'
+                          }`}
+                        >
+                          {board.status === 'ACTIVE' ? '台上進行中' : '已結算'}
+                        </span>
+                      </div>
+                      <span
+                        className={`text-xs font-mono font-bold shrink-0 ${
+                          fin.netProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                        }`}
+                      >
+                        {fin.netProfit >= 0 ? '+' : ''}$
+                        {fin.netProfit.toLocaleString()}
+                      </span>
+                    </div>
+
+                    <div className="w-full h-1.5 bg-slate-900 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-amber-500"
+                        style={{ width: `${holePct}%` }}
                       />
                     </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] text-slate-400 w-8 shrink-0">支出</span>
-                    <div className="flex-1 h-2 bg-slate-900 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-amber-500 rounded-full"
-                        style={{ width: `${costBarPct}%` }}
-                      />
-                    </div>
-                  </div>
-                </div>
 
-                {/* 4 欄清晰數字 (不換行擠壓) */}
-                <div className="grid grid-cols-4 gap-1.5 pt-2 border-t border-slate-800/80 text-center">
-                  <div>
-                    <div className="text-[10px] text-slate-500 whitespace-nowrap">收幣</div>
-                    <div className="text-xs font-mono font-bold text-white">
-                      ${row.grossRevenue.toLocaleString()}
+                    <div className="grid grid-cols-4 gap-1 text-[10px] font-mono text-center pt-1 border-t border-slate-800/80">
+                      <div>
+                        <div className="text-slate-500">毛收幣</div>
+                        <div className="font-bold text-white">${fin.grossCoinRevenue.toLocaleString()}</div>
+                      </div>
+                      <div>
+                        <div className="text-slate-500">回錢</div>
+                        <div className="font-bold text-rose-400">-${fin.totalCashbackDeducted.toLocaleString()}</div>
+                      </div>
+                      <div>
+                        <div className="text-slate-500">獎品成本</div>
+                        <div className="font-bold text-sky-400">-${fin.claimedPrizeCost.toLocaleString()}</div>
+                      </div>
+                      <div>
+                        <div className="text-slate-500">每洞均投</div>
+                        <div className="font-bold text-amber-400">${avgPerHole}/洞</div>
+                      </div>
                     </div>
                   </div>
-                  <div>
-                    <div className="text-[10px] text-slate-500 whitespace-nowrap">回錢</div>
-                    <div className="text-xs font-mono font-bold text-rose-400">
-                      -${row.cashbackDeducted.toLocaleString()}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-[10px] text-slate-500 whitespace-nowrap">獎品</div>
-                    <div className="text-xs font-mono font-bold text-sky-400">
-                      -${row.totalDirectPrizeCost.toLocaleString()}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-[10px] text-slate-500 whitespace-nowrap">台租</div>
-                    <div className="text-xs font-mono font-bold text-amber-400">
-                      -${row.fixedOverhead.toLocaleString()}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
+                );
+              })
+            )}
+          </div>
         </div>
-      </div>
-
-      {/* 3. 各版刮刮樂結算小卡 */}
-      <div className="bg-[#111827] border border-[#1E293B] rounded-xl p-4 space-y-3">
-        <div className="flex items-center gap-1.5 text-xs font-bold text-white">
-          <Grid className="w-4 h-4 text-amber-400" />
-          各版刮刮樂損益 ({scratchBoards.length} 版)
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-          {scratchBoards.map((board) => {
-            const m = machines.find((mc) => mc.machine_id === board.machine_id);
-            const fin = calculateScratchBoardFinancials(
-              board.board_cost,
-              board.gross_coin_revenue,
-              board.prizes
-            );
-            const holePct = Math.round(
-              ((board.total_holes - board.remaining_holes) /
-                Math.max(1, board.total_holes)) *
-                100
-            );
-
-            return (
-              <div
-                key={board.board_id}
-                className="p-3 rounded-xl bg-[#0B0F17] border border-slate-800 space-y-2"
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-1.5 min-w-0">
-                    <span className="font-mono text-xs font-bold text-amber-400 shrink-0">
-                      [{m?.code}]
-                    </span>
-                    <span className="text-xs font-bold text-white truncate">
-                      {board.total_holes}刮 (剩{board.remaining_holes}洞)
-                    </span>
-                  </div>
-                  <span
-                    className={`text-xs font-mono font-bold shrink-0 ${
-                      fin.netProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'
-                    }`}
-                  >
-                    {fin.netProfit >= 0 ? '+' : ''}$
-                    {fin.netProfit.toLocaleString()}
-                  </span>
-                </div>
-
-                <div className="w-full h-1.5 bg-slate-900 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-amber-500"
-                    style={{ width: `${holePct}%` }}
-                  />
-                </div>
-
-                <div className="flex items-center justify-between text-[11px] font-mono text-slate-400">
-                  <span>收幣 ${fin.grossCoinRevenue.toLocaleString()}</span>
-                  <span>回錢 -${fin.totalCashbackDeducted.toLocaleString()}</span>
-                  <span>實收 ${fin.netCoinRevenue.toLocaleString()}</span>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
+      )}
 
       {/* 4. 資料備份、匯入與系統初始化 (需求 2 & 8) */}
       <div className="bg-[#111827] border border-[#1E293B] rounded-xl p-4 space-y-3">

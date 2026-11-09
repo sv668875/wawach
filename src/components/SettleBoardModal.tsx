@@ -43,6 +43,9 @@ export const SettleBoardModal: React.FC<SettleBoardModalProps> = ({
   const [finalCashInput, setFinalCashInput] = useState<number | string>(
     prefilledCash > 0 ? prefilledCash : 0
   );
+  const [settledRemainingHolesInput, setSettledRemainingHolesInput] = useState<number | string>(
+    board.remaining_holes
+  );
   const [prizesAction, setPrizesAction] = useState<
     'RETURN_TO_WAREHOUSE' | 'KEEP_ON_MACHINE'
   >('RETURN_TO_WAREHOUSE');
@@ -56,12 +59,26 @@ export const SettleBoardModal: React.FC<SettleBoardModalProps> = ({
     }
   }, [prefilledCash]);
 
+  useEffect(() => {
+    if (board) {
+      setSettledRemainingHolesInput(board.remaining_holes);
+    }
+  }, [board]);
+
   const claimedPrizes = (board.prizes || []).filter((p) => p.is_claimed);
   const unclaimedPrizes = (board.prizes || []).filter((p) => !p.is_claimed);
 
   const numFinalCash = Math.max(0, Number(finalCashInput) || 0);
   const addedCash = isAlreadyRecorded ? 0 : numFinalCash;
   const simulatedGross = (board.gross_coin_revenue || 0) + addedCash;
+
+  const confirmedRemainingHoles = Math.min(
+    board.total_holes,
+    Math.max(0, Number(settledRemainingHolesInput) || 0)
+  );
+  const actualScratchedHoles = Math.max(0, board.total_holes - confirmedRemainingHoles);
+  const avgGrossPerHole =
+    actualScratchedHoles > 0 ? Math.round(simulatedGross / actualScratchedHoles) : 0;
 
   const fin = useMemo(() => {
     return calculateScratchBoardFinancials(
@@ -71,8 +88,6 @@ export const SettleBoardModal: React.FC<SettleBoardModalProps> = ({
     );
   }, [board, simulatedGross]);
 
-  const scratchedCount = board.total_holes - board.remaining_holes;
-
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onConfirmSettle({
@@ -80,6 +95,7 @@ export const SettleBoardModal: React.FC<SettleBoardModalProps> = ({
       finalCollectedCash: numFinalCash,
       isCashAlreadyRecorded: isAlreadyRecorded,
       remainingPrizesAction: prizesAction,
+      settledRemainingHoles: confirmedRemainingHoles,
       notes: notes.trim() || undefined,
     });
     onClose();
@@ -135,15 +151,69 @@ export const SettleBoardModal: React.FC<SettleBoardModalProps> = ({
               </span>
             </div>
             <div className="text-center">
-              <span className="text-slate-500 block text-[10px]">刮開進度</span>
-              <span className="text-amber-400 font-bold">
-                {scratchedCount} / {board.total_holes} 洞
+              <span className="text-slate-500 block text-[10px]">已開大獎</span>
+              <span className="text-emerald-400 font-bold">
+                {claimedPrizes.length} / {board.prizes.length} 獎已開
               </span>
             </div>
             <div className="text-right">
-              <span className="text-slate-500 block text-[10px]">中獎狀況</span>
-              <span className="text-emerald-400 font-bold">
-                {claimedPrizes.length} / {board.prizes.length} 獎已開出
+              <span className="text-slate-500 block text-[10px]">總刮數</span>
+              <span className="text-amber-400 font-bold">
+                {board.total_holes} 刮
+              </span>
+            </div>
+          </div>
+
+          {/* 1.1 下版洞數與均出確認 (需求 3 & 7：大獎出清提早下版，精準記錄剩餘洞數與每洞均投) */}
+          <div className="bg-[#0B0F17] rounded-xl p-3.5 border border-slate-800 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-sky-400 flex items-center gap-1.5">
+                <Info className="w-4 h-4" />
+                下版刮開洞數確認 (大獎出清提早下版分析)
+              </span>
+              <span className="text-[10px] text-slate-500 font-mono">
+                總刮數 {board.total_holes} 洞
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2.5">
+              <div>
+                <label className="block text-[11px] text-slate-400 mb-1">
+                  下版時剩餘洞數
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  max={board.total_holes}
+                  value={settledRemainingHolesInput}
+                  onFocus={(e) => {
+                    if (e.target.value === '0') e.target.value = '';
+                    e.target.select();
+                  }}
+                  onChange={(e) =>
+                    setSettledRemainingHolesInput(
+                      e.target.value === '' ? '' : Math.max(0, Math.min(board.total_holes, Number(e.target.value)))
+                    )
+                  }
+                  className="w-full bg-[#111827] border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs font-mono font-bold text-white focus:outline-none focus:border-sky-500"
+                />
+              </div>
+
+              <div className="bg-[#111827] p-2 rounded-lg border border-slate-800/80 flex flex-col justify-center">
+                <div className="text-[10px] text-slate-400">實際被刮開</div>
+                <div className="text-sm font-mono font-bold text-amber-400">
+                  {actualScratchedHoles} 洞{' '}
+                  <span className="text-[10px] text-slate-500">
+                    ({Math.round((actualScratchedHoles / (board.total_holes || 1)) * 100)}%)
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between p-2 rounded-lg bg-sky-950/20 border border-sky-800/30 text-xs">
+              <span className="text-sky-300">每洞平均毛收 (均投)</span>
+              <span className="font-mono font-bold text-sky-200">
+                約 ${avgGrossPerHole} 元 / 洞
               </span>
             </div>
           </div>

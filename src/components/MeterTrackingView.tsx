@@ -32,6 +32,7 @@ import {
   calculateSessionMetrics,
   formatSixDigit,
   generateSampleMeterPhotoBase64,
+  getNextMachineCode,
 } from '../utils/calculations';
 import { AnalogCounterWheel } from './AnalogCounterWheel';
 
@@ -39,6 +40,8 @@ interface MeterTrackingViewProps {
   machines: Machine[];
   readings: MeterReading[];
   scratchBoards: ScratchBoard[];
+  selectedMachineId?: string;
+  onSelectMachine?: (machineId: string) => void;
   onSaveReading: (payload: {
     machineId: string;
     entryMode: MachineModel;
@@ -64,6 +67,8 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
   machines,
   readings,
   scratchBoards,
+  selectedMachineId: propSelectedMachineId,
+  onSelectMachine,
   onSaveReading,
   onQuickMountBoard,
   onAddMachine,
@@ -72,15 +77,23 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
   onSwitchMachineModel,
   onJumpToScratchBoard,
 }) => {
-  const [selectedMachineId, setSelectedMachineId] = useState<string>(
+  const [internalMachineId, setInternalMachineId] = useState<string>(
     machines[0]?.machine_id || ''
   );
+  const effectiveMachineId = propSelectedMachineId || internalMachineId;
   const [machineToDelete, setMachineToDelete] = useState<Machine | null>(null);
 
   const selectedMachine = useMemo(
-    () => machines.find((m) => m.machine_id === selectedMachineId) || machines[0],
-    [machines, selectedMachineId]
+    () => machines.find((m) => m.machine_id === effectiveMachineId) || machines[0],
+    [machines, effectiveMachineId]
   );
+
+  // 需求 4：數位機台記錄收幣後提示拿鑰匙歸零面板彈窗狀態
+  const [isZeroReminderModalOpen, setIsZeroReminderModalOpen] = useState(false);
+  const [zeroReminderAmount, setZeroReminderAmount] = useState(0);
+
+  // 需求 8：新增機台防重錯誤提示
+  const [addMachineError, setAddMachineError] = useState<string | null>(null);
 
   // 該機台所有進行中 (ACTIVE) 的看板清單 (支援同機台同時上多個版)
   const machineActiveBoards = useMemo(() => {
@@ -115,10 +128,10 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
   const [notes, setNotes] = useState<string>('');
 
   const [isAddMachineOpen, setIsAddMachineOpen] = useState(false);
-  const [newMachineCode, setNewMachineCode] = useState('C01');
+  const [newMachineCode, setNewMachineCode] = useState(() => getNextMachineCode(machines));
   const [newMachineName, setNewMachineName] = useState('');
   const [newMachineModel, setNewMachineModel] = useState<MachineModel>('DIGITAL');
-  const [newMachineLocation, setNewMachineLocation] = useState('逢甲旗艦店');
+  const [newMachineLocation, setNewMachineLocation] = useState('西門旗艦店');
   const [newMachineRent, setNewMachineRent] = useState(4500);
   const [newMachineInitialCoin, setNewMachineInitialCoin] = useState(0);
   const [newMachineInitialPrize, setNewMachineInitialPrize] = useState(0);
@@ -131,7 +144,10 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleSelectMachine = (machine: Machine) => {
-    setSelectedMachineId(machine.machine_id);
+    if (onSelectMachine) {
+      onSelectMachine(machine.machine_id);
+    }
+    setInternalMachineId(machine.machine_id);
     setSelectedTargetBoardId(null);
     setCoinCounter(machine.last_coin_counter || 0);
     setPrizeCounter(machine.last_prize_counter || 0);
@@ -182,8 +198,13 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
       prizeCounter: isDigital ? selectedMachine.last_prize_counter : prizeCounter,
       resetMode,
       targetBoardId: selectedTargetBoardId,
-      notes: notes.trim() || '分段清0收幣',
+      notes: notes.trim() || '記錄收幣',
     });
+
+    if (isDigital) {
+      setZeroReminderAmount(currentRevenue);
+      setIsZeroReminderModalOpen(true);
+    }
 
     setPanelAmount(0);
     setNotes('');
@@ -255,13 +276,37 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
     reader.readAsDataURL(file);
   };
 
+  const openAddMachineModal = () => {
+    setNewMachineCode(getNextMachineCode(machines));
+    setNewMachineName('');
+    setNewMachineRent(4500);
+    setNewMachineInitialCoin(0);
+    setNewMachineInitialPrize(0);
+    setAddMachineError(null);
+    setIsAddMachineOpen(true);
+  };
+
   const handleCreateMachineSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newMachineCode.trim() || !newMachineName.trim()) return;
+    setAddMachineError(null);
+    const trimmedCode = newMachineCode.trim().toUpperCase();
+    if (!trimmedCode) {
+      setAddMachineError('請填寫機台代號');
+      return;
+    }
+    if (machines.some((m) => m.code.trim().toUpperCase() === trimmedCode)) {
+      setAddMachineError(`機台代號 [${trimmedCode}] 已存在，請使用不同代號！`);
+      return;
+    }
+    if (!newMachineName.trim()) {
+      setAddMachineError('請填寫機台名稱');
+      return;
+    }
+
     const initCoin = Math.max(0, Number(newMachineInitialCoin) || 0);
     const initPrize = Math.max(0, Number(newMachineInitialPrize) || 0);
     onAddMachine({
-      code: newMachineCode.trim().toUpperCase(),
+      code: trimmedCode,
       name: newMachineName.trim(),
       machine_model: newMachineModel,
       location: newMachineLocation.trim() || '預設場地',
@@ -297,6 +342,13 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
               <X className="w-4 h-4" />
             </button>
           </div>
+
+          {addMachineError && (
+            <div className="p-2.5 rounded-lg bg-rose-500/10 border border-rose-500/30 text-xs font-bold text-rose-400 flex items-center gap-1.5">
+              <AlertTriangle className="w-4 h-4 shrink-0" />
+              <span>{addMachineError}</span>
+            </div>
+          )}
 
           <form onSubmit={handleCreateMachineSubmit} className="space-y-3">
             <div className="grid grid-cols-3 gap-2">
@@ -423,7 +475,7 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
           </div>
           <button
             type="button"
-            onClick={() => setIsAddMachineOpen(true)}
+            onClick={openAddMachineModal}
             className="px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-extrabold inline-flex items-center gap-1.5 shadow-md"
           >
             <Plus className="w-4 h-4" />
@@ -483,7 +535,7 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
 
         <button
           type="button"
-          onClick={() => setIsAddMachineOpen(true)}
+          onClick={openAddMachineModal}
           className="shrink-0 flex items-center gap-1 px-3 py-2.5 rounded-xl bg-[#111827] border border-dashed border-slate-700 text-slate-400 hover:text-amber-400 text-xs font-bold whitespace-nowrap"
         >
           <Plus className="w-4 h-4" />
@@ -763,16 +815,16 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
               className="w-full bg-[#0B0F17] border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-amber-500"
             />
 
-            {/* 單一核心收幣大按鈕 (方案 A：純收幣清0，徹底消除誤下板風險) */}
+            {/* 單一核心收幣大按鈕 (需求 4：改為記錄收幣) */}
             <button
               type="button"
               onClick={() => handleExecuteClearRecord('SEGMENT_CLEAR')}
               className="w-full flex items-center justify-center gap-2 py-3.5 px-4 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-sm transition-all shadow-md shadow-amber-950/30"
             >
               <RotateCcw className="w-4 h-4" />
-              <span>記錄收幣並清0</span>
+              <span>【記錄收幣】</span>
               <span className="text-[11px] font-semibold opacity-75 ml-1">
-                (板面續留・歸零機台)
+                (續留看板 · 登記收幣)
               </span>
             </button>
           </div>
@@ -886,16 +938,16 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
               </div>
             </div>
 
-            {/* 單一核心抄錶收幣大按鈕 (方案 A) */}
+            {/* 單一核心抄錶收幣大按鈕 (需求 4：改為記錄收幣) */}
             <button
               type="button"
               onClick={() => handleExecuteClearRecord('SEGMENT_CLEAR')}
               className="w-full flex items-center justify-center gap-2 py-3.5 px-4 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-sm transition-all shadow-md shadow-amber-950/30"
             >
               <RotateCcw className="w-4 h-4" />
-              <span>記錄抄錶收幣</span>
+              <span>【記錄收幣】</span>
               <span className="text-[11px] font-semibold opacity-75 ml-1">
-                (板面續留・記錄底數)
+                (續留看板 · 抄錶登記)
               </span>
             </button>
           </div>
@@ -1239,6 +1291,38 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
                 確認上版
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* 數位面板歸零提醒彈窗 (需求 4：數位機台記錄收幣後，彈窗提醒台主轉機板鑰匙清0，滾輪機台不跳) */}
+      {isZeroReminderModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
+          <div className="bg-[#111827] border border-amber-500/50 rounded-2xl max-w-sm w-full p-5 space-y-4 text-center shadow-2xl">
+            <div className="w-12 h-12 rounded-full bg-amber-500/20 border border-amber-500 text-amber-400 mx-auto flex items-center justify-center text-xl">
+              🔑
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-white">收幣已記錄 · 記得機板歸零！</h3>
+              <p className="text-xs text-slate-300 mt-2 leading-relaxed">
+                已成功記錄 [{selectedMachine?.code}] 收幣{' '}
+                <span className="font-mono font-bold text-amber-400">
+                  ${zeroReminderAmount.toLocaleString()}
+                </span>{' '}
+                元。
+                <br />
+                <span className="text-amber-300 font-semibold block mt-1">
+                  ⚠️ 請拿機台鑰匙轉動機板，將數位計數面板歸零 (清0)！
+                </span>
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsZeroReminderModalOpen(false)}
+              className="w-full py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs transition-colors shadow-lg"
+            >
+              好，我已歸零
+            </button>
           </div>
         </div>
       )}
