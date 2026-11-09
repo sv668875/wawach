@@ -13,6 +13,8 @@ import {
   Calendar,
   Package,
   Cpu,
+  Gauge,
+  DollarSign,
 } from 'lucide-react';
 import {
   InventoryItem,
@@ -60,6 +62,7 @@ interface ScratchBoardViewProps {
       number_label: number;
       claim_type: 'PHYSICAL' | 'CASHBACK';
     }[];
+    newCoinCounter?: number;
     note: string;
   }) => void;
   onUpdateGrossRevenue: (boardId: string, newGrossRevenue: number) => void;
@@ -242,11 +245,30 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
   const [batchSelectedNumbers, setBatchSelectedNumbers] = useState<number[]>([]);
   const [batchAddedCash, setBatchAddedCash] = useState<number>(0);
 
+  // 類比機台預設為滾輪抄錶模式，數位機台預設為直接填金額模式；現場提供靈活微調按鈕
+  const [batchCoinMode, setBatchCoinMode] = useState<'WHEEL' | 'DIRECT'>(() =>
+    currentMachine?.machine_model === 'ANALOG' ? 'WHEEL' : 'DIRECT'
+  );
+
+  useEffect(() => {
+    if (currentMachine) {
+      setBatchCoinMode(currentMachine.machine_model === 'ANALOG' ? 'WHEEL' : 'DIRECT');
+    }
+  }, [currentMachine?.machine_id, currentMachine?.machine_model]);
+
+  const currentMachineLastCoin = currentMachine?.last_coin_counter || 0;
+  const [batchWheelCounter, setBatchWheelCounter] = useState<number>(currentMachineLastCoin);
+
+  useEffect(() => {
+    setBatchWheelCounter(currentMachine?.last_coin_counter || 0);
+  }, [currentMachine?.machine_id, currentMachine?.last_coin_counter]);
+
   const handleSelectBoard = (b: ScratchBoard) => {
     setSelectedBoardId(b.board_id);
     setBatchRemainingHoles(b.remaining_holes);
     setBatchSelectedNumbers([]);
     setBatchAddedCash(0);
+    setBatchWheelCounter(currentMachine?.last_coin_counter || 0);
     setFormError(null);
   };
 
@@ -347,6 +369,17 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
     e.preventDefault();
     if (!selectedBoard) return;
 
+    const unitVal = currentMachine?.coin_unit_value || 10;
+    const wheelCoinDelta = Math.max(0, batchWheelCounter - currentMachineLastCoin);
+    const wheelCalculatedCash = wheelCoinDelta * unitVal;
+
+    const finalAddedCash =
+      batchCoinMode === 'WHEEL' ? wheelCalculatedCash : Math.max(0, Number(batchAddedCash));
+    const newCoinCounter =
+      batchCoinMode === 'WHEEL' && batchWheelCounter > currentMachineLastCoin
+        ? batchWheelCounter
+        : undefined;
+
     const claimedPrizeDetails = batchSelectedNumbers.map((num) => {
       const p = selectedBoard.prizes.find((pz) => pz.number_label === num);
       const choice =
@@ -363,15 +396,20 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
     onRecordBatchProgress({
       boardId: selectedBoard.board_id,
       remainingHoles: Math.max(0, Number(batchRemainingHoles)),
-      addedCashRevenue: Math.max(0, Number(batchAddedCash)),
+      addedCashRevenue: finalAddedCash,
       newlyClaimedNumbers: batchSelectedNumbers,
       claimedPrizeDetails,
-      note: '分批巡場記錄',
+      newCoinCounter,
+      note:
+        batchCoinMode === 'WHEEL' && batchWheelCounter > currentMachineLastCoin
+          ? `分批巡場 (抄錶 ${currentMachineLastCoin} ➔ ${batchWheelCounter})`
+          : '分批巡場紀錄',
     });
 
     setBatchSelectedNumbers([]);
     setBatchClaimChoices({});
     setBatchAddedCash(0);
+    setBatchWheelCounter(newCoinCounter ?? currentMachineLastCoin);
   };
 
   const scratchedHoles = selectedBoard
@@ -683,30 +721,174 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                       />
                     </div>
 
-                    <div className="bg-[#0B0F17] border border-slate-800 rounded-xl p-2.5">
-                      <label className="block text-[10px] text-slate-400 mb-1">
-                        順便記收幣 (選填)
-                      </label>
-                      <input
-                        type="number"
-                        min={0}
-                        step={10}
-                        value={batchAddedCash === 0 ? '' : batchAddedCash}
-                        onFocus={(e) => {
-                          if (e.target.value === '0') e.target.value = '';
-                          e.target.select();
-                        }}
-                        onChange={(e) =>
-                          setBatchAddedCash(
-                            e.target.value === '' ? 0 : Number(e.target.value)
-                          )
-                        }
-                        placeholder="0"
-                        className="w-full bg-transparent text-xl font-mono font-black text-white focus:outline-none"
-                      />
-                      <span className="block text-[9px] text-slate-500 mt-1 leading-tight">
-                        💡 巡場有收幣可在此累加；若習慣整版下版才一次清0，此處留空即可，下版時系統會一次結算。
-                      </span>
+                    <div className="bg-[#0B0F17] border border-slate-800 rounded-xl p-2.5 flex flex-col justify-between">
+                      <div>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <span className="text-[10px] text-slate-400 font-bold flex items-center gap-1">
+                            {batchCoinMode === 'WHEEL' ? (
+                              <>
+                                <Gauge className="w-3.5 h-3.5 text-amber-400" />
+                                <span>滾輪抄錶 (選填)</span>
+                              </>
+                            ) : (
+                              <>
+                                <DollarSign className="w-3.5 h-3.5 text-amber-400" />
+                                <span>順便記收幣 (選填)</span>
+                              </>
+                            )}
+                          </span>
+
+                          {/* 彈性切換模式小標籤 (預設依機台形式，但可隨時切換) */}
+                          <div className="flex items-center bg-[#111827] p-0.5 rounded border border-slate-700/80 text-[9px] font-bold">
+                            <button
+                              type="button"
+                              onClick={() => setBatchCoinMode('WHEEL')}
+                              className={`px-1.5 py-0.5 rounded transition-colors ${
+                                batchCoinMode === 'WHEEL'
+                                  ? 'bg-amber-500 text-slate-950 font-black'
+                                  : 'text-slate-400 hover:text-white'
+                              }`}
+                              title="適用傳統滾輪機械計數器，輸入新讀數自動算差額"
+                            >
+                              滾輪抄錶
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setBatchCoinMode('DIRECT')}
+                              className={`px-1.5 py-0.5 rounded transition-colors ${
+                                batchCoinMode === 'DIRECT'
+                                  ? 'bg-amber-500 text-slate-950 font-black'
+                                  : 'text-slate-400 hover:text-white'
+                              }`}
+                              title="適用改裝數位儀表板或直接填入收幣金額"
+                            >
+                              直接填金額
+                            </button>
+                          </div>
+                        </div>
+
+                        {batchCoinMode === 'WHEEL' ? (
+                          <div>
+                            <div className="flex items-center justify-between text-[10px] text-slate-400 mb-1 font-mono">
+                              <span>上次底數：{currentMachineLastCoin.toLocaleString()}</span>
+                              <span className="text-amber-400/80">1格=10元</span>
+                            </div>
+
+                            <input
+                              type="number"
+                              min={0}
+                              value={batchWheelCounter === 0 ? '' : batchWheelCounter}
+                              onFocus={(e) => {
+                                if (e.target.value === '0') e.target.value = '';
+                                e.target.select();
+                              }}
+                              onChange={(e) =>
+                                setBatchWheelCounter(
+                                  e.target.value === '' ? 0 : Number(e.target.value)
+                                )
+                              }
+                              placeholder={String(currentMachineLastCoin)}
+                              className="w-full bg-transparent text-xl font-mono font-black text-white focus:outline-none placeholder-slate-700"
+                            />
+
+                            {/* 自動折算提示徽章 */}
+                            <div className="mt-1.5 pt-1.5 border-t border-slate-800 flex items-center justify-between text-[10px]">
+                              {batchWheelCounter > currentMachineLastCoin ? (
+                                <span className="text-emerald-400 font-mono font-bold flex items-center gap-1">
+                                  🟢 +{Math.max(0, batchWheelCounter - currentMachineLastCoin).toLocaleString()} 枚 (折合 +${(Math.max(0, batchWheelCounter - currentMachineLastCoin) * (currentMachine?.coin_unit_value || 10)).toLocaleString()} 元)
+                                </span>
+                              ) : batchWheelCounter < currentMachineLastCoin ? (
+                                <span className="text-amber-400 font-mono">
+                                  ⚠️ 讀數小於底數 (若更換錶頭請至收幣頁校準)
+                                </span>
+                              ) : (
+                                <span className="text-slate-500 font-mono">
+                                  讀數未變動 (本次未收幣)
+                                </span>
+                              )}
+                            </div>
+
+                            {/* 快速 +10, +50, +100 枚幣快捷鍵 */}
+                            <div className="flex items-center gap-1 mt-1.5">
+                              <span className="text-[9px] text-slate-500">快調:</span>
+                              {[10, 50, 100].map((inc) => (
+                                <button
+                                  key={inc}
+                                  type="button"
+                                  onClick={() =>
+                                    setBatchWheelCounter(
+                                      (prev) => Math.max(currentMachineLastCoin, prev) + inc
+                                    )
+                                  }
+                                  className="px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] font-mono"
+                                >
+                                  +{inc}枚
+                                </button>
+                              ))}
+                              <button
+                                type="button"
+                                onClick={() => setBatchWheelCounter(currentMachineLastCoin)}
+                                className="px-1.5 py-0.5 rounded text-slate-500 hover:text-slate-300 text-[9px] ml-auto"
+                              >
+                                重設
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div>
+                            <div className="flex items-center justify-between text-[10px] text-slate-400 mb-1">
+                              <span>本次收幣金額 ($)</span>
+                              <span className="font-mono text-amber-400">
+                                折合 {Math.round((batchAddedCash || 0) / (currentMachine?.coin_unit_value || 10))} 枚幣
+                              </span>
+                            </div>
+
+                            <div className="flex items-center">
+                              <span className="text-lg font-mono font-bold text-amber-400 mr-1.5">$</span>
+                              <input
+                                type="number"
+                                min={0}
+                                step={10}
+                                value={batchAddedCash === 0 ? '' : batchAddedCash}
+                                onFocus={(e) => {
+                                  if (e.target.value === '0') e.target.value = '';
+                                  e.target.select();
+                                }}
+                                onChange={(e) =>
+                                  setBatchAddedCash(
+                                    e.target.value === '' ? 0 : Number(e.target.value)
+                                  )
+                                }
+                                placeholder="0"
+                                className="w-full bg-transparent text-xl font-mono font-black text-white focus:outline-none"
+                              />
+                            </div>
+
+                            {/* 快速金額按鈕 */}
+                            <div className="flex items-center gap-1 mt-1.5 pt-1.5 border-t border-slate-800">
+                              {[100, 500, 1000].map((val) => (
+                                <button
+                                  key={val}
+                                  type="button"
+                                  onClick={() => setBatchAddedCash((prev) => prev + val)}
+                                  className="px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] font-mono font-bold"
+                                >
+                                  +{val}
+                                </button>
+                              ))}
+                              {batchAddedCash > 0 && (
+                                <button
+                                  type="button"
+                                  onClick={() => setBatchAddedCash(0)}
+                                  className="px-1.5 py-0.5 rounded text-slate-500 hover:text-slate-300 text-[9px] ml-auto"
+                                >
+                                  清除
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
 

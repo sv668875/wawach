@@ -668,6 +668,7 @@ export default function App() {
       number_label: number;
       claim_type: 'PHYSICAL' | 'CASHBACK';
     }[];
+    newCoinCounter?: number;
     note: string;
   }) => {
     pushUndo('分批巡場紀錄');
@@ -772,6 +773,21 @@ export default function App() {
         };
       })
     );
+
+    // 3. 若有傳入類比錶頭最新讀數，自動同步更新該機台之 last_coin_counter (免去重複打錶)
+    if (typeof payload.newCoinCounter === 'number' && payload.newCoinCounter >= 0) {
+      setMachines((prev) =>
+        prev.map((m) =>
+          m.machine_id === targetBoard.machine_id
+            ? {
+                ...m,
+                last_coin_counter: payload.newCoinCounter!,
+                last_read_at: nowIso,
+              }
+            : m
+        )
+      );
+    }
 
     showToast(`已更新：剩 ${payload.remainingHoles} 洞 (巡場出幣 +$${Number(payload.addedCashRevenue || 0).toLocaleString()})`);
   };
