@@ -22,11 +22,9 @@ import {
   ScratchBoard,
   SettleBoardPayload,
 } from '../types';
-import {
-  calculateScratchBoardFinancials,
-  computeNumberLuckMatrix,
-} from '../utils/calculations';
+import { calculateScratchBoardFinancials, computeNumberLuckMatrix } from '../utils/calculations';
 import { SettleBoardModal } from './SettleBoardModal';
+import { AnalogCounterWheel } from './AnalogCounterWheel';
 
 interface ScratchBoardViewProps {
   boards: ScratchBoard[];
@@ -813,83 +811,41 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                     </div>
 
                     {batchCoinMode === 'WHEEL' ? (
-                      <div className="space-y-2.5">
-                        <div className="flex items-center justify-between text-xs text-slate-400 font-mono">
-                          <span>
-                            上次底數：<strong className="text-white font-bold">{currentMachineLastCoin.toLocaleString()}</strong> 刻度
-                          </span>
-                          <span className="text-amber-400/90 font-medium">
-                            1 刻度 = 10 元 (1枚)
-                          </span>
-                        </div>
-
-                        <div className="flex items-center gap-2 bg-[#111827] rounded-xl px-3 py-2 border border-slate-700/60 focus-within:border-amber-500/70 transition-colors">
-                          <input
-                            type="number"
-                            min={0}
-                            value={batchWheelCounter === 0 ? '' : batchWheelCounter}
-                            onFocus={(e) => {
-                              if (e.target.value === '0') e.target.value = '';
-                              e.target.select();
-                            }}
-                            onChange={(e) =>
-                              setBatchWheelCounter(
-                                e.target.value === '' ? 0 : Number(e.target.value)
-                              )
-                            }
-                            placeholder={String(currentMachineLastCoin)}
-                            className="w-full bg-transparent text-2xl font-mono font-black text-white tabular-nums focus:outline-none placeholder-slate-700"
-                          />
-                          <span className="text-xs font-bold text-slate-400 font-mono shrink-0">
-                            刻度
-                          </span>
-                        </div>
+                      <div className="space-y-3">
+                        {/* 統一採用收幣頁面的擬真 6 位數滾輪轉盤元件 (AnalogCounterWheel) */}
+                        <AnalogCounterWheel
+                          label="投幣錶 (COIN)"
+                          subLabel={`單位：枚 (1格 = ${currentMachine?.coin_unit_value || 10}元)`}
+                          value={batchWheelCounter}
+                          lastValue={currentMachineLastCoin}
+                          accentColor="amber"
+                          onChange={setBatchWheelCounter}
+                        />
 
                         {/* 自動折算提示徽章 */}
-                        <div className="p-2.5 rounded-lg bg-[#111827] border border-slate-800 text-xs">
+                        <div className="p-3 rounded-xl bg-[#111827] border border-slate-800 text-xs">
                           {batchWheelCounter > currentMachineLastCoin ? (
-                            <span className="text-emerald-400 font-mono font-bold flex items-center gap-1.5 flex-wrap">
-                              <span>🟢 本次收幣：</span>
-                              <span>+{Math.max(0, batchWheelCounter - currentMachineLastCoin).toLocaleString()} 枚</span>
-                              <span className="text-slate-400">
-                                (折合 +${(Math.max(0, batchWheelCounter - currentMachineLastCoin) * (currentMachine?.coin_unit_value || 10)).toLocaleString()} 元)
+                            <div className="flex items-center justify-between flex-wrap gap-2">
+                              <span className="text-emerald-400 font-mono font-bold flex items-center gap-1.5">
+                                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                                <span>本次巡場收幣：</span>
+                                <span className="text-sm font-black">
+                                  +{Math.max(0, batchWheelCounter - currentMachineLastCoin).toLocaleString()} 枚
+                                </span>
                               </span>
-                            </span>
+                              <span className="text-amber-400 font-mono font-black text-xs bg-amber-500/10 px-2.5 py-1 rounded-lg border border-amber-500/30">
+                                折合 +${(Math.max(0, batchWheelCounter - currentMachineLastCoin) * (currentMachine?.coin_unit_value || 10)).toLocaleString()} 元
+                              </span>
+                            </div>
                           ) : batchWheelCounter < currentMachineLastCoin ? (
-                            <span className="text-amber-400 font-mono">
-                              ⚠️ 讀數小於上次底數 ({currentMachineLastCoin})，若有更換計數器請先至收幣頁校準底數。
+                            <span className="text-amber-400 font-mono flex items-center gap-1.5">
+                              ⚠️ 讀數小於上次底數 ({currentMachineLastCoin})，若有更換計數器請先至收幣頁校準。
                             </span>
                           ) : (
                             <span className="text-slate-500 font-mono">
-                              讀數未變動 (本次未收幣或尚未抄錶)
+                              讀數未變動 (本次巡場未收幣或尚未轉動滾輪)
                             </span>
                           )}
-                        </div>
-
-                        {/* 快速 +10, +50, +100 枚幣快捷鍵 */}
-                        <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-                          <span className="text-[10px] text-slate-500 shrink-0 font-medium">快速加幣：</span>
-                          {[10, 50, 100].map((inc) => (
-                            <button
-                              key={inc}
-                              type="button"
-                              onClick={() =>
-                                setBatchWheelCounter(
-                                  (prev) => Math.max(currentMachineLastCoin, prev) + inc
-                                )
-                              }
-                              className="h-8 px-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-mono font-bold active:scale-95 transition-all"
-                            >
-                              +{inc}枚
-                            </button>
-                          ))}
-                          <button
-                            type="button"
-                            onClick={() => setBatchWheelCounter(currentMachineLastCoin)}
-                            className="h-8 px-2.5 rounded-lg text-slate-400 hover:text-white text-xs font-mono ml-auto active:scale-95 transition-all"
-                          >
-                            重設底數
-                          </button>
                         </div>
                       </div>
                     ) : (
