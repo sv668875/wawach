@@ -673,10 +673,10 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-white flex items-center gap-1.5">
               <Building className="w-3.5 h-3.5 text-amber-400" />
-              <span>場地 / 店點選擇</span>
+              <span>選擇場地</span>
             </span>
             <span className="text-[10px] text-slate-400 font-mono">
-              當前場地：{selectedLocation || '尚未選取'}
+              {selectedLocation || '未選取'}
             </span>
           </div>
 
@@ -732,11 +732,11 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
         <div className="flex items-center justify-between">
           <span className="text-xs font-bold text-white flex items-center gap-1.5">
             <Cpu className="w-3.5 h-3.5 text-amber-400" />
-            <span>[{selectedLocation}] 機台選擇</span>
+            <span>[{selectedLocation}] 機台</span>
           </span>
           {selectedMachine && (
             <span className="text-[10px] text-slate-400 font-mono">
-              已選定：[{selectedMachine.code}] {selectedMachine.name}
+              [{selectedMachine.code}] {selectedMachine.name}
             </span>
           )}
         </div>

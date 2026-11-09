@@ -421,32 +421,32 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
 
   return (
     <div className="space-y-4">
-      {/* 頂部主分頁切換：進行中刮板 vs 刮板紀錄與統計 (需求 5：明確分開兩者) */}
-      <div className="flex items-center bg-[#111827] p-1 rounded-xl border border-[#1E293B]">
+      {/* 頂部主分頁切換：進行中 vs 歷史統計 */}
+      <div className="grid grid-cols-2 bg-[#111827] p-1 rounded-xl border border-[#1E293B] gap-1">
         <button
           type="button"
           onClick={() => setMainTab('active')}
-          className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-bold transition-colors whitespace-nowrap ${
+          className={`flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-bold transition-colors whitespace-nowrap ${
             mainTab === 'active'
               ? 'bg-amber-500 text-slate-950 shadow-sm'
               : 'text-slate-400 hover:text-white'
           }`}
         >
           <Grid className="w-3.5 h-3.5" />
-          進行中刮板 ({activeBoards.length})
+          <span>進行中 ({activeBoards.length})</span>
         </button>
 
         <button
           type="button"
           onClick={() => setMainTab('stats')}
-          className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-bold transition-colors whitespace-nowrap ${
+          className={`flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-bold transition-colors whitespace-nowrap ${
             mainTab === 'stats'
               ? 'bg-amber-500 text-slate-950 shadow-sm'
               : 'text-slate-400 hover:text-white'
           }`}
         >
           <History className="w-3.5 h-3.5" />
-          刮板紀錄與統計 ({settledBoards.length} 版結算)
+          <span>歷史統計 ({settledBoards.length})</span>
         </button>
       </div>
 
@@ -457,10 +457,10 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-white flex items-center gap-1.5">
                 <Cpu className="w-3.5 h-3.5 text-amber-400" />
-                <span>機台選擇 (依場地分組 · 全域同步)</span>
+                <span>選擇機台</span>
               </span>
               <span className="text-[10px] text-slate-400 font-mono">
-                當前機台：[{currentMachine?.code}] {currentMachine?.name}
+                [{currentMachine?.code}] {currentMachine?.name}
               </span>
             </div>
 
@@ -658,7 +658,7 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                   </div>
 
                   <div className="bg-[#0B0F17] rounded-lg p-2.5 border border-slate-800/80">
-                    <div className="text-[10px] text-slate-400">回錢自動扣幣</div>
+                    <div className="text-[10px] text-slate-400">回錢扣幣</div>
                     <div className="text-base font-mono font-bold text-amber-400">
                       -${boardFinancials.totalCashbackDeducted.toLocaleString()}
                     </div>
@@ -690,9 +690,9 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
               {/* 分批紀錄：剩幾洞 & 哪幾號出了 */}
               <div className="bg-[#111827] border border-[#1E293B] rounded-xl p-4 space-y-3">
                 <div className="text-xs font-bold text-white flex items-center justify-between">
-                  <span>分批巡場紀錄（更新剩餘洞數 ＆ 開出獎號）</span>
+                  <span>分批巡場紀錄</span>
                   <span className="font-mono text-amber-400">
-                    目前剩 {selectedBoard.remaining_holes} 洞
+                    剩 {selectedBoard.remaining_holes} 洞
                   </span>
                 </div>
 
@@ -700,7 +700,7 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                   <div className="grid grid-cols-2 gap-2.5">
                     <div className="bg-[#0B0F17] border border-slate-800 rounded-xl p-2.5">
                       <label className="block text-[10px] text-slate-400 mb-1">
-                        當前剩下幾洞
+                        剩餘洞數
                       </label>
                       <input
                         type="number"
@@ -1031,10 +1031,10 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                 <div className="flex items-center justify-between">
                   <div className="text-xs font-bold text-white flex items-center gap-1.5">
                     <Trophy className="w-4 h-4 text-amber-400" />
-                    <span>本版獎項清單 ({selectedBoard.prizes.length} 個獎)</span>
+                    <span>獎項清單 ({selectedBoard.prizes.length})</span>
                   </div>
                   <span className="text-[11px] text-slate-400">
-                    點號碼可切換「已出 / 未出」
+                    點號碼切換已出
                   </span>
                 </div>
 
@@ -1337,24 +1337,24 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
             <button
               type="button"
               onClick={() => setStatsViewMode('history')}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+              className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-bold transition-colors whitespace-nowrap ${
                 statsViewMode === 'history'
                   ? 'bg-amber-500 text-slate-950'
                   : 'bg-[#111827] text-slate-400 hover:text-white border border-[#1E293B]'
               }`}
             >
-              📜 已結算歷史帳本 ({settledBoards.length} 版)
+              📜 下版歷史 ({settledBoards.length})
             </button>
             <button
               type="button"
               onClick={() => setStatsViewMode('luck')}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+              className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-bold transition-colors whitespace-nowrap ${
                 statsViewMode === 'luck'
                   ? 'bg-amber-500 text-slate-950'
                   : 'bg-[#111827] text-slate-400 hover:text-white border border-[#1E293B]'
               }`}
             >
-              🎯 選號開獎統計 (運氣矩陣)
+              🎯 選號開獎統計
             </button>
           </div>
 

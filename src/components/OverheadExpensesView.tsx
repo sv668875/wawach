@@ -163,19 +163,19 @@ export const OverheadExpensesView: React.FC<OverheadExpensesViewProps> = ({
       <div className="bg-[#111827] border border-[#1E293B] rounded-xl p-4 space-y-3">
         <div className="flex items-center justify-between">
           <div>
-            <div className="text-xs text-slate-400">當月固定支出 (已付實扣)</div>
+            <div className="text-xs text-slate-400">本月固定支出</div>
             <div className="text-2xl font-mono font-black text-amber-400">
               ${overheadSummary.grandTotalOverhead.toLocaleString()}
             </div>
             <div className="text-[11px] text-slate-400 mt-1 flex flex-wrap items-center gap-1.5">
-              <span>本月合約應繳月租：${overheadSummary.totalConfiguredRent.toLocaleString()}</span>
+              <span>合約應繳：${overheadSummary.totalConfiguredRent.toLocaleString()}</span>
               {overheadSummary.unpaidRent > 0 ? (
                 <span className="text-amber-400 font-bold bg-amber-500/10 px-1.5 py-0.2 rounded border border-amber-500/20">
-                  尚有待繳 ${overheadSummary.unpaidRent.toLocaleString()}
+                  待繳 ${overheadSummary.unpaidRent.toLocaleString()}
                 </span>
               ) : (
                 <span className="text-emerald-400 font-bold bg-emerald-500/10 px-1.5 py-0.2 rounded border border-emerald-500/20">
-                  全數已付結清
+                  全數結清
                 </span>
               )}
             </div>

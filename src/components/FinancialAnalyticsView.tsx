@@ -357,70 +357,70 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
 
   return (
     <div className="space-y-4">
-      {/* 多面向損益維度切換列 (需求 10：全場總覽 / 依場地 / 依機台 / 刮板明細) */}
-      <div className="flex items-center bg-[#111827] p-1 rounded-xl border border-[#1E293B]">
+      {/* 多面向損益維度切換列 (總覽 / 場地 / 機台 / 刮板) */}
+      <div className="grid grid-cols-4 bg-[#111827] p-1 rounded-xl border border-[#1E293B] gap-1">
         <button
           type="button"
           onClick={() => setAnalyticsDimension('OVERVIEW')}
-          className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-bold transition-all ${
+          className={`flex items-center justify-center gap-1 py-2 px-1 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
             analyticsDimension === 'OVERVIEW'
               ? 'bg-amber-500 text-slate-950 shadow-sm'
               : 'text-slate-400 hover:text-white'
           }`}
         >
-          <TrendingUp className="w-3.5 h-3.5" />
-          全場總覽
+          <TrendingUp className="w-3.5 h-3.5 shrink-0" />
+          <span>總覽</span>
         </button>
         <button
           type="button"
           onClick={() => setAnalyticsDimension('VENUE')}
-          className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-bold transition-all ${
+          className={`flex items-center justify-center gap-1 py-2 px-1 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
             analyticsDimension === 'VENUE'
               ? 'bg-amber-500 text-slate-950 shadow-sm'
               : 'text-slate-400 hover:text-white'
           }`}
         >
-          <Building className="w-3.5 h-3.5" />
-          依場地店點 ({uniqueVenues.length})
+          <Building className="w-3.5 h-3.5 shrink-0" />
+          <span>場地</span>
         </button>
         <button
           type="button"
           onClick={() => setAnalyticsDimension('MACHINE')}
-          className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-bold transition-all ${
+          className={`flex items-center justify-center gap-1 py-2 px-1 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
             analyticsDimension === 'MACHINE'
               ? 'bg-amber-500 text-slate-950 shadow-sm'
               : 'text-slate-400 hover:text-white'
           }`}
         >
-          <BarChart3 className="w-3.5 h-3.5" />
-          個別機台 ({machines.length})
+          <BarChart3 className="w-3.5 h-3.5 shrink-0" />
+          <span>機台</span>
         </button>
         <button
           type="button"
           onClick={() => setAnalyticsDimension('BOARD')}
-          className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-bold transition-all ${
+          className={`flex items-center justify-center gap-1 py-2 px-1 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
             analyticsDimension === 'BOARD'
               ? 'bg-amber-500 text-slate-950 shadow-sm'
               : 'text-slate-400 hover:text-white'
           }`}
         >
-          <Grid className="w-3.5 h-3.5" />
-          刮板明細 ({scratchBoards.length})
+          <Grid className="w-3.5 h-3.5 shrink-0" />
+          <span>刮板</span>
         </button>
       </div>
 
       {/* 條件篩選列 */}
-      <div className="bg-[#111827] border border-[#1E293B] rounded-xl p-3 flex flex-wrap items-center gap-2">
-        <div className="flex items-center gap-1 text-xs text-slate-400 font-bold">
+      <div className="bg-[#111827] border border-[#1E293B] rounded-xl p-2.5 flex flex-wrap items-center gap-2">
+        <div className="flex items-center gap-1 text-xs text-slate-400 font-bold shrink-0">
           <Filter className="w-3.5 h-3.5 text-amber-400" />
-          <span>標記篩選：</span>
+          <span>篩選</span>
         </div>
         <select
           value={selectedVenueFilter}
           onChange={(e) => setSelectedVenueFilter(e.target.value)}
-          className="bg-[#0B0F17] border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-white"
+          className="flex-1 min-w-[100px] bg-[#0B0F17] border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-white"
         >
-          <option value="ALL">全部店點/場地</option>
+          <option value="ALL">全部場地</option>
           {uniqueVenues.map((v) => (
             <option key={v} value={v}>
               📍 {v}
@@ -431,7 +431,7 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
         <select
           value={selectedMachineFilter}
           onChange={(e) => setSelectedMachineFilter(e.target.value)}
-          className="bg-[#0B0F17] border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-white"
+          className="flex-1 min-w-[100px] bg-[#0B0F17] border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-white"
         >
           <option value="ALL">全部機台</option>
           {machines.map((m) => (
@@ -445,21 +445,21 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
           <select
             value={boardStatusFilter}
             onChange={(e) => setBoardStatusFilter(e.target.value as any)}
-            className="bg-[#0B0F17] border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-white"
+            className="flex-1 min-w-[85px] bg-[#0B0F17] border border-slate-700 rounded-lg px-2 py-1 text-xs text-white"
           >
-            <option value="ALL">全部看板狀態</option>
-            <option value="ACTIVE">進行中看板</option>
-            <option value="SETTLED">已結算看板</option>
+            <option value="ALL">全部狀態</option>
+            <option value="ACTIVE">進行中</option>
+            <option value="SETTLED">已結算</option>
           </select>
         )}
       </div>
 
       {/* 0. 時間區間篩選控制列 (需求 7) */}
-      <div className="bg-[#111827] border border-[#1E293B] rounded-xl p-3.5 space-y-2.5">
+      <div className="bg-[#111827] border border-[#1E293B] rounded-xl p-3 space-y-2.5">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-1.5 text-xs font-bold text-white">
             <Calendar className="w-4 h-4 text-amber-400" />
-            <span>統計時間區間</span>
+            <span>時間範圍</span>
           </div>
 
           {/* 週 / 月 / 年 / 全部切換 */}
@@ -597,7 +597,7 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <PieChart className="w-4 h-4 text-amber-400" />
-                <span className="text-xs font-bold text-white">全場損益總覽</span>
+                <span className="text-xs font-bold text-white">全場損益</span>
               </div>
               <div
                 className={`text-lg font-mono font-black ${
@@ -653,7 +653,7 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
             {/* 4 格重點指標 */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               <div className="bg-[#0B0F17] rounded-lg p-2.5 border border-slate-800">
-                <div className="text-[10px] text-slate-400 whitespace-nowrap">面板總收幣</div>
+                <div className="text-[10px] text-slate-400 whitespace-nowrap">總收幣</div>
                 <div className="text-base font-mono font-bold text-white">
                   ${analytics.totalGrossRevenue.toLocaleString()}
                 </div>
@@ -667,14 +667,14 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
               </div>
 
               <div className="bg-[#0B0F17] rounded-lg p-2.5 border border-slate-800">
-                <div className="text-[10px] text-slate-400 whitespace-nowrap">獎品總成本</div>
+                <div className="text-[10px] text-slate-400 whitespace-nowrap">獎品成本</div>
                 <div className="text-base font-mono font-bold text-sky-400">
                   -${analytics.totalPrizeCost.toLocaleString()}
                 </div>
               </div>
 
               <div className="bg-[#0B0F17] rounded-lg p-2.5 border border-slate-800">
-                <div className="text-[10px] text-slate-400 whitespace-nowrap">實付台租與開銷</div>
+                <div className="text-[10px] text-slate-400 whitespace-nowrap">台租開銷</div>
                 <div className="text-base font-mono font-bold text-amber-400">
                   -${(analytics.grandTotalOverhead ?? 0).toLocaleString()}
                 </div>
@@ -687,7 +687,7 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-1.5 text-xs font-bold text-white">
                 <BarChart3 className="w-4 h-4 text-amber-400" />
-                各機台損益排行
+                機台排行
               </div>
               <div className="flex items-center gap-1.5">
                 <button
@@ -874,7 +874,7 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
           <div className="text-xs font-bold text-white flex items-center justify-between">
             <span className="flex items-center gap-1.5">
               <Building className="w-4 h-4 text-amber-400" />
-              <span>各店點場地損益統計 ({venueBreakdown.length} 個場地)</span>
+              <span>場地損益 ({venueBreakdown.length})</span>
             </span>
           </div>
 
@@ -965,7 +965,7 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-1.5 text-xs font-bold text-white">
               <BarChart3 className="w-4 h-4 text-amber-400" />
-              個別機台損益詳情
+              機台損益
             </div>
           </div>
 
@@ -1007,7 +1007,7 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
                             {row.machine.name}
                           </span>
                           <span className="text-[10px] text-slate-500 font-mono">
-                            📍 {row.machine.location || '未分類店點'} · 月租設定 ${row.configuredMonthlyRent.toLocaleString()}
+                            📍 {row.machine.location || '未分類'} · 月租 ${row.configuredMonthlyRent.toLocaleString()}
                           </span>
                         </div>
                       </div>
@@ -1085,7 +1085,7 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-1.5 text-xs font-bold text-white">
               <Grid className="w-4 h-4 text-amber-400" />
-              <span>個別刮板明細與均出統計 ({displayedBoards.length} 版)</span>
+              <span>刮板明細 ({displayedBoards.length} 版)</span>
             </div>
           </div>
 
@@ -1138,7 +1138,7 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
                               : 'bg-slate-800 text-slate-400'
                           }`}
                         >
-                          {board.status === 'ACTIVE' ? '台上進行中' : '已結算'}
+                          {board.status === 'ACTIVE' ? '進行中' : '已結算'}
                         </span>
                       </div>
                       <span
@@ -1222,7 +1222,7 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
             className="flex items-center justify-center gap-1.5 p-2.5 rounded-xl bg-sky-500/15 hover:bg-sky-500/25 border border-sky-500/30 text-sky-300 text-xs font-bold transition-colors"
           >
             <Upload className="w-4 h-4" />
-            匯入備份 JSON
+            匯入 JSON
           </button>
 
           {/* 匯出備份 */}
@@ -1232,7 +1232,7 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
             className="flex items-center justify-center gap-1.5 p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition-colors"
           >
             <Download className="w-4 h-4 text-amber-400" />
-            匯出完整 JSON
+            匯出 JSON
           </button>
 
           {/* 匯出 CSV */}
@@ -1242,7 +1242,7 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
             className="flex items-center justify-center gap-1.5 p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition-colors"
           >
             <FileText className="w-4 h-4 text-emerald-400" />
-            匯出報表 CSV
+            匯出 CSV
           </button>
         </div>
 
@@ -1254,7 +1254,7 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
             className="text-xs text-rose-400 hover:text-rose-300 flex items-center gap-1 font-bold"
           >
             <Trash2 className="w-3.5 h-3.5" />
-            系統全部初始化歸零
+            全系統清空歸零
           </button>
         </div>
       </div>

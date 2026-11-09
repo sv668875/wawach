@@ -213,12 +213,12 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
               <Package className="w-4 h-4" />
             </div>
             <div>
-              <div className="text-xs font-bold text-white">總壓貨資金與庫存統計</div>
-              <div className="text-[10px] text-slate-400">當前所有在庫存與機台上的商品資產總值</div>
+              <div className="text-xs font-bold text-white">庫存資產</div>
+              <div className="text-[10px] text-slate-400">在庫與機台商品總值</div>
             </div>
           </div>
           <div className="text-right">
-            <div className="text-[10px] text-slate-400">全場總壓貨資金</div>
+            <div className="text-[10px] text-slate-400">總壓貨資金</div>
             <div className="text-lg font-mono font-black text-amber-400">
               ${grandTotalValue.toLocaleString()}
             </div>
@@ -229,19 +229,19 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
         <div className="grid grid-cols-3 gap-2 text-center">
           {/* 總件數 */}
           <div className="bg-[#0B0F17] rounded-xl p-2.5 border border-slate-800 space-y-0.5">
-            <div className="text-[10px] text-slate-400">商品總數量</div>
+            <div className="text-[10px] text-slate-400">總件數</div>
             <div className="text-sm font-mono font-black text-white">
               {totalQuantity} <span className="text-[10px] font-normal text-slate-400">件</span>
             </div>
             <div className="text-[10px] font-mono text-slate-500">
-              共 {items.length} 個品項
+              {items.length} 品項
             </div>
           </div>
 
           {/* 機台在台壓貨 */}
           <div className="bg-[#0B0F17] rounded-xl p-2.5 border border-slate-800 space-y-0.5">
             <div className="text-[10px] text-amber-400 font-bold flex items-center justify-center gap-1">
-              <Cpu className="w-3 h-3" /> 機台在台壓貨
+              <Cpu className="w-3 h-3" /> 機台壓貨
             </div>
             <div className="text-sm font-mono font-black text-amber-400">
               ${totalOnMachineValue.toLocaleString()}
@@ -254,7 +254,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
           {/* 倉庫備品壓貨 */}
           <div className="bg-[#0B0F17] rounded-xl p-2.5 border border-slate-800 space-y-0.5">
             <div className="text-[10px] text-emerald-400 font-bold flex items-center justify-center gap-1">
-              <Archive className="w-3 h-3" /> 倉庫備品壓貨
+              <Archive className="w-3 h-3" /> 倉庫壓貨
             </div>
             <div className="text-sm font-mono font-black text-emerald-400">
               ${totalInStockValue.toLocaleString()}
