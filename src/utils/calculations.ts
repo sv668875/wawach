@@ -246,8 +246,12 @@ export function computeNumberLuckMatrix(boards: ScratchBoard[]): {
         const exitProfit = revenueAtExit - costOrCashback;
         map[num].directExitProfitSum += exitProfit;
 
+        // 當開出時即時損益為負，代表該獎號提早出貨造成台主虧損 (提早下課)
         if (exitProfit < 0) {
           map[num].earlyLossCount += 1;
+          map[num].loss_boards_count += 1; // 該次開獎為「賠 (敗)」
+        } else {
+          map[num].win_boards_count += 1;  // 該次開獎為「賺 (勝)」
         }
 
         const holesAtExit =
@@ -258,22 +262,24 @@ export function computeNumberLuckMatrix(boards: ScratchBoard[]): {
           map[num].exitHolesSum += holesAtExit;
           map[num].exitHolesCount += 1;
         }
+      } else if (board.status === 'SETTLED') {
+        // 若該板已結算且此獎項未被開出，台主保住獎品成本
+        if (boardProfit >= 0) {
+          map[num].win_boards_count += 1;
+        } else {
+          map[num].loss_boards_count += 1;
+        }
       }
+      // 進行中且尚未開出的號碼，暫不計入賺賠結果
 
-      // 統計該板總結是賺錢還是虧損
-      if (isWinBoard) {
-        map[num].win_boards_count += 1;
-      } else {
-        map[num].loss_boards_count += 1;
-      }
       map[num].cumulative_board_profit += boardProfit;
     }
   }
 
   const allStats: NumberLuckStat[] = Object.values(map).map((s) => {
-    const totalBoards = s.win_boards_count + s.loss_boards_count;
+    const totalOutcomes = s.win_boards_count + s.loss_boards_count;
     const winRate =
-      totalBoards > 0 ? Math.round((s.win_boards_count / totalBoards) * 100) : 0;
+      totalOutcomes > 0 ? Math.round((s.win_boards_count / totalOutcomes) * 100) : 0;
     return {
       number_label: s.number_label,
       times_selected: s.times_selected,
@@ -298,28 +304,32 @@ export function computeNumberLuckMatrix(boards: ScratchBoard[]): {
       b.cumulative_board_profit - a.cumulative_board_profit
   );
 
-  // 2. 帶財神號榜 (依直接損益與總賺錢金額排序)
+  // 2. 帶財神號榜 (開出即時損益為正，且無提早虧損下課紀錄)
   const profitLeaders = allStats
-    .filter((s) => (s.direct_exit_profit || 0) > 0 || s.cumulative_board_profit > 0)
+    .filter(
+      (s) =>
+        (s.direct_exit_profit !== undefined ? s.direct_exit_profit : s.cumulative_board_profit) > 0 &&
+        (s.early_exit_loss_count || 0) === 0 &&
+        s.win_boards_count > 0
+    )
     .sort(
       (a, b) =>
         (b.direct_exit_profit || 0) - (a.direct_exit_profit || 0) ||
-        b.cumulative_board_profit - a.cumulative_board_profit
+        b.win_boards_count - a.win_boards_count
     );
 
-  // 3. 虧損地雷號 (有提早被下課或總結虧損的號碼)
+  // 3. 虧損注意號 (開出即時虧損 < 0 或 有提早下課紀錄)
   const lossTrapList = allStats
     .filter(
       (s) =>
-        (s.early_exit_loss_count || 0) > 0 ||
         (s.direct_exit_profit || 0) < 0 ||
-        s.loss_boards_count > 0 ||
-        s.cumulative_board_profit < 0
+        (s.early_exit_loss_count || 0) > 0 ||
+        s.loss_boards_count > 0
     )
     .sort(
       (a, b) =>
         (a.direct_exit_profit || 0) - (b.direct_exit_profit || 0) ||
-        a.cumulative_board_profit - b.cumulative_board_profit
+        b.loss_boards_count - a.loss_boards_count
     );
 
   return {

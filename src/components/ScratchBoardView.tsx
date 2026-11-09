@@ -1565,8 +1565,9 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                                   : 'text-rose-400'
                               }`}
                             >
-                              {(stat.direct_exit_profit || 0) >= 0 ? '+' : ''}$
-                              {(stat.direct_exit_profit || 0).toLocaleString()}
+                              {(stat.direct_exit_profit || 0) >= 0
+                                ? `+$${(stat.direct_exit_profit || 0).toLocaleString()}`
+                                : `-$${Math.abs(stat.direct_exit_profit || 0).toLocaleString()}`}
                             </div>
                             <div className="text-[10px] font-mono text-slate-500">
                               即時出貨損益 · 勝率 {stat.win_rate_pct}%
@@ -1613,7 +1614,9 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                         </div>
                         <div className="text-right">
                           <span className="text-xs font-mono font-bold text-emerald-400 block">
-                            +${(s.direct_exit_profit !== undefined ? s.direct_exit_profit : s.cumulative_board_profit).toLocaleString()}
+                            {((s.direct_exit_profit !== undefined ? s.direct_exit_profit : s.cumulative_board_profit)) >= 0
+                              ? `+$${((s.direct_exit_profit !== undefined ? s.direct_exit_profit : s.cumulative_board_profit)).toLocaleString()}`
+                              : `-$${Math.abs((s.direct_exit_profit !== undefined ? s.direct_exit_profit : s.cumulative_board_profit)).toLocaleString()}`}
                           </span>
                           <span className="text-[9px] text-slate-500 font-mono">
                             出貨即時損益
@@ -1641,16 +1644,18 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                               #{String(s.number_label).padStart(2, '0')}
                             </span>
                             <span className="text-xs text-slate-300">
-                              選 {s.times_selected} 次 ({s.loss_boards_count} 版虧損)
+                              選 {s.times_selected} 次 ({s.win_boards_count}賺/{s.loss_boards_count}賠)
+                              {s.avg_exit_hole ? ` · 均刮${s.avg_exit_hole}洞` : ''}
                             </span>
                           </div>
                           <div className="text-right">
                             <span className="text-xs font-mono font-bold text-rose-400 block">
-                              {((s.direct_exit_profit !== undefined ? s.direct_exit_profit : s.cumulative_board_profit)) >= 0 ? '+' : ''}$
-                              {((s.direct_exit_profit !== undefined ? s.direct_exit_profit : s.cumulative_board_profit)).toLocaleString()}
+                              {((s.direct_exit_profit !== undefined ? s.direct_exit_profit : s.cumulative_board_profit)) >= 0
+                                ? `+$${((s.direct_exit_profit !== undefined ? s.direct_exit_profit : s.cumulative_board_profit)).toLocaleString()}`
+                                : `-$${Math.abs((s.direct_exit_profit !== undefined ? s.direct_exit_profit : s.cumulative_board_profit)).toLocaleString()}`}
                             </span>
                             <span className="text-[9px] text-slate-500 font-mono">
-                              {s.early_exit_loss_count ? `${s.early_exit_loss_count} 次提早下課` : '板面虧損'}
+                              {s.early_exit_loss_count ? `${s.early_exit_loss_count} 次提早虧損` : '出貨即時損益'}
                             </span>
                           </div>
                         </div>

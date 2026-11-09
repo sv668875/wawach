@@ -111,3 +111,99 @@ describe('calculateSimpleOverhead (台租只在確認支付後才計入淨利扣
     expect(decResult.unpaidRent).toBe(4500);
   });
 });
+
+describe('computeNumberLuckMatrix (號碼直接損益與勝率計算)', () => {
+  it('當獎號提早出貨造成虧損 (-200) 時，應統計為 1 敗 / 0 勝，勝率 0%，且歸類為虧損注意號而非帶財神號', () => {
+    const { computeNumberLuckMatrix } = require('./calculations');
+    const board = {
+      board_id: 'b1',
+      machine_id: 'm1',
+      title: 'A01 A板',
+      total_holes: 80,
+      remaining_holes: 70,
+      board_cost: 0,
+      status: 'ACTIVE',
+      gross_coin_revenue: 100,
+      total_cashback_deducted: 300,
+      prizes: [
+        {
+          item_id: 'p17',
+          number_label: 17,
+          prize_name: '提早出貨大獎',
+          is_cashback: true,
+          cashback_amount: 300,
+          prizeCost: 0,
+          is_claimed: true,
+          claim_type: 'CASHBACK',
+          claimed_at_revenue: 100, // 開出時幣量 100，回錢 300 -> 損益 -200
+          claimed_at_scratched_holes: 10,
+        },
+      ],
+      created_at: new Date().toISOString(),
+    };
+
+    const stats = computeNumberLuckMatrix([board]);
+    const num17 = stats.allStats.find((s: any) => s.number_label === 17);
+
+    expect(num17).toBeDefined();
+    expect(num17.times_claimed).toBe(1);
+    expect(num17.direct_exit_profit).toBe(-200);
+    expect(num17.early_exit_loss_count).toBe(1);
+    expect(num17.loss_boards_count).toBe(1);
+    expect(num17.win_boards_count).toBe(0);
+    expect(num17.win_rate_pct).toBe(0);
+
+    // 絕不可出現在帶財神號榜
+    expect(stats.profitLeaders.some((s: any) => s.number_label === 17)).toBe(false);
+
+    // 必須出現在虧損注意號榜
+    expect(stats.lossTrapList.some((s: any) => s.number_label === 17)).toBe(true);
+  });
+
+  it('當獎號在足夠幣量後才出貨獲利 (+500) 時，應統計為 1 勝 / 0 敗，勝率 100%，並名列帶財神號', () => {
+    const { computeNumberLuckMatrix } = require('./calculations');
+    const board = {
+      board_id: 'b2',
+      machine_id: 'm1',
+      title: 'A01 B板',
+      total_holes: 80,
+      remaining_holes: 20,
+      board_cost: 0,
+      status: 'ACTIVE',
+      gross_coin_revenue: 800,
+      total_cashback_deducted: 300,
+      prizes: [
+        {
+          item_id: 'p88',
+          number_label: 88,
+          prize_name: '帶財大獎',
+          is_cashback: true,
+          cashback_amount: 300,
+          prizeCost: 0,
+          is_claimed: true,
+          claim_type: 'CASHBACK',
+          claimed_at_revenue: 800, // 開出時幣量 800，回錢 300 -> 損益 +500
+          claimed_at_scratched_holes: 60,
+        },
+      ],
+      created_at: new Date().toISOString(),
+    };
+
+    const stats = computeNumberLuckMatrix([board]);
+    const num88 = stats.allStats.find((s: any) => s.number_label === 88);
+
+    expect(num88).toBeDefined();
+    expect(num88.times_claimed).toBe(1);
+    expect(num88.direct_exit_profit).toBe(500);
+    expect(num88.early_exit_loss_count).toBe(0);
+    expect(num88.win_boards_count).toBe(1);
+    expect(num88.loss_boards_count).toBe(0);
+    expect(num88.win_rate_pct).toBe(100);
+
+    // 必須出現在帶財神號榜
+    expect(stats.profitLeaders.some((s: any) => s.number_label === 88)).toBe(true);
+
+    // 絕不可出現在虧損注意號榜
+    expect(stats.lossTrapList.some((s: any) => s.number_label === 88)).toBe(false);
+  });
+});
