@@ -1,4 +1,4 @@
-const CACHE_NAME = 'clawops-cache-v5-1794214950549';
+const CACHE_NAME = 'clawops-cache-v5-1794214984729';
 
 // 核心靜態檔案清單（含 Vite 打包產物）
 const PRECACHE_ASSETS = [
