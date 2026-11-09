@@ -129,7 +129,8 @@ export default function App() {
         activeMachineId,
       },
     };
-    setUndoStack((prev) => [snapshot, ...prev.slice(0, 19)]);
+    // 支援至少 10+ 個步驟 (上限保留 30 步深度)
+    setUndoStack((prev) => [snapshot, ...prev.slice(0, 29)]);
   };
 
   const handleUndo = () => {
@@ -1110,6 +1111,7 @@ export default function App() {
     machineId: string,
     fees: MachineCustomFee[]
   ) => {
+    pushUndo('更新機台固定費用');
     setMachines((prev) =>
       prev.map((m) =>
         m.machine_id === machineId ? { ...m, custom_fixed_fees: fees } : m
@@ -1123,6 +1125,7 @@ export default function App() {
     machineId: string,
     payment: Omit<MachinePaymentRecord, 'payment_id' | 'paid_at'>
   ) => {
+    pushUndo(`記錄付款「${payment.title}」`);
     const newRecord: MachinePaymentRecord = {
       ...payment,
       payment_id: `pay_${Date.now()}`,
@@ -1142,6 +1145,7 @@ export default function App() {
   };
 
   const handleUpdateMachineRentPayDay = (machineId: string, payDay: number) => {
+    pushUndo(`修改繳租日為每月 ${payDay} 號`);
     setMachines((prev) =>
       prev.map((m) =>
         m.machine_id === machineId ? { ...m, rent_pay_day: payDay } : m
@@ -1225,6 +1229,7 @@ export default function App() {
   };
 
   const handleSwitchMachineModel = (machineId: string, model: MachineModel) => {
+    pushUndo(`切換機台模式為 ${model === 'ANALOG' ? '傳統類比' : '數位'}`);
     setMachines((prev) =>
       prev.map((m) =>
         m.machine_id === machineId ? { ...m, machine_model: model } : m
@@ -1434,11 +1439,14 @@ export default function App() {
               <button
                 type="button"
                 onClick={handleUndo}
-                className="w-8 h-8 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 text-amber-400 border border-amber-500/40 flex items-center justify-center transition-all shadow-sm active:scale-95"
-                title={`復原上一步：${undoStack[0].description}`}
+                className="h-8 px-2 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 text-amber-400 border border-amber-500/40 flex items-center gap-1.5 transition-all shadow-sm active:scale-95"
+                title={`復原：${undoStack[0].description}（可復原 ${undoStack.length} 個步驟）`}
                 aria-label="復原上一步"
               >
-                <RotateCcw className="w-4 h-4" />
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span className="text-[10px] font-mono font-bold bg-amber-500 text-slate-950 px-1 py-0.2 rounded-full leading-none">
+                  {undoStack.length}
+                </span>
               </button>
             )}
           </div>

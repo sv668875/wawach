@@ -696,12 +696,20 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                   </span>
                 </div>
 
-                <form onSubmit={handleBatchSubmit} className="space-y-3">
-                  <div className="grid grid-cols-2 gap-2.5">
-                    <div className="bg-[#0B0F17] border border-slate-800 rounded-xl p-2.5">
-                      <label className="block text-[10px] text-slate-400 mb-1">
-                        剩餘洞數
+                <form onSubmit={handleBatchSubmit} className="space-y-3.5">
+                  {/* 1. 上區塊：剩餘洞數 (垂直獨立卡片，Full Width，操作大方清晰) */}
+                  <div className="bg-[#0B0F17] border border-slate-800 rounded-xl p-3.5 space-y-2.5">
+                    <div className="flex items-center justify-between text-xs">
+                      <label className="text-slate-300 font-bold flex items-center gap-1.5">
+                        <Grid className="w-3.5 h-3.5 text-amber-400" />
+                        <span>剩餘洞數</span>
                       </label>
+                      <span className="text-[11px] font-mono text-slate-400">
+                        目前板面剩餘：<strong className="text-amber-400 font-black">{selectedBoard.remaining_holes}</strong> / {selectedBoard.total_holes} 洞
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-3 bg-[#111827] rounded-xl px-3 py-2 border border-slate-700/60 focus-within:border-amber-500/70 transition-colors">
                       <input
                         type="number"
                         min={0}
@@ -717,179 +725,228 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                           )
                         }
                         placeholder="0"
-                        className="w-full bg-transparent text-xl font-mono font-black text-amber-400 focus:outline-none"
+                        className="w-full bg-transparent text-2xl font-mono font-black text-amber-400 tabular-nums focus:outline-none"
                       />
+                      <span className="text-xs font-bold text-slate-400 font-mono shrink-0">
+                        洞
+                      </span>
                     </div>
 
-                    <div className="bg-[#0B0F17] border border-slate-800 rounded-xl p-2.5 flex flex-col justify-between">
-                      <div>
-                        <div className="flex items-center justify-between mb-1.5">
-                          <span className="text-[10px] text-slate-400 font-bold flex items-center gap-1">
-                            {batchCoinMode === 'WHEEL' ? (
-                              <>
-                                <Gauge className="w-3.5 h-3.5 text-amber-400" />
-                                <span>滾輪抄錶 (選填)</span>
-                              </>
-                            ) : (
-                              <>
-                                <DollarSign className="w-3.5 h-3.5 text-amber-400" />
-                                <span>順便記收幣 (選填)</span>
-                              </>
-                            )}
-                          </span>
+                    {/* 快捷微調與重設按鈕 (符合手機觸控大按鈕需求) */}
+                    <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                      <span className="text-[10px] text-slate-500 shrink-0 font-medium">快速扣洞：</span>
+                      {[-1, -5, -10].map((delta) => (
+                        <button
+                          key={delta}
+                          type="button"
+                          onClick={() =>
+                            setBatchRemainingHoles((prev) =>
+                              Math.max(0, Math.min(selectedBoard.total_holes, prev + delta))
+                            )
+                          }
+                          className="h-8 px-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-mono font-bold active:scale-95 transition-all"
+                        >
+                          {delta}
+                        </button>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={() => setBatchRemainingHoles(0)}
+                        className="h-8 px-2.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 text-xs font-bold active:scale-95 transition-all"
+                      >
+                        歸零 (全開)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setBatchRemainingHoles(selectedBoard.remaining_holes)}
+                        className="h-8 px-2.5 rounded-lg text-slate-400 hover:text-white text-xs font-mono ml-auto active:scale-95 transition-all"
+                      >
+                        重設
+                      </button>
+                    </div>
+                  </div>
 
-                          {/* 彈性切換模式小標籤 (預設依機台形式，但可隨時切換) */}
-                          <div className="flex items-center bg-[#111827] p-0.5 rounded border border-slate-700/80 text-[9px] font-bold">
-                            <button
-                              type="button"
-                              onClick={() => setBatchCoinMode('WHEEL')}
-                              className={`px-1.5 py-0.5 rounded transition-colors ${
-                                batchCoinMode === 'WHEEL'
-                                  ? 'bg-amber-500 text-slate-950 font-black'
-                                  : 'text-slate-400 hover:text-white'
-                              }`}
-                              title="適用傳統滾輪機械計數器，輸入新讀數自動算差額"
-                            >
-                              滾輪抄錶
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setBatchCoinMode('DIRECT')}
-                              className={`px-1.5 py-0.5 rounded transition-colors ${
-                                batchCoinMode === 'DIRECT'
-                                  ? 'bg-amber-500 text-slate-950 font-black'
-                                  : 'text-slate-400 hover:text-white'
-                              }`}
-                              title="適用改裝數位儀表板或直接填入收幣金額"
-                            >
-                              直接填金額
-                            </button>
-                          </div>
-                        </div>
-
+                  {/* 2. 下區塊：巡場收幣 / 滾輪抄錶 (垂直獨立卡片，Full Width，支援類比/改裝數位無縫切換) */}
+                  <div className="bg-[#0B0F17] border border-slate-800 rounded-xl p-3.5 space-y-3">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                      <div className="flex items-center gap-1.5">
                         {batchCoinMode === 'WHEEL' ? (
-                          <div>
-                            <div className="flex items-center justify-between text-[10px] text-slate-400 mb-1 font-mono">
-                              <span>上次底數：{currentMachineLastCoin.toLocaleString()}</span>
-                              <span className="text-amber-400/80">1格=10元</span>
-                            </div>
-
-                            <input
-                              type="number"
-                              min={0}
-                              value={batchWheelCounter === 0 ? '' : batchWheelCounter}
-                              onFocus={(e) => {
-                                if (e.target.value === '0') e.target.value = '';
-                                e.target.select();
-                              }}
-                              onChange={(e) =>
-                                setBatchWheelCounter(
-                                  e.target.value === '' ? 0 : Number(e.target.value)
-                                )
-                              }
-                              placeholder={String(currentMachineLastCoin)}
-                              className="w-full bg-transparent text-xl font-mono font-black text-white focus:outline-none placeholder-slate-700"
-                            />
-
-                            {/* 自動折算提示徽章 */}
-                            <div className="mt-1.5 pt-1.5 border-t border-slate-800 flex items-center justify-between text-[10px]">
-                              {batchWheelCounter > currentMachineLastCoin ? (
-                                <span className="text-emerald-400 font-mono font-bold flex items-center gap-1">
-                                  🟢 +{Math.max(0, batchWheelCounter - currentMachineLastCoin).toLocaleString()} 枚 (折合 +${(Math.max(0, batchWheelCounter - currentMachineLastCoin) * (currentMachine?.coin_unit_value || 10)).toLocaleString()} 元)
-                                </span>
-                              ) : batchWheelCounter < currentMachineLastCoin ? (
-                                <span className="text-amber-400 font-mono">
-                                  ⚠️ 讀數小於底數 (若更換錶頭請至收幣頁校準)
-                                </span>
-                              ) : (
-                                <span className="text-slate-500 font-mono">
-                                  讀數未變動 (本次未收幣)
-                                </span>
-                              )}
-                            </div>
-
-                            {/* 快速 +10, +50, +100 枚幣快捷鍵 */}
-                            <div className="flex items-center gap-1 mt-1.5">
-                              <span className="text-[9px] text-slate-500">快調:</span>
-                              {[10, 50, 100].map((inc) => (
-                                <button
-                                  key={inc}
-                                  type="button"
-                                  onClick={() =>
-                                    setBatchWheelCounter(
-                                      (prev) => Math.max(currentMachineLastCoin, prev) + inc
-                                    )
-                                  }
-                                  className="px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] font-mono"
-                                >
-                                  +{inc}枚
-                                </button>
-                              ))}
-                              <button
-                                type="button"
-                                onClick={() => setBatchWheelCounter(currentMachineLastCoin)}
-                                className="px-1.5 py-0.5 rounded text-slate-500 hover:text-slate-300 text-[9px] ml-auto"
-                              >
-                                重設
-                              </button>
-                            </div>
-                          </div>
+                          <>
+                            <Gauge className="w-4 h-4 text-amber-400" />
+                            <span className="text-xs font-bold text-white">滾輪抄錶 (選填)</span>
+                          </>
                         ) : (
-                          <div>
-                            <div className="flex items-center justify-between text-[10px] text-slate-400 mb-1">
-                              <span>本次收幣金額 ($)</span>
-                              <span className="font-mono text-amber-400">
-                                折合 {Math.round((batchAddedCash || 0) / (currentMachine?.coin_unit_value || 10))} 枚幣
-                              </span>
-                            </div>
-
-                            <div className="flex items-center">
-                              <span className="text-lg font-mono font-bold text-amber-400 mr-1.5">$</span>
-                              <input
-                                type="number"
-                                min={0}
-                                step={10}
-                                value={batchAddedCash === 0 ? '' : batchAddedCash}
-                                onFocus={(e) => {
-                                  if (e.target.value === '0') e.target.value = '';
-                                  e.target.select();
-                                }}
-                                onChange={(e) =>
-                                  setBatchAddedCash(
-                                    e.target.value === '' ? 0 : Number(e.target.value)
-                                  )
-                                }
-                                placeholder="0"
-                                className="w-full bg-transparent text-xl font-mono font-black text-white focus:outline-none"
-                              />
-                            </div>
-
-                            {/* 快速金額按鈕 */}
-                            <div className="flex items-center gap-1 mt-1.5 pt-1.5 border-t border-slate-800">
-                              {[100, 500, 1000].map((val) => (
-                                <button
-                                  key={val}
-                                  type="button"
-                                  onClick={() => setBatchAddedCash((prev) => prev + val)}
-                                  className="px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] font-mono font-bold"
-                                >
-                                  +{val}
-                                </button>
-                              ))}
-                              {batchAddedCash > 0 && (
-                                <button
-                                  type="button"
-                                  onClick={() => setBatchAddedCash(0)}
-                                  className="px-1.5 py-0.5 rounded text-slate-500 hover:text-slate-300 text-[9px] ml-auto"
-                                >
-                                  清除
-                                </button>
-                              )}
-                            </div>
-                          </div>
+                          <>
+                            <DollarSign className="w-4 h-4 text-amber-400" />
+                            <span className="text-xs font-bold text-white">巡場收幣 (選填)</span>
+                          </>
                         )}
                       </div>
+
+                      {/* 模式切換標籤按鈕 */}
+                      <div className="flex items-center bg-[#111827] p-1 rounded-lg border border-slate-700 text-xs font-bold self-start sm:self-auto">
+                        <button
+                          type="button"
+                          onClick={() => setBatchCoinMode('WHEEL')}
+                          className={`h-7 px-3 rounded-md transition-all flex items-center gap-1 ${
+                            batchCoinMode === 'WHEEL'
+                              ? 'bg-amber-500 text-slate-950 font-black shadow-sm'
+                              : 'text-slate-400 hover:text-white'
+                          }`}
+                        >
+                          <Gauge className="w-3 h-3" />
+                          <span>滾輪抄錶 (類比)</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setBatchCoinMode('DIRECT')}
+                          className={`h-7 px-3 rounded-md transition-all flex items-center gap-1 ${
+                            batchCoinMode === 'DIRECT'
+                              ? 'bg-amber-500 text-slate-950 font-black shadow-sm'
+                              : 'text-slate-400 hover:text-white'
+                          }`}
+                        >
+                          <DollarSign className="w-3 h-3" />
+                          <span>直接填金額</span>
+                        </button>
+                      </div>
                     </div>
+
+                    {batchCoinMode === 'WHEEL' ? (
+                      <div className="space-y-2.5">
+                        <div className="flex items-center justify-between text-xs text-slate-400 font-mono">
+                          <span>
+                            上次底數：<strong className="text-white font-bold">{currentMachineLastCoin.toLocaleString()}</strong> 刻度
+                          </span>
+                          <span className="text-amber-400/90 font-medium">
+                            1 刻度 = 10 元 (1枚)
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-2 bg-[#111827] rounded-xl px-3 py-2 border border-slate-700/60 focus-within:border-amber-500/70 transition-colors">
+                          <input
+                            type="number"
+                            min={0}
+                            value={batchWheelCounter === 0 ? '' : batchWheelCounter}
+                            onFocus={(e) => {
+                              if (e.target.value === '0') e.target.value = '';
+                              e.target.select();
+                            }}
+                            onChange={(e) =>
+                              setBatchWheelCounter(
+                                e.target.value === '' ? 0 : Number(e.target.value)
+                              )
+                            }
+                            placeholder={String(currentMachineLastCoin)}
+                            className="w-full bg-transparent text-2xl font-mono font-black text-white tabular-nums focus:outline-none placeholder-slate-700"
+                          />
+                          <span className="text-xs font-bold text-slate-400 font-mono shrink-0">
+                            刻度
+                          </span>
+                        </div>
+
+                        {/* 自動折算提示徽章 */}
+                        <div className="p-2.5 rounded-lg bg-[#111827] border border-slate-800 text-xs">
+                          {batchWheelCounter > currentMachineLastCoin ? (
+                            <span className="text-emerald-400 font-mono font-bold flex items-center gap-1.5 flex-wrap">
+                              <span>🟢 本次收幣：</span>
+                              <span>+{Math.max(0, batchWheelCounter - currentMachineLastCoin).toLocaleString()} 枚</span>
+                              <span className="text-slate-400">
+                                (折合 +${(Math.max(0, batchWheelCounter - currentMachineLastCoin) * (currentMachine?.coin_unit_value || 10)).toLocaleString()} 元)
+                              </span>
+                            </span>
+                          ) : batchWheelCounter < currentMachineLastCoin ? (
+                            <span className="text-amber-400 font-mono">
+                              ⚠️ 讀數小於上次底數 ({currentMachineLastCoin})，若有更換計數器請先至收幣頁校準底數。
+                            </span>
+                          ) : (
+                            <span className="text-slate-500 font-mono">
+                              讀數未變動 (本次未收幣或尚未抄錶)
+                            </span>
+                          )}
+                        </div>
+
+                        {/* 快速 +10, +50, +100 枚幣快捷鍵 */}
+                        <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                          <span className="text-[10px] text-slate-500 shrink-0 font-medium">快速加幣：</span>
+                          {[10, 50, 100].map((inc) => (
+                            <button
+                              key={inc}
+                              type="button"
+                              onClick={() =>
+                                setBatchWheelCounter(
+                                  (prev) => Math.max(currentMachineLastCoin, prev) + inc
+                                )
+                              }
+                              className="h-8 px-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-mono font-bold active:scale-95 transition-all"
+                            >
+                              +{inc}枚
+                            </button>
+                          ))}
+                          <button
+                            type="button"
+                            onClick={() => setBatchWheelCounter(currentMachineLastCoin)}
+                            className="h-8 px-2.5 rounded-lg text-slate-400 hover:text-white text-xs font-mono ml-auto active:scale-95 transition-all"
+                          >
+                            重設底數
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="space-y-2.5">
+                        <div className="flex items-center justify-between text-xs text-slate-400">
+                          <span>本次收幣金額 ($)</span>
+                          <span className="font-mono text-amber-400 font-bold">
+                            折合 {Math.round((batchAddedCash || 0) / (currentMachine?.coin_unit_value || 10))} 枚幣
+                          </span>
+                        </div>
+
+                        <div className="flex items-center bg-[#111827] rounded-xl px-3 py-2 border border-slate-700/60 focus-within:border-amber-500/70 transition-colors">
+                          <span className="text-xl font-mono font-bold text-amber-400 mr-2">$</span>
+                          <input
+                            type="number"
+                            min={0}
+                            step={10}
+                            value={batchAddedCash === 0 ? '' : batchAddedCash}
+                            onFocus={(e) => {
+                              if (e.target.value === '0') e.target.value = '';
+                              e.target.select();
+                            }}
+                            onChange={(e) =>
+                              setBatchAddedCash(
+                                e.target.value === '' ? 0 : Number(e.target.value)
+                              )
+                            }
+                            placeholder="0"
+                            className="w-full bg-transparent text-2xl font-mono font-black text-white tabular-nums focus:outline-none"
+                          />
+                        </div>
+
+                        {/* 快速金額按鈕 */}
+                        <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                          <span className="text-[10px] text-slate-500 shrink-0 font-medium">快速面額：</span>
+                          {[100, 500, 1000].map((val) => (
+                            <button
+                              key={val}
+                              type="button"
+                              onClick={() => setBatchAddedCash((prev) => prev + val)}
+                              className="h-8 px-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-mono font-bold active:scale-95 transition-all"
+                            >
+                              +${val}
+                            </button>
+                          ))}
+                          {batchAddedCash > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => setBatchAddedCash(0)}
+                              className="h-8 px-2.5 rounded-lg text-slate-400 hover:text-white text-xs font-mono ml-auto active:scale-95 transition-all"
+                            >
+                              清除
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {/* 點選本次開出的獎號 */}
@@ -1019,7 +1076,7 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
 
                   <button
                     type="submit"
-                    className="w-full py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-xs transition-colors shadow-lg shadow-amber-950/20"
+                    className="h-12 w-full rounded-xl bg-amber-500 hover:bg-amber-400 active:scale-[0.98] text-slate-950 font-black text-sm flex items-center justify-center gap-2 shadow-lg shadow-amber-950/30 transition-all"
                   >
                     儲存分批紀錄
                   </button>
