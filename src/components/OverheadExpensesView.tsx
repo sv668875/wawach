@@ -299,10 +299,11 @@ export const OverheadExpensesView: React.FC<OverheadExpensesViewProps> = ({
                       <button
                         type="button"
                         onClick={() => setMachineToDelete(m)}
-                        className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
+                        className="w-9 h-9 flex items-center justify-center rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 active:scale-95 transition-all touch-manipulation"
                         title="刪除此機台與相關數據"
+                        aria-label="刪除機台"
                       >
-                        <Trash2 className="w-3.5 h-3.5" />
+                        <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
                   ) : (
@@ -310,14 +311,18 @@ export const OverheadExpensesView: React.FC<OverheadExpensesViewProps> = ({
                       <button
                         type="button"
                         onClick={() => saveMachineEdit(m.machine_id)}
-                        className="p-1.5 rounded-lg bg-emerald-500 text-slate-950 font-bold"
+                        className="w-9 h-9 flex items-center justify-center rounded-lg bg-emerald-500 text-slate-950 font-bold active:scale-95 touch-manipulation"
+                        title="儲存設定"
+                        aria-label="儲存設定"
                       >
                         <Check className="w-4 h-4" />
                       </button>
                       <button
                         type="button"
                         onClick={() => setEditingMachineId(null)}
-                        className="p-1.5 rounded-lg bg-slate-800 text-slate-300"
+                        className="w-9 h-9 flex items-center justify-center rounded-lg bg-slate-800 text-slate-300 active:scale-95 touch-manipulation"
+                        title="取消編輯"
+                        aria-label="取消編輯"
                       >
                         <X className="w-4 h-4" />
                       </button>
@@ -328,23 +333,23 @@ export const OverheadExpensesView: React.FC<OverheadExpensesViewProps> = ({
                 {/* 定期繳款狀態標籤列 (需求 6) */}
                 <div className="bg-[#0B0F17] p-2.5 rounded-xl border border-slate-800 flex items-center justify-between gap-2">
                   <div className="flex items-center gap-1.5 text-xs">
-                    <Clock className="w-3.5 h-3.5 text-amber-400" />
-                    <span className="text-slate-400 text-[11px]">
+                    <Clock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                    <span className="text-slate-400 text-[11px] whitespace-nowrap">
                       每月 {payDay} 號繳租：
                     </span>
                     {currentMonthPayment ? (
-                      <span className="font-bold text-emerald-400 flex items-center gap-1 text-[11px]">
-                        <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span className="font-bold text-emerald-400 flex items-center gap-1 text-[11px] whitespace-nowrap">
+                        <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
                         本月已付
                       </span>
                     ) : (
-                      <span className="font-bold text-amber-400 text-[11px]">
+                      <span className="font-bold text-amber-400 text-[11px] whitespace-nowrap">
                         本月待繳 ${totalMonthly.toLocaleString()}
                       </span>
                     )}
                   </div>
 
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-1.5 shrink-0">
                     {!currentMonthPayment && (
                       <button
                         type="button"
@@ -355,7 +360,7 @@ export const OverheadExpensesView: React.FC<OverheadExpensesViewProps> = ({
                           setPayAmount(totalMonthly);
                           setPayNote('');
                         }}
-                        className="px-2 py-1 rounded-lg bg-amber-500 text-slate-950 font-bold text-[10px] whitespace-nowrap hover:bg-amber-400 transition-colors"
+                        className="h-8 px-3 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs whitespace-nowrap transition-all active:scale-95 shadow-sm touch-manipulation min-h-[32px] flex items-center justify-center"
                       >
                         登記已付
                       </button>
@@ -363,10 +368,11 @@ export const OverheadExpensesView: React.FC<OverheadExpensesViewProps> = ({
                     <button
                       type="button"
                       onClick={() => setHistoryModalMachine(m)}
-                      className="p-1 text-slate-400 hover:text-white"
+                      className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-white active:bg-slate-800 active:scale-95 transition-all touch-manipulation shrink-0"
                       title="查看繳費歷史紀錄"
+                      aria-label="查看繳費歷史紀錄"
                     >
-                      <History className="w-3.5 h-3.5" />
+                      <History className="w-4 h-4" />
                     </button>
                   </div>
                 </div>
@@ -595,9 +601,11 @@ export const OverheadExpensesView: React.FC<OverheadExpensesViewProps> = ({
                       <button
                         type="button"
                         onClick={() => onDeleteExpense(exp.expense_id)}
-                        className="p-1 text-slate-500 hover:text-rose-400"
+                        className="w-9 h-9 flex items-center justify-center rounded-lg text-slate-400 hover:text-rose-400 active:bg-rose-500/10 active:scale-95 transition-all touch-manipulation"
+                        title="刪除支出項目"
+                        aria-label="刪除支出項目"
                       >
-                        <Trash2 className="w-3.5 h-3.5" />
+                        <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
                   </div>

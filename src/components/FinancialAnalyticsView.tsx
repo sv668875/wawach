@@ -357,12 +357,12 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
 
   return (
     <div className="space-y-4">
-      {/* 多面向損益維度切換列 (總覽 / 場地 / 機台 / 刮板) */}
-      <div className="grid grid-cols-4 bg-[#111827] p-1 rounded-xl border border-[#1E293B] gap-1">
+      {/* 多面向損益維度切換列 (總覽 / 場地 / 機台 / 刮板 - 手機端 2x2 佈局防擠壓) */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 bg-[#111827] p-1.5 rounded-xl border border-[#1E293B] gap-1.5">
         <button
           type="button"
           onClick={() => setAnalyticsDimension('OVERVIEW')}
-          className={`flex items-center justify-center gap-1 py-2 px-1 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
+          className={`flex items-center justify-center gap-1.5 min-h-[42px] py-2 px-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap active:scale-95 touch-manipulation ${
             analyticsDimension === 'OVERVIEW'
               ? 'bg-amber-500 text-slate-950 shadow-sm'
               : 'text-slate-400 hover:text-white'
@@ -374,7 +374,7 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
         <button
           type="button"
           onClick={() => setAnalyticsDimension('VENUE')}
-          className={`flex items-center justify-center gap-1 py-2 px-1 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
+          className={`flex items-center justify-center gap-1.5 min-h-[42px] py-2 px-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap active:scale-95 touch-manipulation ${
             analyticsDimension === 'VENUE'
               ? 'bg-amber-500 text-slate-950 shadow-sm'
               : 'text-slate-400 hover:text-white'
@@ -386,7 +386,7 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
         <button
           type="button"
           onClick={() => setAnalyticsDimension('MACHINE')}
-          className={`flex items-center justify-center gap-1 py-2 px-1 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
+          className={`flex items-center justify-center gap-1.5 min-h-[42px] py-2 px-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap active:scale-95 touch-manipulation ${
             analyticsDimension === 'MACHINE'
               ? 'bg-amber-500 text-slate-950 shadow-sm'
               : 'text-slate-400 hover:text-white'
@@ -398,7 +398,7 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
         <button
           type="button"
           onClick={() => setAnalyticsDimension('BOARD')}
-          className={`flex items-center justify-center gap-1 py-2 px-1 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
+          className={`flex items-center justify-center gap-1.5 min-h-[42px] py-2 px-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap active:scale-95 touch-manipulation ${
             analyticsDimension === 'BOARD'
               ? 'bg-amber-500 text-slate-950 shadow-sm'
               : 'text-slate-400 hover:text-white'
@@ -768,7 +768,7 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-4 gap-1.5 pt-2 border-t border-slate-800/80 text-center">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-slate-800/80 text-center">
                       <div>
                         <div className="text-[10px] text-slate-500 whitespace-nowrap">收幣</div>
                         <div className="text-xs font-mono font-bold text-white">
@@ -916,7 +916,7 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-4 gap-1.5 pt-2 border-t border-slate-800 text-center">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-slate-800 text-center">
                     <div>
                       <div className="text-[10px] text-slate-500 whitespace-nowrap">總投幣</div>
                       <div className="text-xs font-mono font-bold text-white">
@@ -1043,7 +1043,7 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-4 gap-1.5 pt-2 border-t border-slate-800/80 text-center">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-slate-800/80 text-center">
                       <div>
                         <div className="text-[10px] text-slate-500 whitespace-nowrap">收幣</div>
                         <div className="text-xs font-mono font-bold text-white">
@@ -1158,21 +1158,21 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
                       />
                     </div>
 
-                    <div className="grid grid-cols-4 gap-1 text-[10px] font-mono text-center pt-1 border-t border-slate-800/80">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] font-mono text-center pt-2 border-t border-slate-800/80">
                       <div>
-                        <div className="text-slate-500">毛收幣</div>
+                        <div className="text-[10px] text-slate-500">毛收幣</div>
                         <div className="font-bold text-white">${fin.grossCoinRevenue.toLocaleString()}</div>
                       </div>
                       <div>
-                        <div className="text-slate-500">回錢</div>
+                        <div className="text-[10px] text-slate-500">回錢</div>
                         <div className="font-bold text-rose-400">-${fin.totalCashbackDeducted.toLocaleString()}</div>
                       </div>
                       <div>
-                        <div className="text-slate-500">獎品成本</div>
+                        <div className="text-[10px] text-slate-500">獎品成本</div>
                         <div className="font-bold text-sky-400">-${fin.claimedPrizeCost.toLocaleString()}</div>
                       </div>
                       <div>
-                        <div className="text-slate-500">每洞均投</div>
+                        <div className="text-[10px] text-slate-500">每洞均投</div>
                         <div className="font-bold text-amber-400">${avgPerHole}/洞</div>
                       </div>
                     </div>

@@ -772,8 +772,8 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                       </span>
                     </div>
 
-                    {/* 快捷微調與重設按鈕 (符合手機觸控大按鈕需求) */}
-                    <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                    {/* 快捷微調與重設按鈕 (符合手機觸控大按鈕需求，觸控熱區 >= 40px) */}
+                    <div className="flex flex-wrap items-center gap-2 pt-1">
                       <span className="text-[10px] text-slate-500 shrink-0 font-medium">快速扣洞：</span>
                       {[-1, -5, -10].map((delta) => (
                         <button
@@ -784,7 +784,7 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                               Math.max(0, Math.min(selectedBoard.total_holes, prev + delta))
                             )
                           }
-                          className="h-8 px-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-mono font-bold active:scale-95 transition-all"
+                          className="h-10 min-h-[40px] px-3 rounded-lg bg-slate-800 hover:bg-slate-700 active:bg-slate-600 text-slate-200 border border-slate-700 text-xs font-mono font-bold active:scale-95 transition-all touch-manipulation shadow-sm"
                         >
                           {delta}
                         </button>
@@ -792,14 +792,14 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                       <button
                         type="button"
                         onClick={() => setBatchRemainingHoles(0)}
-                        className="h-8 px-2.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 text-xs font-bold active:scale-95 transition-all"
+                        className="h-10 min-h-[40px] px-3 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 active:bg-rose-500/30 text-rose-400 border border-rose-500/30 text-xs font-bold active:scale-95 transition-all touch-manipulation shadow-sm"
                       >
                         歸零 (全開)
                       </button>
                       <button
                         type="button"
                         onClick={() => setBatchRemainingHoles(selectedBoard.remaining_holes)}
-                        className="h-8 px-2.5 rounded-lg text-slate-400 hover:text-white text-xs font-mono ml-auto active:scale-95 transition-all"
+                        className="h-10 min-h-[40px] px-3 rounded-lg text-slate-400 hover:text-white active:bg-slate-800 text-xs font-mono ml-auto active:scale-95 transition-all touch-manipulation"
                       >
                         重設
                       </button>
@@ -808,7 +808,7 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
 
                   {/* 2. 下區塊：巡場收幣 / 滾輪抄錶 (垂直獨立卡片，Full Width，支援類比/改裝數位無縫切換) */}
                   <div className="bg-[#0B0F17] border border-slate-800 rounded-xl p-3.5 space-y-3">
-                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5">
                       <div className="flex items-center gap-1.5">
                         {batchCoinMode === 'WHEEL' ? (
                           <>
@@ -824,29 +824,29 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                       </div>
 
                       {/* 模式切換標籤按鈕 */}
-                      <div className="flex items-center bg-[#111827] p-1 rounded-lg border border-slate-700 text-xs font-bold self-start sm:self-auto">
+                      <div className="flex items-center bg-[#111827] p-1 rounded-xl border border-slate-700 text-xs font-bold self-start sm:self-auto gap-1">
                         <button
                           type="button"
                           onClick={() => setBatchCoinMode('WHEEL')}
-                          className={`h-7 px-3 rounded-md transition-all flex items-center gap-1 ${
+                          className={`min-h-[38px] h-9 px-3.5 rounded-lg transition-all flex items-center gap-1.5 touch-manipulation active:scale-95 ${
                             batchCoinMode === 'WHEEL'
                               ? 'bg-amber-500 text-slate-950 font-black shadow-sm'
                               : 'text-slate-400 hover:text-white'
                           }`}
                         >
-                          <Gauge className="w-3 h-3" />
+                          <Gauge className="w-3.5 h-3.5" />
                           <span>滾輪抄錶 (類比)</span>
                         </button>
                         <button
                           type="button"
                           onClick={() => setBatchCoinMode('DIRECT')}
-                          className={`h-7 px-3 rounded-md transition-all flex items-center gap-1 ${
+                          className={`min-h-[38px] h-9 px-3.5 rounded-lg transition-all flex items-center gap-1.5 touch-manipulation active:scale-95 ${
                             batchCoinMode === 'DIRECT'
                               ? 'bg-amber-500 text-slate-950 font-black shadow-sm'
                               : 'text-slate-400 hover:text-white'
                           }`}
                         >
-                          <DollarSign className="w-3 h-3" />
+                          <DollarSign className="w-3.5 h-3.5" />
                           <span>直接填金額</span>
                         </button>
                       </div>
@@ -1371,10 +1371,11 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                           onClick={() =>
                             onDeletePrizeFromBoard(selectedBoard.board_id, p.item_id)
                           }
-                          className="p-1 text-slate-500 hover:text-rose-400 shrink-0"
+                          className="w-10 h-10 -mr-2 flex items-center justify-center rounded-lg text-slate-400 hover:text-rose-400 active:bg-rose-500/10 active:scale-95 shrink-0 transition-all touch-manipulation"
                           title="刪除獎項"
+                          aria-label="刪除獎項"
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
+                          <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
                     ))}
@@ -1392,9 +1393,9 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
             <button
               type="button"
               onClick={() => setStatsViewMode('history')}
-              className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-bold transition-colors whitespace-nowrap ${
+              className={`flex-1 min-h-[42px] py-2.5 px-3 rounded-xl text-xs font-bold transition-all whitespace-nowrap active:scale-95 touch-manipulation ${
                 statsViewMode === 'history'
-                  ? 'bg-amber-500 text-slate-950'
+                  ? 'bg-amber-500 text-slate-950 shadow-sm'
                   : 'bg-[#111827] text-slate-400 hover:text-white border border-[#1E293B]'
               }`}
             >
@@ -1403,9 +1404,9 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
             <button
               type="button"
               onClick={() => setStatsViewMode('luck')}
-              className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-bold transition-colors whitespace-nowrap ${
+              className={`flex-1 min-h-[42px] py-2.5 px-3 rounded-xl text-xs font-bold transition-all whitespace-nowrap active:scale-95 touch-manipulation ${
                 statsViewMode === 'luck'
-                  ? 'bg-amber-500 text-slate-950'
+                  ? 'bg-amber-500 text-slate-950 shadow-sm'
                   : 'bg-[#111827] text-slate-400 hover:text-white border border-[#1E293B]'
               }`}
             >

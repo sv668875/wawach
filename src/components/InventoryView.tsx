@@ -460,7 +460,9 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                   <button
                     type="button"
                     onClick={() => onDeleteItem(item.item_id)}
-                    className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-slate-900 shrink-0"
+                    className="w-10 h-10 min-w-[40px] min-h-[40px] flex items-center justify-center rounded-lg text-slate-400 hover:text-rose-400 active:bg-rose-500/10 active:scale-95 shrink-0 transition-all touch-manipulation"
+                    title="刪除庫存商品"
+                    aria-label="刪除庫存商品"
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>

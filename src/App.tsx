@@ -168,7 +168,7 @@ export default function App() {
       setActiveMachineId(latest.state.activeMachineId);
     }
     setUndoStack(rest);
-    showToast(`↩️ 已復原上一步：${latest.description}`);
+    showToast(`↩️ 已復原：${latest.description}（還可復原 ${rest.length} 步）`);
   };
 
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -1461,12 +1461,13 @@ export default function App() {
               <button
                 type="button"
                 onClick={handleUndo}
-                className="h-8 px-2 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 text-amber-400 border border-amber-500/40 flex items-center gap-1.5 transition-all shadow-sm active:scale-95"
+                className="min-h-[36px] h-9 px-2.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 active:bg-amber-500/35 text-amber-400 border border-amber-500/40 flex items-center gap-1.5 transition-all shadow-sm active:scale-95 touch-manipulation"
                 title={`復原：${undoStack[0].description}（可復原 ${undoStack.length} 個步驟）`}
                 aria-label="復原上一步"
               >
-                <RotateCcw className="w-3.5 h-3.5" />
-                <span className="text-[10px] font-mono font-bold bg-amber-500 text-slate-950 px-1 py-0.2 rounded-full leading-none">
+                <RotateCcw className="w-3.5 h-3.5 shrink-0" />
+                <span className="text-[11px] font-bold hidden sm:inline">復原</span>
+                <span className="text-[10px] font-mono font-black bg-amber-500 text-slate-950 px-1.5 py-0.5 rounded-full leading-none">
                   {undoStack.length}
                 </span>
               </button>
@@ -1544,10 +1545,21 @@ export default function App() {
         </div>
       </header>
 
-      {/* Toast */}
+      {/* Toast 提示浮窗 (整合快捷復原按鈕) */}
       {toastMessage && (
-        <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 bg-emerald-500 text-slate-950 px-4 py-2 rounded-full font-extrabold text-xs shadow-xl whitespace-nowrap">
-          {toastMessage}
+        <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 max-w-[92vw] bg-[#111827] border border-emerald-500/50 text-white pl-4 pr-2 py-1.5 rounded-2xl font-bold text-xs shadow-2xl flex items-center gap-2.5 shadow-emerald-950/50 animate-in fade-in slide-in-from-top-2">
+          <span className="text-emerald-400 font-semibold truncate">{toastMessage}</span>
+          {undoStack.length > 0 && !toastMessage.startsWith('↩️') && (
+            <button
+              type="button"
+              onClick={handleUndo}
+              className="h-7 px-2.5 rounded-lg bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-slate-950 font-black text-[11px] flex items-center gap-1 shrink-0 active:scale-95 transition-all touch-manipulation shadow-sm"
+              title="立即復原剛才的操作"
+            >
+              <RotateCcw className="w-3 h-3" />
+              <span>復原</span>
+            </button>
+          )}
         </div>
       )}
 
