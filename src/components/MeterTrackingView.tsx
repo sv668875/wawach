@@ -187,9 +187,6 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
     );
   }, [scratchBoards, selectedMachine]);
 
-  // 指定收幣歸屬的板 ID（null 代表全機台）
-  const [selectedTargetBoardId, setSelectedTargetBoardId] = useState<string | null>(null);
-
   // 滾輪二手錶底數校準彈窗狀態
   const [isCalibrateOpen, setIsCalibrateOpen] = useState(false);
   const [calibrateCoin, setCalibrateCoin] = useState(0);
@@ -232,7 +229,6 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
       onSelectMachine(machine.machine_id);
     }
     setInternalMachineId(machine.machine_id);
-    setSelectedTargetBoardId(null);
     setCoinCounter(machine.last_coin_counter || 0);
     setPrizeCounter(machine.last_prize_counter || 0);
     setPanelAmount(0);
@@ -269,6 +265,8 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
     if (!selectedMachine) return;
     const isDigital = selectedMachine.machine_model === 'DIGITAL';
     const currentRevenue = isDigital ? panelAmount : sessionMetrics.revenue;
+    // 依需求：收幣直接記錄在該機台現有刮板上；若無刮板則直接匯入機台自己本身的幣量
+    const autoTargetBoardId = machineActiveBoards.length > 0 ? machineActiveBoards[0].board_id : null;
 
     onSaveReading({
       machineId: selectedMachine.machine_id,
@@ -281,7 +279,7 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
         : coinCounter,
       prizeCounter: isDigital ? selectedMachine.last_prize_counter : prizeCounter,
       resetMode,
-      targetBoardId: selectedTargetBoardId,
+      targetBoardId: autoTargetBoardId,
       notes: notes.trim() || '記錄收幣',
     });
 
@@ -975,47 +973,22 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
           </div>
         </div>
 
-        {/* 多板獨立記帳：選擇本筆收幣歸屬哪一個板 */}
-        {machineActiveBoards.length > 0 && (
-          <div className="bg-[#0B0F17] p-3 rounded-xl border border-slate-800 space-y-1.5">
-            <div className="flex items-center justify-between text-[11px] font-bold text-slate-400">
-              <span className="flex items-center gap-1 text-amber-400">
-                <Layers className="w-3.5 h-3.5" />
-                收幣歸屬看板：
-              </span>
-              <span className="text-[10px] text-slate-500 font-normal">
-                {selectedTargetBoardId ? '將計入此版營收並同步扣抵' : '全機台總收（不分攤進單一看板）'}
-              </span>
-            </div>
-            <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-              <button
-                type="button"
-                onClick={() => setSelectedTargetBoardId(null)}
-                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
-                  selectedTargetBoardId === null
-                    ? 'bg-amber-500 text-slate-950 shadow-sm'
-                    : 'bg-[#111827] text-slate-400 border border-slate-800'
-                }`}
-              >
-                全機台總收 (不指定板)
-              </button>
-              {machineActiveBoards.map((b) => (
-                <button
-                  key={b.board_id}
-                  type="button"
-                  onClick={() => setSelectedTargetBoardId(b.board_id)}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
-                    selectedTargetBoardId === b.board_id
-                      ? 'bg-emerald-500 text-slate-950 shadow-sm'
-                      : 'bg-[#111827] text-slate-400 border border-slate-800'
-                  }`}
-                >
-                  {b.board_letter ? `${b.board_letter}板` : (b.board_seq ? `${b.board_seq}號版` : b.title)}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
+        {/* 收幣流向清晰提示徽章 (無需手動選歸屬：有板自動入板，無板自動入機台幣量) */}
+        <div className="bg-[#0B0F17] px-3.5 py-2.5 rounded-xl border border-slate-800 flex items-center justify-between text-xs">
+          <span className="flex items-center gap-1.5 font-bold text-slate-300">
+            <Coins className="w-3.5 h-3.5 text-amber-400" />
+            <span>收幣記錄流向：</span>
+          </span>
+          {machineActiveBoards.length > 0 ? (
+            <span className="font-mono text-emerald-400 font-bold flex items-center gap-1 text-[11px] bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/30">
+              <span>🎯 直接匯入現有 [{machineActiveBoards[0].board_letter || 'A'}板]</span>
+            </span>
+          ) : (
+            <span className="font-mono text-slate-400 text-[11px] bg-slate-800/80 px-2 py-0.5 rounded border border-slate-700">
+              🎰 純娃娃機台（直接匯入機台本身幣量）
+            </span>
+          )}
+        </div>
 
         {isDigitalMode ? (
           <div className="space-y-4">

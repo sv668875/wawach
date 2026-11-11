@@ -123,9 +123,16 @@ export function calculateScratchBoardFinancials(
     return sum;
   }, 0);
 
-  const netCoinRevenue = Math.max(0, (Number(grossCoinRevenue) || 0) - totalCashbackDeducted);
+  // 實質幣量 (毛收幣扣除回錢現金支出後的實收幣量，可為負數代表倒賠)
+  const netCoinRevenue = (Number(grossCoinRevenue) || 0) - totalCashbackDeducted;
+
+  // 總淨利 = 毛收幣 - 回錢現金支出 - 實體獎品成本 - 空板成本
+  // 無論客人選擇「拿獎」(失去商品成本) 還是「回錢」(給付現金)，對台主淨利損益影響完全對等！
   const netProfit =
-    netCoinRevenue - claimedPrizeCost - (Number(boardCost) || 0);
+    (Number(grossCoinRevenue) || 0) -
+    totalCashbackDeducted -
+    claimedPrizeCost -
+    (Number(boardCost) || 0);
 
   return {
     grossCoinRevenue: Number(grossCoinRevenue) || 0,

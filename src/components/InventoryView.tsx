@@ -59,6 +59,8 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   // 新增貨物表單
   const [itemName, setItemName] = useState<string>('');
   const [itemCategory, setItemCategory] = useState<string>(categories[0] || '公仔');
+  const [isAddingNewCatInModal, setIsAddingNewCatInModal] = useState<boolean>(false);
+  const [newCatInModalName, setNewCatInModalName] = useState<string>('');
   const [itemSource, setItemSource] = useState<AcquisitionSource>('採購');
   const [itemCost, setItemCost] = useState<number>(350);
   const [itemQty, setItemQty] = useState<number>(1);
@@ -125,9 +127,17 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
     e.preventDefault();
     if (!itemName.trim()) return;
 
+    let finalCategory = itemCategory;
+    if (isAddingNewCatInModal && newCatInModalName.trim()) {
+      finalCategory = newCatInModalName.trim();
+      onAddCategory(finalCategory);
+    } else if (!finalCategory || finalCategory === '__NEW_CATEGORY__') {
+      finalCategory = categories[0] || '未分類';
+    }
+
     onAddItem({
       name: itemName.trim(),
-      category: itemCategory || categories[0] || '未分類',
+      category: finalCategory,
       acquisition_source: itemSource,
       unit_cost: Math.max(0, Number(itemCost) || 0),
       quantity: Math.max(1, Number(itemQty) || 1),
@@ -141,6 +151,8 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
 
     setItemName('');
     setItemQty(1);
+    setNewCatInModalName('');
+    setIsAddingNewCatInModal(false);
     setPlacementTab(itemTargetPlacement);
     setIsAddModalOpen(false);
   };
@@ -492,18 +504,45 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block text-[11px] text-slate-400 mb-1">類別</label>
-                  <select
-                    value={itemCategory}
-                    onChange={(e) => setItemCategory(e.target.value)}
-                    className="w-full bg-[#0B0F17] border border-slate-700 rounded-lg px-2.5 py-2 text-xs text-white"
-                  >
-                    {categories.map((cat) => (
-                      <option key={cat} value={cat}>
-                        {cat}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-[11px] text-slate-400">類別</label>
+                    <button
+                      type="button"
+                      onClick={() => setIsAddingNewCatInModal(!isAddingNewCatInModal)}
+                      className="text-[10px] text-amber-400 hover:text-amber-300 font-bold"
+                    >
+                      {isAddingNewCatInModal ? '選擇既有' : '+ 新增類別'}
+                    </button>
+                  </div>
+                  {isAddingNewCatInModal ? (
+                    <input
+                      type="text"
+                      required
+                      value={newCatInModalName}
+                      onChange={(e) => setNewCatInModalName(e.target.value)}
+                      placeholder="輸入新類別"
+                      className="w-full bg-[#0B0F17] border border-amber-500/60 rounded-lg px-2.5 py-2 text-xs text-amber-300 placeholder-slate-600 focus:outline-none"
+                    />
+                  ) : (
+                    <select
+                      value={itemCategory}
+                      onChange={(e) => {
+                        if (e.target.value === '__NEW_CATEGORY__') {
+                          setIsAddingNewCatInModal(true);
+                        } else {
+                          setItemCategory(e.target.value);
+                        }
+                      }}
+                      className="w-full bg-[#0B0F17] border border-slate-700 rounded-lg px-2.5 py-2 text-xs text-white"
+                    >
+                      {categories.map((cat) => (
+                        <option key={cat} value={cat}>
+                          {cat}
+                        </option>
+                      ))}
+                      <option value="__NEW_CATEGORY__">+ 新增自訂類別...</option>
+                    </select>
+                  )}
                 </div>
 
                 <div>

@@ -51,3 +51,80 @@
 ::-webkit-scrollbar-thumb:hover {
   background: #334155;
 }
+
+/* ================= 3 種主題色彩系統 (亮 / 中間值 / 暗) ================= */
+/* 1. 中間值 (Neutral / 護眼深藍灰) */
+.theme-neutral {
+  background-color: #141c2a !important;
+  color: #f1f5f9 !important;
+}
+.theme-neutral header {
+  background-color: rgba(20, 28, 42, 0.95) !important;
+  border-color: #334155 !important;
+}
+.theme-neutral .bg-\[\#0B0F17\] {
+  background-color: #141c2a !important;
+}
+.theme-neutral .bg-\[\#111827\] {
+  background-color: #1f293d !important;
+}
+.theme-neutral .bg-\[\#080B10\],
+.theme-neutral .bg-\[\#05070A\] {
+  background-color: #111826 !important;
+}
+.theme-neutral .border-\[\#1E293B\],
+.theme-neutral .border-slate-800,
+.theme-neutral .border-slate-700 {
+  border-color: #334155 !important;
+}
+
+/* 2. 亮色 (Light / 清爽純白淺色) */
+.theme-light {
+  background-color: #f8fafc !important;
+  color: #0f172a !important;
+}
+.theme-light header {
+  background-color: rgba(255, 255, 255, 0.95) !important;
+  border-color: #e2e8f0 !important;
+}
+.theme-light .bg-\[\#0B0F17\] {
+  background-color: #f1f5f9 !important;
+}
+.theme-light .bg-\[\#111827\] {
+  background-color: #ffffff !important;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.06);
+}
+.theme-light .bg-\[\#080B10\],
+.theme-light .bg-\[\#05070A\] {
+  background-color: #f8fafc !important;
+}
+.theme-light .bg-slate-900 {
+  background-color: #f1f5f9 !important;
+}
+.theme-light .bg-slate-800 {
+  background-color: #e2e8f0 !important;
+  color: #1e293b !important;
+}
+.theme-light .border-\[\#1E293B\],
+.theme-light .border-slate-800,
+.theme-light .border-slate-700 {
+  border-color: #e2e8f0 !important;
+}
+.theme-light .text-white {
+  color: #0f172a !important;
+}
+.theme-light .text-slate-100,
+.theme-light .text-slate-200,
+.theme-light .text-slate-300 {
+  color: #1e293b !important;
+}
+.theme-light .text-slate-400 {
+  color: #64748b !important;
+}
+.theme-light .text-slate-500 {
+  color: #94a3b8 !important;
+}
+.theme-light input,
+.theme-light select {
+  color: #0f172a !important;
+}

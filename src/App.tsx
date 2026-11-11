@@ -111,6 +111,28 @@ export default function App() {
     }
   }, [machines, activeMachineId]);
 
+  // 主題配色系統：暗 (dark, 當前風格)、中間值 (neutral, 護眼深藍灰)、亮 (light, 清爽純白)
+  type AppTheme = 'dark' | 'neutral' | 'light';
+  const [theme, setTheme] = useState<AppTheme>(
+    () => (localStorage.getItem('wawach_theme') as AppTheme) || 'dark'
+  );
+
+  const handleToggleTheme = () => {
+    setTheme((prev) => {
+      const next: AppTheme =
+        prev === 'dark' ? 'neutral' : prev === 'neutral' ? 'light' : 'dark';
+      localStorage.setItem('wawach_theme', next);
+      showToast(
+        next === 'light'
+          ? '☀️ 已切換為明亮風格'
+          : next === 'neutral'
+          ? '🌤️ 已切換為柔和風格 (中間值)'
+          : '🌙 已切換為暗黑風格'
+      );
+      return next;
+    });
+  };
+
   // 操作防呆與返回復原堆疊 (Undo stack)
   const [undoStack, setUndoStack] = useState<UndoSnapshot[]>([]);
 
@@ -1423,9 +1445,9 @@ export default function App() {
   ];
 
   return (
-    <div className="min-h-screen bg-[#0B0F17] text-slate-100 flex flex-col pb-28 md:pb-6">
+    <div className={`min-h-screen bg-[#0B0F17] text-slate-100 flex flex-col pb-28 md:pb-6 theme-${theme} transition-colors duration-200`}>
       {/* Top Bar */}
-      <header className="sticky top-0 z-30 bg-[#0B0F17]/95 backdrop-blur border-b border-[#1E293B] pt-safe">
+      <header className="sticky top-0 z-30 bg-[#0B0F17]/95 backdrop-blur border-b border-[#1E293B] pt-safe transition-colors duration-200">
         <div className="max-w-3xl mx-auto px-4 h-14 flex items-center justify-between gap-2">
           {/* Brand & Undo Button */}
           <div className="flex items-center gap-2 sm:gap-3">
@@ -1470,8 +1492,8 @@ export default function App() {
             ))}
           </nav>
 
-          {/* Compact Profit Pill */}
-          <div className="flex items-center gap-3 text-right">
+          {/* Compact Profit Pill + Theme Switcher */}
+          <div className="flex items-center gap-2 sm:gap-3 text-right">
             <div>
               <div className="text-[10px] text-slate-400 leading-none">實收</div>
               <div className="text-xs font-mono font-bold text-amber-400">
@@ -1491,6 +1513,33 @@ export default function App() {
                 {topStats.trueNetProfit.toLocaleString()}
               </div>
             </div>
+
+            {/* 3 種風格切換按鈕 (亮 / 中間值 / 暗) */}
+            <button
+              type="button"
+              onClick={handleToggleTheme}
+              className="h-8 px-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 flex items-center gap-1 text-xs font-bold transition-all active:scale-95 shrink-0 shadow-sm"
+              title={`目前風格：${theme === 'dark' ? '暗黑科技 (當前)' : theme === 'neutral' ? '柔和深灰 (中間值)' : '純淨明亮 (亮色)'}（點擊切換）`}
+            >
+              {theme === 'dark' && (
+                <>
+                  <span className="text-xs">🌙</span>
+                  <span className="text-[10px] font-bold hidden sm:inline">暗</span>
+                </>
+              )}
+              {theme === 'neutral' && (
+                <>
+                  <span className="text-xs">🌤️</span>
+                  <span className="text-[10px] font-bold hidden sm:inline text-sky-300">柔</span>
+                </>
+              )}
+              {theme === 'light' && (
+                <>
+                  <span className="text-xs">☀️</span>
+                  <span className="text-[10px] font-bold hidden sm:inline text-amber-500">亮</span>
+                </>
+              )}
+            </button>
           </div>
         </div>
       </header>

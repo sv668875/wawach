@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { calculateSimpleOverhead } from './calculations';
+import { calculateSimpleOverhead, calculateScratchBoardFinancials } from './calculations';
 import { Machine, Expense } from '../types';
 
 describe('calculateSimpleOverhead (台租只在確認支付後才計入淨利扣除)', () => {
@@ -205,5 +205,54 @@ describe('computeNumberLuckMatrix (號碼直接損益與勝率計算)', () => {
 
     // 絕不可出現在虧損注意號榜
     expect(stats.lossTrapList.some((s: any) => s.number_label === 88)).toBe(false);
+  });
+});
+
+describe('calculateScratchBoardFinancials (拿獎 vs 回錢 損益對等與毛收幣不足時正確呈現負損益)', () => {
+  it('當回錢 (1500) 大於毛收幣 (500) 時，淨利應為 -1000，不可截斷為 0', () => {
+    const fin = calculateScratchBoardFinancials(0, 500, [
+      {
+        item_id: 'p1',
+        number_label: 1,
+        is_claimed: true,
+        claim_type: 'CASHBACK',
+        cashback_amount: 1500,
+        prize_cost: 0,
+      },
+    ]);
+
+    expect(fin.grossCoinRevenue).toBe(500);
+    expect(fin.totalCashbackDeducted).toBe(1500);
+    expect(fin.netCoinRevenue).toBe(-1000);
+    expect(fin.netProfit).toBe(-1000);
+  });
+
+  it('拿獎 (扣成本 1000) 與 回錢 (給付現金 1000) 對台主淨利損益影響完全對等', () => {
+    const finPhysical = calculateScratchBoardFinancials(0, 1500, [
+      {
+        item_id: 'p_phys',
+        number_label: 2,
+        is_claimed: true,
+        claim_type: 'PHYSICAL',
+        prize_cost: 1000,
+        cashback_amount: 1000,
+      },
+    ]);
+
+    const finCashback = calculateScratchBoardFinancials(0, 1500, [
+      {
+        item_id: 'p_cash',
+        number_label: 3,
+        is_claimed: true,
+        claim_type: 'CASHBACK',
+        prize_cost: 1000,
+        cashback_amount: 1000,
+      },
+    ]);
+
+    // 兩者淨利皆應為 1500 - 1000 = 500
+    expect(finPhysical.netProfit).toBe(500);
+    expect(finCashback.netProfit).toBe(500);
+    expect(finPhysical.netProfit).toBe(finCashback.netProfit);
   });
 });

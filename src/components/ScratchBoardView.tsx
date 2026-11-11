@@ -32,7 +32,7 @@ interface ScratchBoardViewProps {
   inventoryItems?: InventoryItem[];
   activeMachineId?: string;
   onSelectMachine?: (machineId: string) => void;
-  onQuickMountBoard: (machineId: string, totalHoles: number) => void;
+  onQuickMountBoard: (machineId: string, totalHoles: number, customTitle?: string) => void;
   onAddPrizeToBoard: (
     boardId: string,
     prize: {
@@ -194,6 +194,21 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
 
   const [mountHoles, setMountHoles] = useState<number>(80);
 
+  // 上新板自訂彈窗狀態 (支援自訂任意刮數與自訂名稱)
+  const [isMountModalOpen, setIsMountModalOpen] = useState(false);
+  const [customMountTitle, setCustomMountTitle] = useState('');
+  const [customMountHoles, setCustomMountHoles] = useState<number>(80);
+
+  // 獎號大於刮數防呆警告確認彈窗
+  const [numberWarningData, setNumberWarningData] = useState<{
+    num: number;
+    totalHoles: number;
+    onConfirm: () => void;
+  } | null>(null);
+
+  // 獎項全部出清自動下版提示彈窗
+  const [isAllClaimedPromptOpen, setIsAllClaimedPromptOpen] = useState(false);
+
   // 新增獎項表單狀態
   const [selectedInventoryId, setSelectedInventoryId] = useState<string>('');
   const [prizeNumberInput, setPrizeNumberInput] = useState<string>('');
@@ -316,22 +331,37 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
       return;
     }
 
-    onAddPrizeToBoard(selectedBoard.board_id, {
-      numberLabel: num,
-      prizeName: prizeNameInput.trim() || undefined,
-      isCashback: isCashbackInput,
-      cashbackAmount: isCashbackInput ? cbAmount : 0,
-      prizeCost: Number(prizeCostInput) || 0,
-      syncToInventory: syncToMachineInventory,
-      inventoryItemId: selectedInventoryId || undefined,
-    });
+    const executeAddPrize = () => {
+      onAddPrizeToBoard(selectedBoard.board_id, {
+        numberLabel: num,
+        prizeName: prizeNameInput.trim() || undefined,
+        isCashback: isCashbackInput,
+        cashbackAmount: isCashbackInput ? cbAmount : 0,
+        prizeCost: Number(prizeCostInput) || 0,
+        syncToInventory: syncToMachineInventory,
+        inventoryItemId: selectedInventoryId || undefined,
+      });
 
-    setPrizeNumberInput('');
-    setPrizeNameInput('');
-    setCashbackAmountInput('');
-    setPrizeCostInput('');
-    setSelectedInventoryId('');
-    setSyncToMachineInventory(false);
+      setPrizeNumberInput('');
+      setPrizeNameInput('');
+      setCashbackAmountInput('');
+      setPrizeCostInput('');
+      setSelectedInventoryId('');
+      setSyncToMachineInventory(false);
+      setNumberWarningData(null);
+    };
+
+    // 依需求：當選擇的獎號大於刮數時，跳出提示警告用戶確認，用戶確認後一樣讓他設定
+    if (num > selectedBoard.total_holes) {
+      setNumberWarningData({
+        num,
+        totalHoles: selectedBoard.total_holes,
+        onConfirm: executeAddPrize,
+      });
+      return;
+    }
+
+    executeAddPrize();
   };
 
   const [batchClaimChoices, setBatchClaimChoices] = useState<
@@ -403,6 +433,14 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
           ? `分批巡場 (抄錶 ${currentMachineLastCoin} ➔ ${batchWheelCounter})`
           : '分批巡場紀錄',
     });
+
+    // 依需求：當獎項全部開出被出掉後，跳出提示通知使用者獎項已全部出清，要不要下版
+    const unclaimedRemaining = selectedBoard.prizes.filter(
+      (p) => !p.is_claimed && !batchSelectedNumbers.includes(p.number_label)
+    );
+    if (selectedBoard.prizes.length > 0 && unclaimedRemaining.length === 0) {
+      setTimeout(() => setIsAllClaimedPromptOpen(true), 400);
+    }
 
     setBatchSelectedNumbers([]);
     setBatchClaimChoices({});
@@ -523,24 +561,17 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                 <span>[{currentMachine?.code}] 進行中刮板</span>
               </span>
               <div className="flex items-center gap-2">
-                <select
-                  value={mountHoles}
-                  onChange={(e) => setMountHoles(Number(e.target.value))}
-                  className="bg-[#0B0F17] border border-slate-700 rounded-lg px-2 py-1 text-xs font-mono font-bold text-amber-400"
-                >
-                  {HOLE_PRESETS.map((h) => (
-                    <option key={h} value={h}>
-                      {h} 刮
-                    </option>
-                  ))}
-                </select>
                 <button
                   type="button"
-                  onClick={() => currentMachine && onQuickMountBoard(currentMachine.machine_id, mountHoles)}
-                  className="px-2.5 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs flex items-center gap-1 shadow-sm whitespace-nowrap"
+                  onClick={() => {
+                    setCustomMountHoles(80);
+                    setCustomMountTitle('');
+                    setIsMountModalOpen(true);
+                  }}
+                  className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs flex items-center gap-1 shadow-sm whitespace-nowrap active:scale-95 transition-all"
                 >
                   <Plus className="w-3.5 h-3.5" />
-                  上新板
+                  上新板 (可自訂刮數)
                 </button>
               </div>
             </div>
@@ -563,6 +594,17 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                       + {h} 刮
                     </button>
                   ))}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCustomMountHoles(80);
+                      setCustomMountTitle('');
+                      setIsMountModalOpen(true);
+                    }}
+                    className="px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500 hover:text-slate-950 text-amber-400 border border-amber-500/40 text-xs font-bold transition-all"
+                  >
+                    + 自訂刮數...
+                  </button>
                 </div>
               </div>
             ) : (
@@ -1356,7 +1398,7 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                   : 'bg-[#111827] text-slate-400 hover:text-white border border-[#1E293B]'
               }`}
             >
-              📜 下版歷史 ({settledBoards.length})
+              📜 刮板歷史 ({settledBoards.length})
             </button>
             <button
               type="button"
@@ -1759,6 +1801,182 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
           onSettleBoard(payload);
         }}
       />
+
+      {/* 上新板彈窗 (支援自訂刮數與自訂看板名稱 - 參考收幣頁面設計) */}
+      {isMountModalOpen && currentMachine && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#111827] border border-slate-700 rounded-2xl p-5 max-w-sm w-full space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-white font-bold text-sm">
+                <Plus className="w-4 h-4 text-amber-400" />
+                <span>[{currentMachine.code}] 上架新刮板</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsMountModalOpen(false)}
+                className="text-slate-400 hover:text-white"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div>
+              <label className="block text-xs text-slate-400 mb-1">
+                看板名稱 (選填，留空自動命名)
+              </label>
+              <input
+                type="text"
+                value={customMountTitle}
+                onChange={(e) => setCustomMountTitle(e.target.value)}
+                placeholder={`例如：${currentMachine.code} ${currentMachineActiveBoards.length + 1}號版`}
+                className="w-full bg-[#0B0F17] border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500"
+              />
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between text-xs text-slate-400 mb-1.5">
+                <span>總刮數設定</span>
+                <span className="font-mono text-amber-400 font-bold">{customMountHoles} 刮</span>
+              </div>
+              {/* 快捷按鈕 */}
+              <div className="flex flex-wrap items-center gap-1.5 mb-2.5">
+                {HOLE_PRESETS.map((num) => (
+                  <button
+                    key={num}
+                    type="button"
+                    onClick={() => setCustomMountHoles(num)}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-mono font-bold transition-colors ${
+                      customMountHoles === num
+                        ? 'bg-amber-500 text-slate-950 shadow-sm'
+                        : 'bg-[#0B0F17] text-slate-300 border border-slate-800 hover:border-slate-700'
+                    }`}
+                  >
+                    {num}刮
+                  </button>
+                ))}
+              </div>
+              {/* 自訂刮數輸入框 */}
+              <div className="flex items-center gap-2 bg-[#0B0F17] border border-slate-700 rounded-xl px-3 py-1.5">
+                <span className="text-[11px] text-slate-400 shrink-0 font-medium">自訂任意刮數：</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={999}
+                  value={customMountHoles === 0 ? '' : customMountHoles}
+                  onFocus={(e) => {
+                    if (e.target.value === '0') e.target.value = '';
+                    e.target.select();
+                  }}
+                  onChange={(e) => setCustomMountHoles(Math.max(1, Number(e.target.value) || 0))}
+                  placeholder="自訂洞數 (如 50, 70, 150)"
+                  className="w-full bg-transparent text-sm font-mono font-bold text-amber-400 focus:outline-none"
+                />
+                <span className="text-xs font-mono text-slate-400">刮</span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setIsMountModalOpen(false)}
+                className="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition-colors"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  onQuickMountBoard(currentMachine.machine_id, customMountHoles, customMountTitle);
+                  setCustomMountTitle('');
+                  setIsMountModalOpen(false);
+                }}
+                className="flex-1 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold transition-colors shadow-lg shadow-amber-950/40"
+              >
+                確認上新板
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 依需求：獎號大於刮數防呆警告確認彈窗 */}
+      {numberWarningData && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#111827] border border-amber-500/50 rounded-2xl p-5 max-w-sm w-full space-y-3.5 shadow-2xl text-center">
+            <div className="w-12 h-12 mx-auto rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center text-xl">
+              ⚠️
+            </div>
+            <div className="space-y-1">
+              <h3 className="text-white font-bold text-sm">獎號超出刮數提示</h3>
+              <p className="text-slate-300 text-xs leading-relaxed">
+                您設定的獎號 <strong className="text-amber-400 font-mono text-sm">#{numberWarningData.num}</strong> 大於本版總刮數（<strong className="text-white font-mono">{numberWarningData.totalHoles}</strong> 刮）。
+              </p>
+              <p className="text-slate-400 text-[11px]">
+                若此為您店內設定的加碼特別號或保留獎項，請確認無誤後點擊「確認使用」；若輸入有誤請點「返回修改」。
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setNumberWarningData(null)}
+                className="py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition-colors"
+              >
+                返回修改
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  numberWarningData.onConfirm();
+                }}
+                className="py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold transition-colors shadow-lg shadow-amber-950/40"
+              >
+                確認使用此獎號
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 依需求：獎項全部出清自動提示下版彈窗 */}
+      {isAllClaimedPromptOpen && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#111827] border border-emerald-500/50 rounded-2xl p-5 max-w-sm w-full space-y-4 shadow-2xl text-center">
+            <div className="w-12 h-12 mx-auto rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-xl">
+              🎉
+            </div>
+            <div className="space-y-1.5">
+              <h3 className="text-white font-bold text-sm">本版大獎已全數出清！</h3>
+              <p className="text-slate-300 text-xs leading-relaxed">
+                恭喜！目前板上的所有獎項號碼已經全部被客人開出開清。
+              </p>
+              <p className="text-amber-300/90 text-[11px] font-medium">
+                請問是否要直接前往進行下版結算，清算本版最終盈虧並準備上新版？
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setIsAllClaimedPromptOpen(false)}
+                className="py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 text-xs font-bold transition-colors"
+              >
+                暫不下版
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsAllClaimedPromptOpen(false);
+                  setIsSettleModalOpen(true);
+                }}
+                className="py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold transition-colors shadow-lg shadow-emerald-950/40"
+              >
+                前往下版結算
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
