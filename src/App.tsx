@@ -173,6 +173,22 @@ export default function App() {
 
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [targetScratchBoardId, setTargetScratchBoardId] = useState<string | null>(null);
+  const [activeScratchBoardId, setActiveScratchBoardId] = useState<string | null>(() => {
+    return localStorage.getItem('clawops_active_board_id') || null;
+  });
+
+  const handleSelectScratchBoard = (boardId: string) => {
+    setActiveScratchBoardId(boardId);
+    try {
+      if (boardId) {
+        localStorage.setItem('clawops_active_board_id', boardId);
+      } else {
+        localStorage.removeItem('clawops_active_board_id');
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
   useEffect(() => {
     try {
@@ -423,6 +439,8 @@ export default function App() {
         m.machine_id === machineId ? { ...m, active_board_id: newBoardId } : m
       )
     );
+
+    handleSelectScratchBoard(newBoardId);
 
     showToast(`[${targetMachine.code}] 已成功上架 ${nextLetter}板 (${holeCount}刮)`);
   };
@@ -1655,6 +1673,8 @@ export default function App() {
             inventoryItems={inventoryItems}
             activeMachineId={activeMachineId}
             onSelectMachine={setActiveMachineId}
+            activeBoardId={activeScratchBoardId}
+            onSelectBoard={handleSelectScratchBoard}
             targetBoardId={targetScratchBoardId}
             onTargetBoardConsumed={() => setTargetScratchBoardId(null)}
             onQuickMountBoard={handleQuickMountBoard}

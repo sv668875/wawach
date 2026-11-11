@@ -65,6 +65,8 @@ interface ScratchBoardViewProps {
   }) => void;
   onUpdateGrossRevenue: (boardId: string, newGrossRevenue: number) => void;
   onSettleBoard: (payload: SettleBoardPayload | string) => void;
+  activeBoardId?: string | null;
+  onSelectBoard?: (boardId: string) => void;
   targetBoardId?: string | null;
   onTargetBoardConsumed?: () => void;
 }
@@ -77,6 +79,8 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
   inventoryItems = [],
   activeMachineId: propActiveMachineId,
   onSelectMachine,
+  activeBoardId,
+  onSelectBoard,
   onQuickMountBoard,
   onAddPrizeToBoard,
   onTogglePrizeClaimed,
@@ -167,13 +171,26 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
     return activeBoards.filter((b) => b.machine_id === currentMachine.machine_id);
   }, [activeBoards, currentMachine]);
 
-  const [selectedBoardId, setSelectedBoardId] = useState<string>(
-    targetBoardId || currentMachineActiveBoards[0]?.board_id || ''
-  );
+  const [selectedBoardId, setSelectedBoardId] = useState<string>(() => {
+    if (targetBoardId && boards.some((b) => b.board_id === targetBoardId)) {
+      return targetBoardId;
+    }
+    if (activeBoardId && currentMachineActiveBoards.some((b) => b.board_id === activeBoardId)) {
+      return activeBoardId;
+    }
+    if (
+      currentMachine?.active_board_id &&
+      currentMachineActiveBoards.some((b) => b.board_id === currentMachine.active_board_id)
+    ) {
+      return currentMachine.active_board_id;
+    }
+    return currentMachineActiveBoards[0]?.board_id || '';
+  });
 
   useEffect(() => {
     if (targetBoardId && boards.some((b) => b.board_id === targetBoardId)) {
       setSelectedBoardId(targetBoardId);
+      onSelectBoard?.(targetBoardId);
       const foundTargetBoard = boards.find((b) => b.board_id === targetBoardId);
       if (foundTargetBoard && foundTargetBoard.machine_id !== currentMachineId) {
         onSelectMachine?.(foundTargetBoard.machine_id);
@@ -181,26 +198,38 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
       }
       onTargetBoardConsumed?.();
     }
-  }, [targetBoardId, boards, currentMachineId, onSelectMachine, onTargetBoardConsumed]);
+  }, [targetBoardId, boards, currentMachineId, onSelectMachine, onTargetBoardConsumed, onSelectBoard]);
 
   // 選取的刮板：嚴格鎖定當前機台的進行中看板（若該機台無進行中刮板則為 null，絕不誤穿透顯示其他機台的板）
   const selectedBoard = useMemo(() => {
     if (!currentMachine || currentMachineActiveBoards.length === 0) return null;
     const match = currentMachineActiveBoards.find((b) => b.board_id === selectedBoardId);
     if (match) return match;
-    return currentMachineActiveBoards[0] || null;
-  }, [currentMachine, currentMachineActiveBoards, selectedBoardId]);
+    const preferred =
+      (activeBoardId && currentMachineActiveBoards.find((b) => b.board_id === activeBoardId)) ||
+      (currentMachine?.active_board_id &&
+        currentMachineActiveBoards.find((b) => b.board_id === currentMachine.active_board_id)) ||
+      currentMachineActiveBoards[0];
+    return preferred || null;
+  }, [currentMachine, currentMachineActiveBoards, selectedBoardId, activeBoardId]);
 
   // 當切換機台或進行中看板異動時，嚴格同步 selectedBoardId
   useEffect(() => {
     if (currentMachineActiveBoards.length > 0) {
       if (!currentMachineActiveBoards.some((b) => b.board_id === selectedBoardId)) {
-        setSelectedBoardId(currentMachineActiveBoards[0].board_id);
+        const preferred =
+          (activeBoardId && currentMachineActiveBoards.find((b) => b.board_id === activeBoardId)) ||
+          (currentMachine?.active_board_id &&
+            currentMachineActiveBoards.find((b) => b.board_id === currentMachine.active_board_id)) ||
+          currentMachineActiveBoards[0];
+        setSelectedBoardId(preferred.board_id);
+        onSelectBoard?.(preferred.board_id);
       }
     } else {
       setSelectedBoardId('');
+      onSelectBoard?.('');
     }
-  }, [currentMachineActiveBoards, selectedBoardId]);
+  }, [currentMachineActiveBoards, selectedBoardId, activeBoardId, currentMachine?.active_board_id, onSelectBoard]);
 
   const handleSelectMachine = (machineId: string) => {
     if (onSelectMachine) {
@@ -208,12 +237,24 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
     } else {
       setInternalMachineId(machineId);
     }
-    const machineBoards = activeBoards.filter((b) => b.machine_id === machineId);
-    if (machineBoards.length > 0) {
-      setSelectedBoardId(machineBoards[0].board_id);
+    const targetMach = machines.find((m) => m.machine_id === machineId);
+    const machActiveBoards = activeBoards.filter((b) => b.machine_id === machineId);
+    if (machActiveBoards.length > 0) {
+      const preferredBoard =
+        machActiveBoards.find((b) => b.board_id === targetMach?.active_board_id) ||
+        machActiveBoards[0];
+      setSelectedBoardId(preferredBoard.board_id);
+      onSelectBoard?.(preferredBoard.board_id);
+      setBatchRemainingHoles(preferredBoard.remaining_holes);
+      setBatchSelectedNumbers([]);
+      setBatchAddedCash(0);
+      setBatchWheelCounter(targetMach?.last_coin_counter || 0);
     } else {
       setSelectedBoardId('');
+      onSelectBoard?.('');
+      setBatchRemainingHoles(0);
     }
+    setFormError(null);
   };
 
   const [mountHoles, setMountHoles] = useState<number>(80);
@@ -275,12 +316,19 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
     cashback_amount: number;
   } | null>(null);
 
-  // 分批巡場紀錄表單狀態
+  // 分批巡場紀錄表單狀態：預設嚴格連動當前選定看板的 remaining_holes (絕不使用寫死常數)
   const [batchRemainingHoles, setBatchRemainingHoles] = useState<number>(
-    selectedBoard ? selectedBoard.remaining_holes : 60
+    () => selectedBoard?.remaining_holes ?? 0
   );
   const [batchSelectedNumbers, setBatchSelectedNumbers] = useState<number[]>([]);
   const [batchAddedCash, setBatchAddedCash] = useState<number>(0);
+
+  // 當切換刮板、切換機台、或該刮板的剩餘刮數因分批巡場/下版/編輯異動時，嚴格自動同步剩餘洞數欄位為該板當前最新剩餘刮數
+  useEffect(() => {
+    if (selectedBoard) {
+      setBatchRemainingHoles(selectedBoard.remaining_holes);
+    }
+  }, [selectedBoard?.board_id, selectedBoard?.remaining_holes]);
 
   // 類比機台預設為滾輪抄錶模式，數位機台預設為直接填金額模式；現場提供靈活微調按鈕
   const [batchCoinMode, setBatchCoinMode] = useState<'WHEEL' | 'DIRECT'>(() =>
@@ -302,6 +350,7 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
 
   const handleSelectBoard = (b: ScratchBoard) => {
     setSelectedBoardId(b.board_id);
+    onSelectBoard?.(b.board_id);
     setBatchRemainingHoles(b.remaining_holes);
     setBatchSelectedNumbers([]);
     setBatchAddedCash(0);
