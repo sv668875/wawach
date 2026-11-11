@@ -202,51 +202,83 @@
   color: #94A3B8 !important;
 }
 
-/* 亮色模式下彩色數值與文字加深（提高對比，避免黃色綠色在白底飄走） */
-.theme-light .text-amber-400,
-.theme-light .text-amber-300,
-.theme-light .text-amber-200 {
-  color: #B45309 !important; /* Amber 700 沉穩暖金 */
+/* 亮色模式下彩色文字全面強制高對比 (包含所有帶透明度的變體，例如 text-amber-300/80, text-amber-400/90) */
+.theme-light [class*="text-amber-"],
+.theme-light [class*="text-amber-"] * {
+  color: #92400E !important; /* Amber 800 深金褐色，對比度 > 7:1 */
 }
 
-.theme-light .text-emerald-400,
-.theme-light .text-emerald-300 {
-  color: #047857 !important; /* Emerald 700 濃郁森林綠 */
+.theme-light [class*="text-emerald-"],
+.theme-light [class*="text-emerald-"] * {
+  color: #065F46 !important; /* Emerald 800 深森林綠，對比度 > 7:1 */
 }
 
-.theme-light .text-sky-400,
-.theme-light .text-sky-300 {
-  color: #0369A1 !important; /* Sky 700 湛深海藍 */
+.theme-light [class*="text-sky-"],
+.theme-light [class*="text-sky-"] * {
+  color: #075985 !important; /* Sky 800 深湛藍，對比度 > 7:1 */
 }
 
-.theme-light .text-rose-400,
-.theme-light .text-rose-300 {
-  color: #BE123C !important; /* Rose 700 寶石深紅 */
+.theme-light [class*="text-rose-"],
+.theme-light [class*="text-rose-"] * {
+  color: #9F1239 !important; /* Rose 800 深石榴紅，對比度 > 7:1 */
 }
 
 /* ----------------- 半透明彩色徽章標籤 (高辨識度成對配色) ----------------- */
 .theme-light [class*="bg-amber-500/"] {
   background-color: #FEF3C7 !important;
   border-color: #FDE68A !important;
-  color: #B45309 !important;
+  color: #92400E !important;
 }
 
 .theme-light [class*="bg-emerald-500/"] {
   background-color: #D1FAE5 !important;
   border-color: #A7F3D0 !important;
-  color: #047857 !important;
+  color: #065F46 !important;
 }
 
 .theme-light [class*="bg-sky-500/"] {
   background-color: #E0F2FE !important;
   border-color: #BAE6FD !important;
-  color: #0369A1 !important;
+  color: #075985 !important;
 }
 
 .theme-light [class*="bg-rose-500/"] {
   background-color: #FFE4E6 !important;
   border-color: #FECDD3 !important;
-  color: #BE123C !important;
+  color: #9F1239 !important;
+}
+
+/* 當標籤或按鈕帶有彩色文字卻套用了深灰/黑底 class (如 bg-slate-800, bg-slate-900)，自動轉為成對清晰彩色徽章 */
+.theme-light [class*="bg-slate-800"][class*="text-amber-"],
+.theme-light [class*="bg-slate-900"][class*="text-amber-"],
+.theme-light [class*="bg-slate-800"]:has([class*="text-amber-"]) {
+  background-color: #FEF3C7 !important;
+  border-color: #FDE68A !important;
+  color: #92400E !important;
+}
+
+.theme-light [class*="bg-slate-800"][class*="text-emerald-"],
+.theme-light [class*="bg-slate-900"][class*="text-emerald-"],
+.theme-light [class*="bg-slate-800"]:has([class*="text-emerald-"]) {
+  background-color: #D1FAE5 !important;
+  border-color: #A7F3D0 !important;
+  color: #065F46 !important;
+}
+
+.theme-light [class*="bg-slate-800"][class*="text-sky-"],
+.theme-light [class*="bg-slate-900"][class*="text-sky-"],
+.theme-light [class*="bg-slate-800"]:has([class*="text-sky-"]) {
+  background-color: #E0F2FE !important;
+  border-color: #BAE6FD !important;
+  color: #075985 !important;
+}
+
+.theme-light [class*="bg-slate-800"][class*="text-rose-"],
+.theme-light [class*="bg-slate-900"][class*="text-rose-"],
+.theme-light [class*="bg-slate-800"]:has([class*="text-rose-"]) {
+  background-color: #FFE4E6 !important;
+  border-color: #FECDD3 !important;
+  color: #9F1239 !important;
 }
 
 /* ----------------- 機械滾輪抄錶轉盤專屬適配 ----------------- */

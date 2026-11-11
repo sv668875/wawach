@@ -1011,7 +1011,7 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
               <div className="flex items-center justify-between text-xs text-slate-400 mb-2">
                 <div className="flex items-center gap-1.5">
                   <span className="font-bold text-slate-200">數位面板金額</span>
-                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-amber-300/80 border border-slate-700 font-mono">
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400 border border-amber-500/30 font-mono font-bold">
                     單位：元 (1 = 1元)
                   </span>
                 </div>

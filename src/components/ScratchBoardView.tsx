@@ -613,7 +613,7 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                       onClick={() =>
                         currentMachine && onQuickMountBoard(currentMachine.machine_id, h)
                       }
-                      className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-amber-500 hover:text-slate-950 text-amber-300 border border-slate-700 text-xs font-mono font-bold transition-all"
+                      className="px-2.5 py-1 rounded-lg bg-amber-500/15 hover:bg-amber-500 hover:text-slate-950 text-amber-400 border border-amber-500/30 text-xs font-mono font-bold transition-all"
                     >
                       + {h} 刮
                     </button>
@@ -1538,7 +1538,7 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                     >
                       <div className="flex items-center justify-between gap-2">
                         <div className="flex items-center gap-2 min-w-0">
-                          <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-slate-800 text-amber-400 shrink-0">
+                          <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-amber-500/15 text-amber-400 border border-amber-500/30 shrink-0">
                             [{m?.code || '機台'}] {board.board_letter || 'A'}板
                           </span>
                           <span className="text-xs font-bold text-white truncate">
