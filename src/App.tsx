@@ -1592,7 +1592,7 @@ export default function App() {
               {theme === 'neutral' && (
                 <>
                   <span className="text-xs">🌤️</span>
-                  <span className="text-[10px] font-bold hidden sm:inline text-sky-300">柔</span>
+                  <span className="text-[10px] font-bold hidden sm:inline text-sky-300">中</span>
                 </>
               )}
               {theme === 'light' && (

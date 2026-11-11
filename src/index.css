@@ -53,78 +53,248 @@
 }
 
 /* ================= 3 種主題色彩系統 (亮 / 中間值 / 暗) ================= */
-/* 1. 中間值 (Neutral / 護眼深藍灰) */
+
+/* -------------------------------------------------------------
+ * 1. 中間值 (Neutral / 護眼深藍灰)
+ * ------------------------------------------------------------- */
 .theme-neutral {
-  background-color: #141c2a !important;
-  color: #f1f5f9 !important;
-}
-.theme-neutral header {
-  background-color: rgba(20, 28, 42, 0.95) !important;
-  border-color: #334155 !important;
-}
-.theme-neutral .bg-\[\#0B0F17\] {
-  background-color: #141c2a !important;
-}
-.theme-neutral .bg-\[\#111827\] {
-  background-color: #1f293d !important;
-}
-.theme-neutral .bg-\[\#080B10\],
-.theme-neutral .bg-\[\#05070A\] {
-  background-color: #111826 !important;
-}
-.theme-neutral .border-\[\#1E293B\],
-.theme-neutral .border-slate-800,
-.theme-neutral .border-slate-700 {
-  border-color: #334155 !important;
+  background-color: #151D2A !important;
+  color: #F1F5F9 !important;
 }
 
-/* 2. 亮色 (Light / 清爽純白淺色) */
+.theme-neutral header {
+  background-color: rgba(21, 29, 42, 0.95) !important;
+  border-color: #2D3B4F !important;
+}
+
+.theme-neutral nav {
+  background-color: rgba(31, 41, 61, 0.95) !important;
+  border-color: #2D3B4F !important;
+}
+
+.theme-neutral [class*="bg-[#0B0F17]"] {
+  background-color: #161F2E !important;
+}
+
+.theme-neutral [class*="bg-[#111827]"] {
+  background-color: #1F293D !important;
+  border-color: #2D3B4F !important;
+}
+
+.theme-neutral [class*="bg-[#080B10]"],
+.theme-neutral [class*="bg-[#05070A]"] {
+  background-color: #121926 !important;
+  border-color: #2D3B4F !important;
+}
+
+.theme-neutral [class*="bg-slate-900"],
+.theme-neutral [class*="bg-slate-950"] {
+  background-color: #161F2E !important;
+}
+
+.theme-neutral [class*="bg-slate-800"] {
+  background-color: #26334A !important;
+}
+
+.theme-neutral [class*="border-[#1E293B]"],
+.theme-neutral [class*="border-slate-800"],
+.theme-neutral [class*="border-slate-700"] {
+  border-color: #2D3B4F !important;
+}
+
+.theme-neutral input,
+.theme-neutral select {
+  background-color: #161F2E !important;
+  border-color: #374660 !important;
+  color: #F8FAFC !important;
+}
+
+
+/* -------------------------------------------------------------
+ * 2. 亮色 (Light / 溫潤護眼淺色)
+ * 解決：① 避免刺眼死白 (改用護眼暖灰底 #EEF2F6 + 乾淨紙白卡片 #FFFFFF)
+ *       ② 徹底修復暗色/反灰色塊與白字黃字在亮色下無法辨識的問題
+ * ------------------------------------------------------------- */
 .theme-light {
-  background-color: #f8fafc !important;
-  color: #0f172a !important;
+  background-color: #EEF2F6 !important;
+  color: #0F172A !important;
 }
+
+/* 頁首與行動端底部導覽列 */
 .theme-light header {
+  background-color: rgba(238, 242, 246, 0.95) !important;
+  border-color: #CBD5E1 !important;
+}
+
+.theme-light nav {
   background-color: rgba(255, 255, 255, 0.95) !important;
-  border-color: #e2e8f0 !important;
+  border-color: #CBD5E1 !important;
+  box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.04);
 }
-.theme-light .bg-\[\#0B0F17\] {
-  background-color: #f1f5f9 !important;
+
+.theme-light nav button.text-slate-400 {
+  color: #64748B !important;
 }
-.theme-light .bg-\[\#111827\] {
-  background-color: #ffffff !important;
-  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.06);
+
+.theme-light nav button[class*="bg-amber-500"] {
+  background-color: #FEF3C7 !important;
+  color: #B45309 !important;
 }
-.theme-light .bg-\[\#080B10\],
-.theme-light .bg-\[\#05070A\] {
-  background-color: #f8fafc !important;
+
+/* 主卡片面板 (原 bg-[#111827])：乾淨紙白、柔和邊框與陰影，不刺眼 */
+.theme-light [class*="bg-[#111827]"] {
+  background-color: #FFFFFF !important;
+  border-color: #E2E8F0 !important;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05), 0 1px 2px rgba(15, 23, 42, 0.03);
 }
-.theme-light .bg-slate-900 {
-  background-color: #f1f5f9 !important;
+
+/* 內嵌式凹槽/次級容器 (原 bg-[#0B0F17])：柔和淺色區塊，形成清楚層級 */
+.theme-light [class*="bg-[#0B0F17]"] {
+  background-color: #F8FAFC !important;
+  border-color: #E2E8F0 !important;
 }
-.theme-light .bg-slate-800 {
-  background-color: #e2e8f0 !important;
-  color: #1e293b !important;
+
+/* 暗黑色塊全面替換為清晰柔和色塊，不再產生黑色死塊 */
+.theme-light [class*="bg-slate-900"],
+.theme-light [class*="bg-slate-950"] {
+  background-color: #F1F5F9 !important;
+  border-color: #CBD5E1 !important;
 }
-.theme-light .border-\[\#1E293B\],
-.theme-light .border-slate-800,
-.theme-light .border-slate-700 {
-  border-color: #e2e8f0 !important;
+
+.theme-light [class*="bg-slate-800"] {
+  background-color: #E2E8F0 !important;
+  border-color: #CBD5E1 !important;
 }
+
+/* 邊框全面切換為清爽淺灰，告別黑邊 */
+.theme-light [class*="border-[#1E293B]"],
+.theme-light [class*="border-slate-800"],
+.theme-light [class*="border-slate-700"] {
+  border-color: #E2E8F0 !important;
+}
+
+/* 彈窗半透明遮罩 */
+.theme-light [class*="bg-black/"] {
+  background-color: rgba(15, 23, 42, 0.6) !important;
+}
+
+/* ----------------- 文字對比度全面校準 (絕不泛白看不清) ----------------- */
 .theme-light .text-white {
-  color: #0f172a !important;
+  color: #0F172A !important;
 }
+
+.theme-light .text-slate-50,
 .theme-light .text-slate-100,
 .theme-light .text-slate-200,
 .theme-light .text-slate-300 {
-  color: #1e293b !important;
+  color: #1E293B !important;
 }
+
 .theme-light .text-slate-400 {
-  color: #64748b !important;
+  color: #475569 !important; /* 清晰中深灰，極高可讀性 */
 }
+
 .theme-light .text-slate-500 {
-  color: #94a3b8 !important;
+  color: #64748B !important;
 }
+
+.theme-light .text-slate-600 {
+  color: #94A3B8 !important;
+}
+
+/* 亮色模式下彩色數值與文字加深（提高對比，避免黃色綠色在白底飄走） */
+.theme-light .text-amber-400,
+.theme-light .text-amber-300,
+.theme-light .text-amber-200 {
+  color: #B45309 !important; /* Amber 700 沉穩暖金 */
+}
+
+.theme-light .text-emerald-400,
+.theme-light .text-emerald-300 {
+  color: #047857 !important; /* Emerald 700 濃郁森林綠 */
+}
+
+.theme-light .text-sky-400,
+.theme-light .text-sky-300 {
+  color: #0369A1 !important; /* Sky 700 湛深海藍 */
+}
+
+.theme-light .text-rose-400,
+.theme-light .text-rose-300 {
+  color: #BE123C !important; /* Rose 700 寶石深紅 */
+}
+
+/* ----------------- 半透明彩色徽章標籤 (高辨識度成對配色) ----------------- */
+.theme-light [class*="bg-amber-500/"] {
+  background-color: #FEF3C7 !important;
+  border-color: #FDE68A !important;
+  color: #B45309 !important;
+}
+
+.theme-light [class*="bg-emerald-500/"] {
+  background-color: #D1FAE5 !important;
+  border-color: #A7F3D0 !important;
+  color: #047857 !important;
+}
+
+.theme-light [class*="bg-sky-500/"] {
+  background-color: #E0F2FE !important;
+  border-color: #BAE6FD !important;
+  color: #0369A1 !important;
+}
+
+.theme-light [class*="bg-rose-500/"] {
+  background-color: #FFE4E6 !important;
+  border-color: #FECDD3 !important;
+  color: #BE123C !important;
+}
+
+/* ----------------- 機械滾輪抄錶轉盤專屬適配 ----------------- */
+/* 滾輪外殼：金屬質感淺灰卡槽 */
+.theme-light [class*="bg-[#080B10]"] {
+  background-color: #E2E8F0 !important;
+  border-color: #CBD5E1 !important;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.05) !important;
+}
+
+/* 6 個滾輪數字框：白底黑字，絕對清晰明確 */
+.theme-light [class*="bg-[#05070A]"] {
+  background-color: #FFFFFF !important;
+  border-color: #CBD5E1 !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04) !important;
+}
+
+.theme-light [class*="bg-[#05070A]"] span {
+  color: #0F172A !important;
+}
+
+.theme-light [class*="bg-[#05070A]"] span.text-amber-300,
+.theme-light [class*="bg-[#05070A]"] span.text-amber-400 {
+  color: #B45309 !important;
+}
+
+/* 上下微調按鈕：乾淨實體按鍵 */
+.theme-light [class*="bg-[#080B10]"] button {
+  background-color: #F8FAFC !important;
+  border-color: #CBD5E1 !important;
+  color: #334155 !important;
+}
+
+.theme-light [class*="bg-[#080B10]"] button:hover {
+  background-color: #E2E8F0 !important;
+  color: #0F172A !important;
+}
+
+/* ----------------- 表單輸入框與下拉選單 ----------------- */
 .theme-light input,
-.theme-light select {
-  color: #0f172a !important;
+.theme-light select,
+.theme-light textarea {
+  background-color: #FFFFFF !important;
+  color: #0F172A !important;
+  border-color: #CBD5E1 !important;
+}
+
+.theme-light input::placeholder,
+.theme-light textarea::placeholder {
+  color: #94A3B8 !important;
 }
