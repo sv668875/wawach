@@ -29,6 +29,7 @@ import {
 import {
   calculateScratchBoardFinancials,
   calculateSimpleOverhead,
+  formatProfit,
 } from '../utils/calculations';
 
 interface FinancialAnalyticsViewProps {
@@ -320,7 +321,7 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
       });
       const totalOverhead = rawOverhead.grandTotalOverhead;
 
-      const netRevenue = Math.max(0, totalGross - totalCashback);
+      const netRevenue = totalGross - totalCashback;
       const netProfit = netRevenue - totalPrizeCost - totalOverhead;
 
       return {
@@ -604,8 +605,7 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
                   analytics.trueNetProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'
                 }`}
               >
-                淨利 {analytics.trueNetProfit >= 0 ? '+' : ''}$
-                {analytics.trueNetProfit.toLocaleString()}
+                淨利 {formatProfit(analytics.trueNetProfit)}
               </div>
             </div>
 
@@ -742,8 +742,7 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
                           row.netProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'
                         }`}
                       >
-                        {row.netProfit >= 0 ? '+' : ''}$
-                        {row.netProfit.toLocaleString()}
+                        {formatProfit(row.netProfit)}
                       </div>
                     </div>
 
@@ -843,8 +842,7 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
                           fin.netProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'
                         }`}
                       >
-                        {fin.netProfit >= 0 ? '+' : ''}$
-                        {fin.netProfit.toLocaleString()}
+                        {formatProfit(fin.netProfit)}
                       </span>
                     </div>
 
@@ -908,7 +906,7 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
                           v.netProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'
                         }`}
                       >
-                        {v.netProfit >= 0 ? '+' : ''}${v.netProfit.toLocaleString()}
+                        {formatProfit(v.netProfit)}
                       </div>
                       <div className="text-[10px] text-slate-500 font-mono">
                         場地淨利 (利潤率 {v.totalGross > 0 ? Math.round((v.netProfit / v.totalGross) * 100) : 0}%)
@@ -1017,8 +1015,7 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
                           row.netProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'
                         }`}
                       >
-                        {row.netProfit >= 0 ? '+' : ''}$
-                        {row.netProfit.toLocaleString()}
+                        {formatProfit(row.netProfit)}
                       </div>
                     </div>
 
@@ -1146,8 +1143,7 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
                           fin.netProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'
                         }`}
                       >
-                        {fin.netProfit >= 0 ? '+' : ''}$
-                        {fin.netProfit.toLocaleString()}
+                        {formatProfit(fin.netProfit)}
                       </span>
                     </div>
 

@@ -22,7 +22,7 @@ import {
   ScratchBoard,
   SettleBoardPayload,
 } from '../types';
-import { calculateScratchBoardFinancials, computeNumberLuckMatrix } from '../utils/calculations';
+import { calculateScratchBoardFinancials, computeNumberLuckMatrix, formatProfit } from '../utils/calculations';
 import { SettleBoardModal } from './SettleBoardModal';
 import { AnalogCounterWheel } from './AnalogCounterWheel';
 
@@ -117,6 +117,30 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
         ),
     [boards]
   );
+
+  // 刮板歷史篩選與排序狀態
+  const [historyMachineFilter, setHistoryMachineFilter] = useState<string>('ALL');
+  const [historySortOrder, setHistorySortOrder] = useState<'NEWEST' | 'PROFIT_HIGH' | 'LOSS_HIGH'>('NEWEST');
+
+  const filteredSettledBoards = useMemo(() => {
+    let list = settledBoards;
+    if (historyMachineFilter !== 'ALL') {
+      list = list.filter((b) => b.machine_id === historyMachineFilter);
+    }
+    return [...list].sort((a, b) => {
+      if (historySortOrder === 'PROFIT_HIGH') {
+        const finA = calculateScratchBoardFinancials(a.board_cost, a.gross_coin_revenue, a.prizes);
+        const finB = calculateScratchBoardFinancials(b.board_cost, b.gross_coin_revenue, b.prizes);
+        return finB.netProfit - finA.netProfit;
+      }
+      if (historySortOrder === 'LOSS_HIGH') {
+        const finA = calculateScratchBoardFinancials(a.board_cost, a.gross_coin_revenue, a.prizes);
+        const finB = calculateScratchBoardFinancials(b.board_cost, b.gross_coin_revenue, b.prizes);
+        return finA.netProfit - finB.netProfit;
+      }
+      return new Date(b.settled_at || 0).getTime() - new Date(a.settled_at || 0).getTime();
+    });
+  }, [settledBoards, historyMachineFilter, historySortOrder]);
 
   // 需求 2 & 9：以場地分組機台，再選刮板
   const [internalMachineId, setInternalMachineId] = useState<string>(
@@ -720,8 +744,7 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                           : 'text-rose-400'
                       }`}
                     >
-                      {boardFinancials.netProfit >= 0 ? '+' : ''}$
-                      {boardFinancials.netProfit.toLocaleString()}
+                      {formatProfit(boardFinancials.netProfit)}
                     </div>
                   </div>
                 </div>
@@ -752,6 +775,7 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                     <div className="flex items-center gap-3 bg-[#111827] rounded-xl px-3 py-2 border border-slate-700/60 focus-within:border-amber-500/70 transition-colors">
                       <input
                         type="number"
+                        inputMode="numeric"
                         min={0}
                         max={selectedBoard.total_holes}
                         value={batchRemainingHoles === 0 ? '' : batchRemainingHoles}
@@ -903,6 +927,7 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                           <span className="text-xl font-mono font-bold text-amber-400 mr-2">$</span>
                           <input
                             type="number"
+                            inputMode="numeric"
                             min={0}
                             step={10}
                             value={batchAddedCash === 0 ? '' : batchAddedCash}
@@ -1156,6 +1181,7 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                       </label>
                       <input
                         type="number"
+                        inputMode="numeric"
                         min={1}
                         required
                         value={prizeNumberInput}
@@ -1186,6 +1212,7 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                       </label>
                       <input
                         type="number"
+                        inputMode="numeric"
                         min={0}
                         value={prizeCostInput === '0' ? '' : prizeCostInput}
                         onFocus={(e) => {
@@ -1231,6 +1258,7 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                         <span className="text-[11px] text-amber-400 font-bold">$</span>
                         <input
                           type="number"
+                          inputMode="numeric"
                           min={10}
                           step={10}
                           required
@@ -1415,18 +1443,72 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
           </div>
 
           {statsViewMode === 'history' ? (
-            /* A. 已結算刮板帳本列表 (需求 5) */
+            /* A. 已結算刮板帳本列表 (支援機台快篩與損益排序) */
             <div className="space-y-3">
-              {settledBoards.length === 0 ? (
+              {/* 機台快篩與排序控制列 */}
+              {settledBoards.length > 0 && (
+                <div className="bg-[#111827] border border-[#1E293B] rounded-xl p-3 space-y-2.5">
+                  <div className="flex items-center justify-between text-xs font-bold text-slate-300">
+                    <span className="flex items-center gap-1.5">
+                      <History className="w-3.5 h-3.5 text-amber-400" />
+                      歷史刮板帳本 ({filteredSettledBoards.length}/{settledBoards.length}板)
+                    </span>
+                    <select
+                      value={historySortOrder}
+                      onChange={(e) => setHistorySortOrder(e.target.value as any)}
+                      className="bg-[#0B0F17] border border-slate-700 rounded-lg px-2 py-1 text-[11px] font-bold text-amber-400 focus:outline-none"
+                    >
+                      <option value="NEWEST">⏱️ 最新下版優先</option>
+                      <option value="PROFIT_HIGH">🔥 獲利最高優先</option>
+                      <option value="LOSS_HIGH">⚠️ 虧損最多優先</option>
+                    </select>
+                  </div>
+
+                  {/* 機台快篩按鈕群 */}
+                  <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-0.5">
+                    <button
+                      type="button"
+                      onClick={() => setHistoryMachineFilter('ALL')}
+                      className={`shrink-0 px-2.5 py-1 rounded-lg text-xs font-bold transition-all active:scale-95 touch-manipulation ${
+                        historyMachineFilter === 'ALL'
+                          ? 'bg-amber-500 text-slate-950 shadow-sm'
+                          : 'bg-[#0B0F17] text-slate-400 border border-slate-800'
+                      }`}
+                    >
+                      全部機台
+                    </button>
+                    {machines.map((m) => (
+                      <button
+                        key={m.machine_id}
+                        type="button"
+                        onClick={() => setHistoryMachineFilter(m.machine_id)}
+                        className={`shrink-0 px-2.5 py-1 rounded-lg text-xs font-bold transition-all active:scale-95 touch-manipulation ${
+                          historyMachineFilter === m.machine_id
+                            ? 'bg-amber-500 text-slate-950 shadow-sm'
+                            : 'bg-[#0B0F17] text-slate-400 border border-slate-800'
+                        }`}
+                      >
+                        [{m.code}] {m.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {filteredSettledBoards.length === 0 ? (
                 <div className="bg-[#111827] border border-[#1E293B] rounded-xl p-8 text-center space-y-2">
                   <History className="w-8 h-8 mx-auto text-slate-600" />
-                  <div className="text-white text-xs font-bold">尚無已結算的刮板紀錄</div>
-                  <p className="text-slate-400 text-[11px]">
-                    當台上的刮板開完或更換時，點擊「結算下版」，完整的上架時間、收幣、獎項成本與淨利將完整收錄於此。
+                  <div className="text-white text-xs font-bold">
+                    {settledBoards.length === 0 ? '尚無已結算的刮板紀錄' : '查無符合條件的刮板紀錄'}
+                  </div>
+                  <p className="text-slate-400 text-xs">
+                    {settledBoards.length === 0
+                      ? '當刮板開完或更換下版後，歷史盈虧將彙整於此。'
+                      : '請切換機台快篩標籤檢視其他機台的結算板子。'}
                   </p>
                 </div>
               ) : (
-                settledBoards.map((board) => {
+                filteredSettledBoards.map((board) => {
                   const m = machines.find((mc) => mc.machine_id === board.machine_id);
                   const fin = calculateScratchBoardFinancials(
                     board.board_cost,
@@ -1469,8 +1551,7 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                             fin.netProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'
                           }`}
                         >
-                          {fin.netProfit >= 0 ? '+' : ''}$
-                          {fin.netProfit.toLocaleString()}
+                          {formatProfit(fin.netProfit)}
                         </span>
                       </div>
 
@@ -1557,7 +1638,7 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                                     <span className="text-[9px] text-slate-400">
                                       (第 {p.claimed_at_scratched_holes} 刮出 · 幣量 ${exitRev} ·{' '}
                                       <span className={exitProfit >= 0 ? 'text-emerald-400 font-bold' : 'text-rose-400 font-bold'}>
-                                        {exitProfit >= 0 ? '+' : ''}${exitProfit}
+                                        {formatProfit(exitProfit)}
                                       </span>
                                       )
                                     </span>
@@ -1621,9 +1702,7 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                                   : 'text-rose-400'
                               }`}
                             >
-                              {(stat.direct_exit_profit || 0) >= 0
-                                ? `+$${(stat.direct_exit_profit || 0).toLocaleString()}`
-                                : `-$${Math.abs(stat.direct_exit_profit || 0).toLocaleString()}`}
+                              {formatProfit(stat.direct_exit_profit || 0)}
                             </div>
                             <div className="text-[10px] font-mono text-slate-500">
                               即時出貨損益 · 勝率 {stat.win_rate_pct}%
@@ -1670,9 +1749,7 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                         </div>
                         <div className="text-right">
                           <span className="text-xs font-mono font-bold text-emerald-400 block">
-                            {((s.direct_exit_profit !== undefined ? s.direct_exit_profit : s.cumulative_board_profit)) >= 0
-                              ? `+$${((s.direct_exit_profit !== undefined ? s.direct_exit_profit : s.cumulative_board_profit)).toLocaleString()}`
-                              : `-$${Math.abs((s.direct_exit_profit !== undefined ? s.direct_exit_profit : s.cumulative_board_profit)).toLocaleString()}`}
+                            {formatProfit(s.direct_exit_profit !== undefined ? s.direct_exit_profit : s.cumulative_board_profit)}
                           </span>
                           <span className="text-[11px] text-slate-400 font-mono">
                             出貨即時損益
@@ -1706,9 +1783,7 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                           </div>
                           <div className="text-right">
                             <span className="text-xs font-mono font-bold text-rose-400 block">
-                              {((s.direct_exit_profit !== undefined ? s.direct_exit_profit : s.cumulative_board_profit)) >= 0
-                                ? `+$${((s.direct_exit_profit !== undefined ? s.direct_exit_profit : s.cumulative_board_profit)).toLocaleString()}`
-                                : `-$${Math.abs((s.direct_exit_profit !== undefined ? s.direct_exit_profit : s.cumulative_board_profit)).toLocaleString()}`}
+                              {formatProfit(s.direct_exit_profit !== undefined ? s.direct_exit_profit : s.cumulative_board_profit)}
                             </span>
                             <span className="text-[11px] text-slate-400 font-mono">
                               {s.early_exit_loss_count ? `${s.early_exit_loss_count} 次提早虧損` : '出貨即時損益'}
@@ -1861,6 +1936,7 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                 <span className="text-[11px] text-slate-400 shrink-0 font-medium">自訂任意刮數：</span>
                 <input
                   type="number"
+                  inputMode="numeric"
                   min={1}
                   max={999}
                   value={customMountHoles === 0 ? '' : customMountHoles}

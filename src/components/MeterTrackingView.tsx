@@ -60,6 +60,7 @@ interface MeterTrackingViewProps {
   onDeleteMachine: (machineId: string) => void;
   onCalibrateCounters: (machineId: string, initialCoin: number, initialPrize: number) => void;
   onSwitchMachineModel: (machineId: string, model: MachineModel) => void;
+  onDeleteReading?: (readingId: string) => void;
   onJumpToScratchBoard: (boardId?: string) => void;
 }
 
@@ -77,6 +78,7 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
   onDeleteMachine,
   onCalibrateCounters,
   onSwitchMachineModel,
+  onDeleteReading,
   onJumpToScratchBoard,
 }) => {
   const [internalMachineId, setInternalMachineId] = useState<string>(
@@ -175,6 +177,10 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
   // 需求 4：數位機台記錄收幣後提示拿鑰匙歸零面板彈窗狀態
   const [isZeroReminderModalOpen, setIsZeroReminderModalOpen] = useState(false);
   const [zeroReminderAmount, setZeroReminderAmount] = useState(0);
+
+  // 查看全部抄錶紀錄與刪除確認狀態
+  const [isAllReadingsModalOpen, setIsAllReadingsModalOpen] = useState(false);
+  const [readingToDelete, setReadingToDelete] = useState<MeterReading | null>(null);
 
   // 需求 8：新增機台防重錯誤提示
   const [addMachineError, setAddMachineError] = useState<string | null>(null);
@@ -482,6 +488,7 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
                 <label className="block text-[11px] text-slate-400 mb-1">月台租 ($)</label>
                 <input
                   type="number"
+                  inputMode="numeric"
                   value={newMachineRent === 0 ? '' : newMachineRent}
                   onFocus={(e) => { if (e.target.value === '0') e.target.value = ''; e.target.select(); }}
                   onChange={(e) => setNewMachineRent(e.target.value === '' ? 0 : Number(e.target.value))}
@@ -532,6 +539,7 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
                   <label className="block text-xs text-slate-400 mb-0.5">起始投幣底數</label>
                   <input
                     type="number"
+                    inputMode="numeric"
                     min={0}
                     value={newMachineInitialCoin === 0 ? '' : newMachineInitialCoin}
                     onFocus={(e) => { if (e.target.value === '0') e.target.value = ''; e.target.select(); }}
@@ -544,6 +552,7 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
                   <label className="block text-xs text-slate-400 mb-0.5">起始出貨底數</label>
                   <input
                     type="number"
+                    inputMode="numeric"
                     min={0}
                     value={newMachineInitialPrize === 0 ? '' : newMachineInitialPrize}
                     onFocus={(e) => { if (e.target.value === '0') e.target.value = ''; e.target.select(); }}
@@ -635,9 +644,14 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
   };
 
   const isDigitalMode = selectedMachine?.machine_model === 'DIGITAL';
-  const machineReadings = selectedMachine
-    ? readings.filter((r) => r.machine_id === selectedMachine.machine_id).slice(0, 6)
-    : [];
+  const allMachineReadings = useMemo(
+    () =>
+      selectedMachine
+        ? readings.filter((r) => r.machine_id === selectedMachine.machine_id)
+        : [],
+    [readings, selectedMachine]
+  );
+  const machineReadings = allMachineReadings.slice(0, 6);
 
   return (
     <div className="space-y-4">
@@ -1010,6 +1024,7 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
                 <span className="text-2xl font-mono font-bold text-amber-400 mr-2">$</span>
                 <input
                   type="number"
+                  inputMode="numeric"
                   min={0}
                   step={10}
                   value={panelAmount === 0 ? '' : panelAmount}
@@ -1199,6 +1214,15 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
             <History className="w-3.5 h-3.5 text-amber-400" />
             近期紀錄 ({selectedMachine.code})
           </div>
+          {allMachineReadings.length > 6 && (
+            <button
+              type="button"
+              onClick={() => setIsAllReadingsModalOpen(true)}
+              className="text-xs text-amber-400 hover:text-amber-300 font-bold active:scale-95 transition-all touch-manipulation"
+            >
+              查看全部 ({allMachineReadings.length}) ➔
+            </button>
+          )}
         </div>
 
         {machineReadings.length === 0 ? (
@@ -1208,7 +1232,7 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
             {machineReadings.map((r) => (
               <div
                 key={r.reading_id}
-                className="flex items-center justify-between p-2.5 rounded-lg bg-[#0B0F17] border border-slate-800/80"
+                className="flex items-center justify-between p-2.5 rounded-lg bg-[#0B0F17] border border-slate-800/80 gap-2"
               >
                 <div className="flex items-center gap-2.5 min-w-0">
                   <span
@@ -1234,8 +1258,21 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
                     </div>
                   </div>
                 </div>
-                <div className="text-sm font-mono font-bold text-amber-400 shrink-0 ml-2">
-                  +${r.cash_collected.toLocaleString()}
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="text-sm font-mono font-bold text-amber-400">
+                    +${r.cash_collected.toLocaleString()}
+                  </span>
+                  {onDeleteReading && (
+                    <button
+                      type="button"
+                      onClick={() => setReadingToDelete(r)}
+                      className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 active:scale-95 transition-all touch-manipulation"
+                      title="刪除/撤銷此筆抄錶紀錄"
+                      aria-label="刪除此筆抄錶紀錄"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                 </div>
               </div>
             ))}
@@ -1406,6 +1443,7 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
                 </label>
                 <input
                   type="number"
+                  inputMode="numeric"
                   min={0}
                   max={999999}
                   value={calibrateCoin === 0 ? '' : calibrateCoin}
@@ -1422,6 +1460,7 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
                 </label>
                 <input
                   type="number"
+                  inputMode="numeric"
                   min={0}
                   max={999999}
                   value={calibratePrize === 0 ? '' : calibratePrize}
@@ -1565,6 +1604,136 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
             >
               確認已歸零
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* 全部抄錶紀錄檢視彈窗 (手機自適應 Bottom Sheet) */}
+      {isAllReadingsModalOpen && selectedMachine && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center sm:p-4">
+          <div className="bg-[#111827] border border-slate-700 rounded-t-3xl sm:rounded-2xl max-w-md w-full p-5 space-y-4 max-h-[90vh] flex flex-col shadow-2xl animate-in slide-in-from-bottom-6 sm:slide-in-from-bottom-0 sm:fade-in duration-200">
+            <div className="w-10 h-1 bg-slate-700 rounded-full mx-auto mb-1 sm:hidden shrink-0" />
+            <div className="flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-2 text-white font-bold text-sm">
+                <History className="w-4 h-4 text-amber-400" />
+                <span>全部抄錶收幣紀錄 [{selectedMachine.code}]</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsAllReadingsModalOpen(false)}
+                className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-white active:scale-95"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto space-y-2 pr-1">
+              {allMachineReadings.length === 0 ? (
+                <div className="text-center py-10 text-xs text-slate-500">尚無抄錶紀錄</div>
+              ) : (
+                allMachineReadings.map((r, idx) => (
+                  <div
+                    key={r.reading_id}
+                    className="p-3 rounded-xl bg-[#0B0F17] border border-slate-800 space-y-1.5"
+                  >
+                    <div className="flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span
+                          className={`shrink-0 px-2 py-0.5 rounded text-[11px] font-bold ${
+                            r.clear_action === 'BOARD_CLOSE_CLEAR'
+                              ? 'bg-emerald-500/15 text-emerald-400'
+                              : 'bg-amber-500/15 text-amber-400'
+                          }`}
+                        >
+                          {r.clear_action === 'BOARD_CLOSE_CLEAR' ? '結算下版' : '巡場收幣'}
+                        </span>
+                        {idx === 0 && (
+                          <span className="text-[10px] bg-slate-800 text-slate-300 px-1.5 py-0.2 rounded font-mono">
+                            最新
+                          </span>
+                        )}
+                        <span className="text-slate-200 truncate font-medium">
+                          {r.notes || '收幣紀錄'}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="font-mono font-bold text-amber-400">
+                          +${r.cash_collected.toLocaleString()}
+                        </span>
+                        {onDeleteReading && (
+                          <button
+                            type="button"
+                            onClick={() => setReadingToDelete(r)}
+                            className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 active:scale-95 transition-all touch-manipulation"
+                            title="刪除/撤銷此筆紀錄"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between text-[11px] font-mono text-slate-500 pt-0.5">
+                      <span>投幣錶讀數: {r.coin_counter.toLocaleString()} (增+{r.coins_delta})</span>
+                      <span>{new Date(r.read_at).toLocaleString('zh-TW', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setIsAllReadingsModalOpen(false)}
+              className="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition-all shrink-0 active:scale-95 touch-manipulation"
+            >
+              關閉
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 單筆抄錶紀錄刪除確認彈窗 */}
+      {readingToDelete && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#111827] border border-rose-500/40 rounded-2xl max-w-sm w-full p-5 space-y-4 shadow-2xl">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-xl bg-rose-500/20 flex items-center justify-center text-rose-400 shrink-0">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div className="space-y-1">
+                <h4 className="text-white font-bold text-sm">確認撤銷/刪除此筆收幣紀錄？</h4>
+                <p className="text-xs text-slate-300">
+                  金額：<span className="font-mono font-bold text-amber-400">+${readingToDelete.cash_collected.toLocaleString()}</span> 元
+                  <br />
+                  時間：{new Date(readingToDelete.read_at).toLocaleString()}
+                </p>
+                <p className="text-[11px] text-amber-300/90 pt-1">
+                  💡 若此筆為最新抄錶，刪除後系統將自動將機台讀數底數回退至前一次抄錶，維持數據準確。
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setReadingToDelete(null)}
+                className="py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition-all active:scale-95 touch-manipulation"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (onDeleteReading) {
+                    onDeleteReading(readingToDelete.reading_id);
+                  }
+                  setReadingToDelete(null);
+                }}
+                className="py-2.5 rounded-xl bg-rose-500 hover:bg-rose-400 text-white text-xs font-bold transition-all active:scale-95 touch-manipulation shadow-sm"
+              >
+                確認刪除
+              </button>
+            </div>
           </div>
         </div>
       )}

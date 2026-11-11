@@ -386,6 +386,7 @@ export const OverheadExpensesView: React.FC<OverheadExpensesViewProps> = ({
                         </label>
                         <input
                           type="number"
+                          inputMode="numeric"
                           value={editDraft.rent_monthly === 0 ? '' : editDraft.rent_monthly}
                           onFocus={(e) => { if (e.target.value === '0') e.target.value = ''; e.target.select(); }}
                           onChange={(e) =>
@@ -404,6 +405,7 @@ export const OverheadExpensesView: React.FC<OverheadExpensesViewProps> = ({
                         </label>
                         <input
                           type="number"
+                          inputMode="numeric"
                           min={1}
                           max={31}
                           value={editDraft.rent_pay_day === 0 ? '' : editDraft.rent_pay_day}
@@ -560,6 +562,7 @@ export const OverheadExpensesView: React.FC<OverheadExpensesViewProps> = ({
                 </select>
                 <input
                   type="number"
+                  inputMode="numeric"
                   min={1}
                   required
                   value={expAmount === 0 ? '' : expAmount}
@@ -618,8 +621,11 @@ export const OverheadExpensesView: React.FC<OverheadExpensesViewProps> = ({
 
       {/* 刪除機台連帶清除確認彈窗 */}
       {machineToDelete && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#111827] border border-rose-500/40 rounded-2xl p-5 max-w-sm w-full space-y-4 shadow-2xl">
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <div className="bg-[#111827] border border-rose-500/40 rounded-t-3xl sm:rounded-2xl p-5 max-w-sm w-full space-y-4 shadow-2xl">
+            <div className="sm:hidden flex justify-center pt-1 pb-1">
+              <div className="w-10 h-1 rounded-full bg-slate-700" />
+            </div>
             <div className="flex items-start gap-3">
               <div className="w-10 h-10 rounded-xl bg-rose-500/15 text-rose-400 flex items-center justify-center shrink-0">
                 <AlertTriangle className="w-5 h-5" />
@@ -672,8 +678,11 @@ export const OverheadExpensesView: React.FC<OverheadExpensesViewProps> = ({
 
       {/* 新增其他固定費用項目彈窗 (需求 5) */}
       {feeModalMachine && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#111827] border border-amber-500/40 rounded-2xl p-5 max-w-sm w-full space-y-4 shadow-2xl">
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <div className="bg-[#111827] border border-amber-500/40 rounded-t-3xl sm:rounded-2xl p-5 max-w-sm w-full space-y-4 shadow-2xl">
+            <div className="sm:hidden flex justify-center pt-1 pb-1">
+              <div className="w-10 h-1 rounded-full bg-slate-700" />
+            </div>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-white font-bold text-sm">
                 <Plus className="w-4 h-4 text-amber-400" />
@@ -709,6 +718,7 @@ export const OverheadExpensesView: React.FC<OverheadExpensesViewProps> = ({
                 <label className="block text-xs text-slate-400 mb-1">每月金額 ($)</label>
                 <input
                   type="number"
+                  inputMode="numeric"
                   min={0}
                   value={newFeeAmount === 0 ? '' : newFeeAmount}
                   onFocus={(e) => { if (e.target.value === '0') e.target.value = ''; e.target.select(); }}
@@ -754,8 +764,11 @@ export const OverheadExpensesView: React.FC<OverheadExpensesViewProps> = ({
 
       {/* 登記定期已付款彈窗 (需求 6) */}
       {payModalMachine && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#111827] border border-emerald-500/40 rounded-2xl p-5 max-w-sm w-full space-y-4 shadow-2xl">
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <div className="bg-[#111827] border border-emerald-500/40 rounded-t-3xl sm:rounded-2xl p-5 max-w-sm w-full space-y-4 shadow-2xl">
+            <div className="sm:hidden flex justify-center pt-1 pb-1">
+              <div className="w-10 h-1 rounded-full bg-slate-700" />
+            </div>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-white font-bold text-sm">
                 <CheckCircle2 className="w-4 h-4 text-emerald-400" />
@@ -804,6 +817,7 @@ export const OverheadExpensesView: React.FC<OverheadExpensesViewProps> = ({
                 <label className="block text-xs text-slate-400 mb-1">實付金額 ($)</label>
                 <input
                   type="number"
+                  inputMode="numeric"
                   min={0}
                   value={payAmount === 0 ? '' : payAmount}
                   onFocus={(e) => { if (e.target.value === '0') e.target.value = ''; e.target.select(); }}
@@ -858,8 +872,11 @@ export const OverheadExpensesView: React.FC<OverheadExpensesViewProps> = ({
 
       {/* 檢視繳款歷史紀錄彈窗 (需求 6) */}
       {historyModalMachine && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#111827] border border-slate-700 rounded-2xl p-5 max-w-sm w-full space-y-4 shadow-2xl">
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <div className="bg-[#111827] border border-slate-700 rounded-t-3xl sm:rounded-2xl p-5 max-w-sm w-full space-y-4 shadow-2xl">
+            <div className="sm:hidden flex justify-center pt-1 pb-1">
+              <div className="w-10 h-1 rounded-full bg-slate-700" />
+            </div>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-white font-bold text-sm">
                 <History className="w-4 h-4 text-amber-400" />

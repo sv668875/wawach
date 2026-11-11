@@ -19,6 +19,17 @@ export function formatSixDigit(val: number): string {
 }
 
 /**
+ * 格式化損益金額為標註正負號之金額字串 (例如 500 -> "+$500", -200 -> "-$200", 0 -> "+$0")
+ * 杜絕 "+$-200" 或 "$-200" 等符號顛倒或重複錯置格式
+ */
+export function formatProfit(val: number): string {
+  const num = Number(val) || 0;
+  if (num > 0) return `+$${num.toLocaleString()}`;
+  if (num < 0) return `-$${Math.abs(num).toLocaleString()}`;
+  return '+$0';
+}
+
+/**
  * 類比台抄錶核心計算邏輯
  */
 export function calculateSessionMetrics(

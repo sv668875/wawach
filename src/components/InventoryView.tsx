@@ -28,6 +28,7 @@ interface InventoryViewProps {
     targetMachineId: string | null
   ) => void;
   onDeleteItem: (itemId: string) => void;
+  onUpdateItemQuantity?: (itemId: string, newQuantity: number) => void;
 }
 
 const ACQUISITION_SOURCES: AcquisitionSource[] = [
@@ -45,6 +46,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   onAddItem,
   onMoveItemPlacement,
   onDeleteItem,
+  onUpdateItemQuantity,
 }) => {
   // 兩個小巧子分頁按鈕：機台庫存 vs 倉庫庫存
   const [placementTab, setPlacementTab] = useState<ItemPlacement>('ON_MACHINE');
@@ -430,10 +432,36 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                     </div>
                   </div>
 
-                  <div className="text-right shrink-0">
+                  <div className="text-right shrink-0 space-y-1">
                     <div className="text-sm font-mono font-bold text-white">
                       ${(item.unit_cost * item.quantity).toLocaleString()}
                     </div>
+                    {onUpdateItemQuantity && (
+                      <div className="flex items-center gap-1 bg-[#0B0F17] border border-slate-700/80 rounded-lg p-0.5 justify-end">
+                        <button
+                          type="button"
+                          onClick={() => onUpdateItemQuantity(item.item_id, item.quantity - 1)}
+                          disabled={item.quantity <= 0}
+                          className="w-6 h-6 flex items-center justify-center rounded text-xs font-bold text-slate-400 hover:text-white disabled:opacity-30 active:scale-95 touch-manipulation"
+                          title="減少 1 件"
+                          aria-label="減少 1 件"
+                        >
+                          -
+                        </button>
+                        <span className="font-mono text-xs font-bold text-amber-400 px-1">
+                          {item.quantity}件
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => onUpdateItemQuantity(item.item_id, item.quantity + 1)}
+                          className="w-6 h-6 flex items-center justify-center rounded text-xs font-bold text-slate-400 hover:text-white active:scale-95 touch-manipulation"
+                          title="增加 1 件"
+                          aria-label="增加 1 件"
+                        >
+                          +
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -473,10 +501,11 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
         </div>
       )}
 
-      {/* 新增貨物彈窗 */}
+      {/* 新增貨物彈窗 (手機自適應 Bottom Sheet) */}
       {isAddModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4">
-          <div className="bg-[#111827] border border-slate-700 rounded-2xl max-w-sm w-full p-5 space-y-4">
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center sm:p-4">
+          <div className="bg-[#111827] border border-slate-700 rounded-t-3xl sm:rounded-2xl max-w-sm w-full p-5 space-y-4 max-h-[92vh] overflow-y-auto animate-in slide-in-from-bottom-6 sm:slide-in-from-bottom-0 sm:fade-in duration-200">
+            <div className="w-10 h-1 bg-slate-700 rounded-full mx-auto mb-1 sm:hidden" />
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-bold text-white flex items-center gap-1.5">
                 <Package className="w-4 h-4 text-amber-400" />
@@ -485,7 +514,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
               <button
                 type="button"
                 onClick={() => setIsAddModalOpen(false)}
-                className="text-slate-400 hover:text-white"
+                className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-white active:scale-95"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -570,6 +599,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                   <label className="block text-[11px] text-slate-400 mb-1">單價成本 ($)</label>
                   <input
                     type="number"
+                    inputMode="numeric"
                     min={0}
                     value={itemCost === 0 ? '' : itemCost}
                     onFocus={(e) => { if (e.target.value === '0') e.target.value = ''; e.target.select(); }}
@@ -582,6 +612,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                   <label className="block text-[11px] text-slate-400 mb-1">數量</label>
                   <input
                     type="number"
+                    inputMode="numeric"
                     min={1}
                     value={itemQty === 0 ? '' : itemQty}
                     onFocus={(e) => { if (e.target.value === '0') e.target.value = ''; e.target.select(); }}

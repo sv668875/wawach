@@ -16,7 +16,7 @@ import {
   ScratchBoard,
   SettleBoardPayload,
 } from '../types';
-import { calculateScratchBoardFinancials } from '../utils/calculations';
+import { calculateScratchBoardFinancials, formatProfit } from '../utils/calculations';
 
 interface SettleBoardModalProps {
   isOpen: boolean;
@@ -102,8 +102,12 @@ export const SettleBoardModal: React.FC<SettleBoardModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
-      <div className="bg-[#111827] border border-slate-700 w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
+      <div className="bg-[#111827] border border-slate-700 w-full max-w-lg rounded-t-3xl sm:rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
+        {/* 手機端底部抽出拖曳把手 */}
+        <div className="sm:hidden flex justify-center pt-2.5 pb-1 bg-[#0B0F17]/60">
+          <div className="w-10 h-1 rounded-full bg-slate-700" />
+        </div>
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800 bg-[#0B0F17]/60">
           <div className="flex items-center gap-2.5">
@@ -183,6 +187,7 @@ export const SettleBoardModal: React.FC<SettleBoardModalProps> = ({
                 </label>
                 <input
                   type="number"
+                  inputMode="numeric"
                   min={0}
                   max={board.total_holes}
                   value={settledRemainingHolesInput}
@@ -265,6 +270,7 @@ export const SettleBoardModal: React.FC<SettleBoardModalProps> = ({
                         <span className="text-xs text-slate-400">本次收幣金額: $</span>
                         <input
                           type="number"
+                          inputMode="numeric"
                           min={0}
                           step={10}
                           value={finalCashInput === 0 ? '' : finalCashInput}
@@ -444,7 +450,7 @@ export const SettleBoardModal: React.FC<SettleBoardModalProps> = ({
                   <TrendingDown className="w-5 h-5" />
                 )}
                 <span>
-                  {fin.netProfit >= 0 ? '+' : ''}${fin.netProfit.toLocaleString()}
+                  {formatProfit(fin.netProfit)}
                 </span>
               </div>
             </div>

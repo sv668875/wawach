@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { calculateSimpleOverhead, calculateScratchBoardFinancials } from './calculations';
+import { calculateSimpleOverhead, calculateScratchBoardFinancials, formatProfit } from './calculations';
 import { Machine, Expense } from '../types';
 
 describe('calculateSimpleOverhead (台租只在確認支付後才計入淨利扣除)', () => {
@@ -254,5 +254,21 @@ describe('calculateScratchBoardFinancials (拿獎 vs 回錢 損益對等與毛�
     expect(finPhysical.netProfit).toBe(500);
     expect(finCashback.netProfit).toBe(500);
     expect(finPhysical.netProfit).toBe(finCashback.netProfit);
+  });
+});
+
+describe('formatProfit (金額正負號與字串防呆)', () => {
+  it('正數應以 +$ 前綴呈現', () => {
+    expect(formatProfit(500)).toBe('+$500');
+    expect(formatProfit(1400)).toBe('+$1,400');
+  });
+
+  it('負數應以 -$ 前綴呈現，絕不可輸出 +$-200 或 $-200', () => {
+    expect(formatProfit(-200)).toBe('-$200');
+    expect(formatProfit(-1400)).toBe('-$1,400');
+  });
+
+  it('0 應輸出 +$0', () => {
+    expect(formatProfit(0)).toBe('+$0');
   });
 });

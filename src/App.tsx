@@ -1112,6 +1112,67 @@ export default function App() {
     showToast(`[${target.code}] 滾輪底數已校準 (幣:${initialCoinCounter.toLocaleString()} / 出:${initialPrizeCounter.toLocaleString()})`);
   };
 
+  // 1.5. 刪除手誤抄錶紀錄 (自動回退機台底數至前一筆)
+  const handleDeleteReading = (readingId: string) => {
+    const targetReading = readings.find((r) => r.reading_id === readingId);
+    if (!targetReading) return;
+    pushUndo(`刪除收幣紀錄 (+$${targetReading.cash_collected.toLocaleString()})`);
+
+    const remainingReadings = readings.filter((r) => r.reading_id !== readingId);
+    setReadings(remainingReadings);
+
+    // 如果刪除的紀錄是該機台的最新抄錶，自動回退上次計數器
+    const machineRemaining = remainingReadings.filter(
+      (r) => r.machine_id === targetReading.machine_id
+    );
+    if (machineRemaining.length > 0) {
+      const prevLatest = machineRemaining[0];
+      setMachines((prev) =>
+        prev.map((m) =>
+          m.machine_id === targetReading.machine_id
+            ? {
+                ...m,
+                last_coin_counter: prevLatest.coin_counter,
+                last_prize_counter: prevLatest.prize_counter,
+                last_read_at: prevLatest.read_at,
+              }
+            : m
+        )
+      );
+    } else {
+      // 若該機台已無任何抄錶紀錄，回退至起始底數
+      setMachines((prev) =>
+        prev.map((m) =>
+          m.machine_id === targetReading.machine_id
+            ? {
+                ...m,
+                last_coin_counter: m.initial_coin_counter ?? 0,
+                last_prize_counter: m.initial_prize_counter ?? 0,
+              }
+            : m
+        )
+      );
+    }
+
+    showToast(`已刪除收幣紀錄 (已自動校準機台讀數)`);
+  };
+
+  // 1.6. 微調商品庫存數量
+  const handleUpdateItemQuantity = (itemId: string, newQuantity: number) => {
+    const target = inventoryItems.find((i) => i.item_id === itemId);
+    if (!target) return;
+    const safeQty = Math.max(0, Math.floor(newQuantity));
+    pushUndo(`更新「${target.name}」數量為 ${safeQty} 件`);
+    setInventoryItems((prev) =>
+      prev.map((item) =>
+        item.item_id === itemId
+          ? { ...item, quantity: safeQty, updated_at: new Date().toISOString() }
+          : item
+      )
+    );
+    showToast(`「${target.name}」數量已更新為 ${safeQty} 件`);
+  };
+
   // 2. 整個 App 一鍵初始化（全部資料清空歸零）
   const handleResetEntireApp = () => {
     setMachines([]);
@@ -1579,6 +1640,7 @@ export default function App() {
             onDeleteMachine={handleDeleteMachine}
             onCalibrateCounters={handleCalibrateMachineCounters}
             onSwitchMachineModel={handleSwitchMachineModel}
+            onDeleteReading={handleDeleteReading}
             onJumpToScratchBoard={(boardId) => {
               if (boardId) setTargetScratchBoardId(boardId);
               setActiveTab('scratch');
@@ -1614,6 +1676,7 @@ export default function App() {
             onAddItem={handleAddItem}
             onMoveItemPlacement={handleMoveItemPlacement}
             onDeleteItem={handleDeleteItem}
+            onUpdateItemQuantity={handleUpdateItemQuantity}
           />
         )}
 
