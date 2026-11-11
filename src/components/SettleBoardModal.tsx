@@ -116,7 +116,7 @@ export const SettleBoardModal: React.FC<SettleBoardModalProps> = ({
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="text-white font-black text-sm">
+                <span className="text-white font-bold text-sm">
                   {machine ? `[${machine.code}] ` : ''}
                   {board.board_letter ? `${board.board_letter}板 ` : ''}
                   下版結清
@@ -408,7 +408,7 @@ export const SettleBoardModal: React.FC<SettleBoardModalProps> = ({
           </div>
 
           {/* 4. 本板最終損益預覽卡片 */}
-          <div className="bg-gradient-to-br from-[#0B0F17] to-[#151D2C] rounded-xl p-4 border border-slate-800 space-y-3">
+          <div className="bg-[#0B0F17] rounded-xl p-4 border border-slate-800 space-y-3">
             <div className="flex items-center justify-between text-xs">
               <span className="text-slate-400 font-bold">本板結算損益試算</span>
               <span className="text-[11px] font-mono text-slate-400">
@@ -440,7 +440,7 @@ export const SettleBoardModal: React.FC<SettleBoardModalProps> = ({
             <div className="pt-2 border-t border-slate-800 flex items-center justify-between">
               <span className="text-xs font-bold text-slate-300">本板最終毛利/淨利</span>
               <div
-                className={`text-xl font-mono font-black flex items-center gap-1 ${
+                className={`text-xl font-mono font-bold flex items-center gap-1 ${
                   fin.netProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'
                 }`}
               >
@@ -481,7 +481,7 @@ export const SettleBoardModal: React.FC<SettleBoardModalProps> = ({
             </button>
             <button
               type="submit"
-              className="flex-[2] py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs flex items-center justify-center gap-1.5 shadow-lg shadow-emerald-950/40 transition-all"
+              className="flex-[2] py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-1.5 shadow-sm transition-all"
             >
               <Flag className="w-4 h-4" />
               確認完成下版結清

@@ -1512,7 +1512,7 @@ export default function App() {
         <div className="max-w-3xl mx-auto px-4 h-14 flex items-center justify-between gap-2">
           {/* Brand & Undo Button */}
           <div className="flex items-center gap-2 sm:gap-3">
-            <div className="w-8 h-8 rounded-lg bg-amber-500 flex items-center justify-center text-slate-950 font-black">
+            <div className="w-8 h-8 rounded-lg bg-amber-500 flex items-center justify-center text-slate-950 font-bold">
               <Cpu className="w-4 h-4" />
             </div>
             <span className="text-sm font-extrabold tracking-tight text-white">
@@ -1528,7 +1528,7 @@ export default function App() {
               >
                 <RotateCcw className="w-3.5 h-3.5 shrink-0" />
                 <span className="text-[11px] font-bold hidden sm:inline">復原</span>
-                <span className="text-[10px] font-mono font-black bg-amber-500 text-slate-950 px-1.5 py-0.5 rounded-full leading-none">
+                <span className="text-[10px] font-mono font-bold bg-amber-500 text-slate-950 px-1.5 py-0.5 rounded-full leading-none">
                   {undoStack.length}
                 </span>
               </button>
@@ -1608,13 +1608,13 @@ export default function App() {
 
       {/* Toast 提示浮窗 (整合快捷復原按鈕) */}
       {toastMessage && (
-        <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 max-w-[92vw] bg-[#111827] border border-emerald-500/50 text-white pl-4 pr-2 py-1.5 rounded-2xl font-bold text-xs shadow-2xl flex items-center gap-2.5 shadow-emerald-950/50 animate-in fade-in slide-in-from-top-2">
+        <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 max-w-[92vw] bg-[#111827] border border-emerald-500/50 text-white pl-4 pr-2 py-1.5 rounded-2xl font-bold text-xs shadow-lg flex items-center gap-2.5 animate-in fade-in slide-in-from-top-2">
           <span className="text-emerald-400 font-semibold truncate">{toastMessage}</span>
           {undoStack.length > 0 && !toastMessage.startsWith('↩️') && (
             <button
               type="button"
               onClick={handleUndo}
-              className="h-7 px-2.5 rounded-lg bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-slate-950 font-black text-[11px] flex items-center gap-1 shrink-0 active:scale-95 transition-all touch-manipulation shadow-sm"
+              className="h-7 px-2.5 rounded-lg bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-slate-950 font-bold text-[11px] flex items-center gap-1 shrink-0 active:scale-95 transition-all touch-manipulation shadow-sm"
               title="立即復原剛才的操作"
             >
               <RotateCcw className="w-3 h-3" />

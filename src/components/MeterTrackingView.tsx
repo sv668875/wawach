@@ -1036,7 +1036,7 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
                     const val = e.target.value;
                     setPanelAmount(val === '' ? 0 : Math.max(0, Number(val)));
                   }}
-                  className="w-full bg-transparent text-3xl font-mono font-black tabular-nums text-white focus:outline-none"
+                  className="w-full bg-transparent text-3xl font-mono font-bold tabular-nums text-white focus:outline-none"
                   placeholder="0"
                 />
                 {panelAmount > 0 && (
@@ -1405,7 +1405,7 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
                   onDeleteMachine(machineToDelete.machine_id);
                   setMachineToDelete(null);
                 }}
-                className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition-colors shadow-lg shadow-rose-900/30"
+                className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition-colors shadow-sm"
               >
                 確認連帶清除
               </button>
@@ -1488,7 +1488,7 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
                   setPrizeCounter(calibratePrize);
                   setIsCalibrateOpen(false);
                 }}
-                className="flex-1 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold transition-colors shadow-lg shadow-amber-950/40"
+                className="flex-1 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold transition-colors shadow-sm"
               >
                 確認更新底數
               </button>
@@ -1563,7 +1563,7 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
                   setMountCustomTitle('');
                   setIsMountModalOpen(false);
                 }}
-                className="flex-1 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold transition-colors shadow-lg shadow-amber-950/40"
+                className="flex-1 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold transition-colors shadow-sm"
               >
                 確認上版
               </button>

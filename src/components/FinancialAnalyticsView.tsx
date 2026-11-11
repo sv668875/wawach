@@ -601,7 +601,7 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
                 <span className="text-xs font-bold text-white">全場損益</span>
               </div>
               <div
-                className={`text-lg font-mono font-black ${
+                className={`text-lg font-mono font-bold ${
                   analytics.trueNetProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'
                 }`}
               >
@@ -738,7 +738,7 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
                       </div>
 
                       <div
-                        className={`text-sm font-mono font-black shrink-0 ${
+                        className={`text-sm font-mono font-bold shrink-0 ${
                           row.netProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'
                         }`}
                       >
@@ -902,7 +902,7 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
                     </div>
                     <div className="text-right">
                       <div
-                        className={`text-base font-mono font-black ${
+                        className={`text-base font-mono font-bold ${
                           v.netProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'
                         }`}
                       >
@@ -1011,7 +1011,7 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
                       </div>
 
                       <div
-                        className={`text-sm font-mono font-black shrink-0 ${
+                        className={`text-sm font-mono font-bold shrink-0 ${
                           row.netProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'
                         }`}
                       >
@@ -1332,7 +1332,7 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
                   onImportJSON(importedDataPreview, 'OVERWRITE');
                   setImportedDataPreview(null);
                 }}
-                className="w-full py-2.5 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 text-xs font-extrabold transition-colors shadow-lg shadow-sky-950/40"
+                className="w-full py-2.5 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 text-xs font-bold transition-colors shadow-sm"
               >
                 完整覆蓋還原（推薦，清空現有資料）
               </button>
@@ -1353,8 +1353,11 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
 
       {/* 系統全部初始化歸零確認彈窗 (需求 2) */}
       {isResetConfirmOpen && (
-        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#111827] border border-rose-500/50 rounded-2xl p-5 max-w-sm w-full space-y-4 shadow-2xl">
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <div className="bg-[#111827] border border-rose-500/50 rounded-t-3xl sm:rounded-2xl p-5 max-w-sm w-full space-y-4 shadow-xl">
+            <div className="sm:hidden flex justify-center pt-1 pb-1">
+              <div className="w-10 h-1 rounded-full bg-slate-700" />
+            </div>
             <div className="flex items-start gap-3">
               <div className="w-10 h-10 rounded-xl bg-rose-500/20 text-rose-400 flex items-center justify-center shrink-0">
                 <AlertTriangle className="w-5 h-5" />
@@ -1400,7 +1403,7 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
                   onResetEntireApp();
                   setIsResetConfirmOpen(false);
                 }}
-                className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition-colors shadow-lg shadow-rose-900/40"
+                className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition-colors shadow-sm"
               >
                 確認清空歸零
               </button>

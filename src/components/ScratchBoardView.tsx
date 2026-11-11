@@ -648,7 +648,7 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                     >
                       <div className="flex items-center gap-1.5 text-xs font-bold whitespace-nowrap">
                         <span className="font-mono text-amber-400">{b.board_letter || 'A'}板</span>
-                        <span className="text-white font-black">{b.total_holes}刮</span>
+                        <span className="text-white font-bold">{b.total_holes}刮</span>
                         <span className="text-[10px] text-emerald-400">● 進行中</span>
                       </div>
                       <div className="flex items-center justify-between gap-3 text-[10px] font-mono text-slate-400 mt-1 whitespace-nowrap">
@@ -675,7 +675,7 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                 <div className="flex items-center justify-between gap-2">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className="px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-400 font-mono font-black text-xs">
+                      <span className="px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-400 font-mono font-bold text-xs">
                         {selectedBoard.board_letter || 'A'}板
                       </span>
                       <span className="text-sm font-bold text-white truncate">
@@ -697,7 +697,7 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                   <button
                     type="button"
                     onClick={() => setIsSettleModalOpen(true)}
-                    className="px-3.5 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold text-xs flex items-center gap-1 whitespace-nowrap shrink-0 shadow-lg shadow-emerald-950/30"
+                    className="px-3.5 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs flex items-center gap-1 whitespace-nowrap shrink-0 shadow-sm transition-all"
                   >
                     <Flag className="w-3.5 h-3.5" />
                     結算下版
@@ -707,7 +707,7 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                 {/* 視覺化刮數進度條 */}
                 <div className="w-full h-2.5 bg-[#0B0F17] rounded-full overflow-hidden border border-slate-800">
                   <div
-                    className="h-full bg-gradient-to-r from-amber-500 to-emerald-400 transition-all"
+                    className="h-full bg-amber-500 transition-all"
                     style={{ width: `${Math.min(100, Math.max(0, scratchedPct))}%` }}
                   />
                 </div>
@@ -768,7 +768,7 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                         <span>剩餘洞數</span>
                       </label>
                       <span className="text-[11px] font-mono text-slate-400">
-                        目前板面剩餘：<strong className="text-amber-400 font-black">{selectedBoard.remaining_holes}</strong> / {selectedBoard.total_holes} 洞
+                        目前板面剩餘：<strong className="text-amber-400 font-bold">{selectedBoard.remaining_holes}</strong> / {selectedBoard.total_holes} 洞
                       </span>
                     </div>
 
@@ -789,7 +789,7 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                           )
                         }
                         placeholder="0"
-                        className="w-full bg-transparent text-2xl font-mono font-black text-amber-400 tabular-nums focus:outline-none"
+                        className="w-full bg-transparent text-2xl font-mono font-bold text-amber-400 tabular-nums focus:outline-none"
                       />
                       <span className="text-xs font-bold text-slate-400 font-mono shrink-0">
                         洞
@@ -854,7 +854,7 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                           onClick={() => setBatchCoinMode('WHEEL')}
                           className={`min-h-[38px] h-9 px-3.5 rounded-lg transition-all flex items-center gap-1.5 touch-manipulation active:scale-95 ${
                             batchCoinMode === 'WHEEL'
-                              ? 'bg-amber-500 text-slate-950 font-black shadow-sm'
+                              ? 'bg-amber-500 text-slate-950 font-bold shadow-sm'
                               : 'text-slate-400 hover:text-white'
                           }`}
                         >
@@ -866,7 +866,7 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                           onClick={() => setBatchCoinMode('DIRECT')}
                           className={`min-h-[38px] h-9 px-3.5 rounded-lg transition-all flex items-center gap-1.5 touch-manipulation active:scale-95 ${
                             batchCoinMode === 'DIRECT'
-                              ? 'bg-amber-500 text-slate-950 font-black shadow-sm'
+                              ? 'bg-amber-500 text-slate-950 font-bold shadow-sm'
                               : 'text-slate-400 hover:text-white'
                           }`}
                         >
@@ -895,11 +895,11 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                               <span className="text-emerald-400 font-mono font-bold flex items-center gap-1.5">
                                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
                                 <span>本次巡場收幣：</span>
-                                <span className="text-sm font-black">
+                                <span className="text-sm font-bold">
                                   +{Math.max(0, batchWheelCounter - currentMachineLastCoin).toLocaleString()} 枚
                                 </span>
                               </span>
-                              <span className="text-amber-400 font-mono font-black text-xs bg-amber-500/10 px-2.5 py-1 rounded-lg border border-amber-500/30">
+                              <span className="text-amber-400 font-mono font-bold text-xs bg-amber-500/10 px-2.5 py-1 rounded-lg border border-amber-500/30">
                                 折合 +${(Math.max(0, batchWheelCounter - currentMachineLastCoin) * (currentMachine?.coin_unit_value || 10)).toLocaleString()} 元
                               </span>
                             </div>
@@ -941,7 +941,7 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                               )
                             }
                             placeholder="0"
-                            className="w-full bg-transparent text-2xl font-mono font-black text-white tabular-nums focus:outline-none"
+                            className="w-full bg-transparent text-2xl font-mono font-bold text-white tabular-nums focus:outline-none"
                           />
                         </div>
 
@@ -1099,7 +1099,7 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
 
                   <button
                     type="submit"
-                    className="h-12 w-full rounded-xl bg-amber-500 hover:bg-amber-400 active:scale-[0.98] text-slate-950 font-black text-sm flex items-center justify-center gap-2 shadow-lg shadow-amber-950/30 transition-all"
+                    className="h-12 w-full rounded-xl bg-amber-500 hover:bg-amber-400 active:scale-[0.98] text-slate-950 font-bold text-sm flex items-center justify-center gap-2 shadow-sm transition-all"
                   >
                     儲存分批紀錄
                   </button>
@@ -1307,7 +1307,7 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                   {/* 貼入獎號按鈕：獨立整列置底 (需求 3) */}
                   <button
                     type="submit"
-                    className="w-full py-2.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold transition-colors flex items-center justify-center gap-1.5 shadow-md shadow-amber-950/20"
+                    className="w-full py-2.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold transition-colors flex items-center justify-center gap-1.5 shadow-sm"
                   >
                     <Plus className="w-3.5 h-3.5" />
                     + 貼入獎號
@@ -1354,7 +1354,7 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                           className="flex items-center gap-2 text-left min-w-0 flex-1"
                         >
                           <span
-                            className={`w-8 h-8 rounded-lg font-mono font-black text-xs flex items-center justify-center shrink-0 ${
+                            className={`w-8 h-8 rounded-lg font-mono font-bold text-xs flex items-center justify-center shrink-0 ${
                               p.is_claimed
                                 ? p.claim_type === 'CASHBACK'
                                   ? 'bg-amber-500 text-slate-950'
@@ -1547,7 +1547,7 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                         </div>
 
                         <span
-                          className={`text-sm font-mono font-black shrink-0 ${
+                          className={`text-sm font-mono font-bold shrink-0 ${
                             fin.netProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'
                           }`}
                         >
@@ -1673,7 +1673,7 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                       >
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2.5">
-                            <span className="w-9 h-9 rounded-lg bg-amber-500/15 border border-amber-500/40 font-mono font-black text-sm text-amber-400 flex items-center justify-center">
+                            <span className="w-9 h-9 rounded-lg bg-amber-500/15 border border-amber-500/40 font-mono font-bold text-sm text-amber-400 flex items-center justify-center">
                               #{String(stat.number_label).padStart(2, '0')}
                             </span>
                             <div>
@@ -1801,10 +1801,10 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
       )}
       {/* 兌獎二擇一彈窗 (拿獎 vs 回錢，避免扣兩次 $3000，名稱精簡好明瞭) */}
       {choiceModalPrize && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#111827] border border-amber-500/40 rounded-2xl p-5 max-w-xs w-full space-y-4 shadow-2xl text-center">
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <div className="bg-[#111827] border border-amber-500/40 rounded-t-2xl sm:rounded-2xl p-5 max-w-xs w-full space-y-4 shadow-2xl text-center">
             <div className="space-y-1">
-              <span className="w-10 h-10 mx-auto rounded-xl bg-amber-500/20 text-amber-400 font-mono font-black text-base flex items-center justify-center">
+              <span className="w-10 h-10 mx-auto rounded-xl bg-amber-500/20 text-amber-400 font-mono font-bold text-base flex items-center justify-center">
                 #{String(choiceModalPrize.number_label).padStart(2, '0')}
               </span>
               <h3 className="text-white font-bold text-sm">
@@ -1967,7 +1967,7 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                   setCustomMountTitle('');
                   setIsMountModalOpen(false);
                 }}
-                className="flex-1 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold transition-colors shadow-lg shadow-amber-950/40"
+                className="flex-1 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold transition-colors shadow-sm"
               >
                 確認上新板
               </button>
@@ -2006,7 +2006,7 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                 onClick={() => {
                   numberWarningData.onConfirm();
                 }}
-                className="py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold transition-colors shadow-lg shadow-amber-950/40"
+                className="py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold transition-colors shadow-sm"
               >
                 確認使用此獎號
               </button>

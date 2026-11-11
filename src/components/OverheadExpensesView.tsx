@@ -667,7 +667,7 @@ export const OverheadExpensesView: React.FC<OverheadExpensesViewProps> = ({
                   onDeleteMachine(machineToDelete.machine_id);
                   setMachineToDelete(null);
                 }}
-                className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition-colors shadow-lg shadow-rose-900/30"
+                className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition-colors shadow-sm"
               >
                 確認連帶清除
               </button>
@@ -753,7 +753,7 @@ export const OverheadExpensesView: React.FC<OverheadExpensesViewProps> = ({
                   ]);
                   setFeeModalMachine(null);
                 }}
-                className="flex-1 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold transition-colors shadow-lg shadow-amber-950/40"
+                className="flex-1 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold transition-colors shadow-sm"
               >
                 確認新增
               </button>
@@ -861,7 +861,7 @@ export const OverheadExpensesView: React.FC<OverheadExpensesViewProps> = ({
                   });
                   setPayModalMachine(null);
                 }}
-                className="flex-1 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold transition-colors shadow-lg shadow-emerald-950/40"
+                className="flex-1 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold transition-colors shadow-sm"
               >
                 確認記錄已付款
               </button>
