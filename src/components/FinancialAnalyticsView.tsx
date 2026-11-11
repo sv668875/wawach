@@ -653,28 +653,28 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
             {/* 4 格重點指標 */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               <div className="bg-[#0B0F17] rounded-lg p-2.5 border border-slate-800">
-                <div className="text-[10px] text-slate-400 whitespace-nowrap">總收幣</div>
+                <div className="text-xs text-slate-400 font-medium whitespace-nowrap">總收幣</div>
                 <div className="text-base font-mono font-bold text-white">
                   ${analytics.totalGrossRevenue.toLocaleString()}
                 </div>
               </div>
 
               <div className="bg-[#0B0F17] rounded-lg p-2.5 border border-slate-800">
-                <div className="text-[10px] text-slate-400 whitespace-nowrap">回錢扣減</div>
+                <div className="text-xs text-slate-400 font-medium whitespace-nowrap">回錢扣減</div>
                 <div className="text-base font-mono font-bold text-rose-400">
                   -${analytics.totalCashbackDeducted.toLocaleString()}
                 </div>
               </div>
 
               <div className="bg-[#0B0F17] rounded-lg p-2.5 border border-slate-800">
-                <div className="text-[10px] text-slate-400 whitespace-nowrap">獎品成本</div>
+                <div className="text-xs text-slate-400 font-medium whitespace-nowrap">獎品成本</div>
                 <div className="text-base font-mono font-bold text-sky-400">
                   -${analytics.totalPrizeCost.toLocaleString()}
                 </div>
               </div>
 
               <div className="bg-[#0B0F17] rounded-lg p-2.5 border border-slate-800">
-                <div className="text-[10px] text-slate-400 whitespace-nowrap">台租開銷</div>
+                <div className="text-xs text-slate-400 font-medium whitespace-nowrap">台租開銷</div>
                 <div className="text-base font-mono font-bold text-amber-400">
                   -${(analytics.grandTotalOverhead ?? 0).toLocaleString()}
                 </div>
@@ -770,30 +770,30 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
 
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-slate-800/80 text-center">
                       <div>
-                        <div className="text-[10px] text-slate-500 whitespace-nowrap">收幣</div>
+                        <div className="text-xs text-slate-400 font-medium whitespace-nowrap">收幣</div>
                         <div className="text-xs font-mono font-bold text-white">
                           ${row.grossRevenue.toLocaleString()}
                         </div>
                       </div>
                       <div>
-                        <div className="text-[10px] text-slate-500 whitespace-nowrap">回錢</div>
+                        <div className="text-xs text-slate-400 font-medium whitespace-nowrap">回錢</div>
                         <div className="text-xs font-mono font-bold text-rose-400">
                           -${row.cashbackDeducted.toLocaleString()}
                         </div>
                       </div>
                       <div>
-                        <div className="text-[10px] text-slate-500 whitespace-nowrap">獎品</div>
+                        <div className="text-xs text-slate-400 font-medium whitespace-nowrap">獎品</div>
                         <div className="text-xs font-mono font-bold text-sky-400">
                           -${row.totalDirectPrizeCost.toLocaleString()}
                         </div>
                       </div>
                       <div>
-                        <div className="text-[10px] text-slate-500 whitespace-nowrap">實付台租</div>
+                        <div className="text-xs text-slate-400 font-medium whitespace-nowrap">實付台租</div>
                         <div className="text-xs font-mono font-bold text-amber-400">
                           {row.paidRent > 0 ? `-$${row.paidRent.toLocaleString()}` : '$0'}
                         </div>
                         {row.paidRent === 0 && row.configuredMonthlyRent > 0 && (
-                          <div className="text-[9px] text-slate-500 font-mono">待繳 ${row.configuredMonthlyRent.toLocaleString()}</div>
+                          <div className="text-[11px] text-slate-400 font-mono">待繳 ${row.configuredMonthlyRent.toLocaleString()}</div>
                         )}
                       </div>
                     </div>
@@ -918,25 +918,25 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
 
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-slate-800 text-center">
                     <div>
-                      <div className="text-[10px] text-slate-500 whitespace-nowrap">總投幣</div>
+                      <div className="text-xs text-slate-400 font-medium whitespace-nowrap">總投幣</div>
                       <div className="text-xs font-mono font-bold text-white">
                         ${v.totalGross.toLocaleString()}
                       </div>
                     </div>
                     <div>
-                      <div className="text-[10px] text-slate-500 whitespace-nowrap">回錢</div>
+                      <div className="text-xs text-slate-400 font-medium whitespace-nowrap">回錢</div>
                       <div className="text-xs font-mono font-bold text-rose-400">
                         -${v.totalCashback.toLocaleString()}
                       </div>
                     </div>
                     <div>
-                      <div className="text-[10px] text-slate-500 whitespace-nowrap">獎品成本</div>
+                      <div className="text-xs text-slate-400 font-medium whitespace-nowrap">獎品成本</div>
                       <div className="text-xs font-mono font-bold text-sky-400">
                         -${v.totalPrizeCost.toLocaleString()}
                       </div>
                     </div>
                     <div>
-                      <div className="text-[10px] text-slate-500 whitespace-nowrap">場租雜支</div>
+                      <div className="text-xs text-slate-400 font-medium whitespace-nowrap">場租雜支</div>
                       <div className="text-xs font-mono font-bold text-amber-400">
                         -${v.totalOverhead.toLocaleString()}
                       </div>
@@ -1045,30 +1045,30 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
 
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-slate-800/80 text-center">
                       <div>
-                        <div className="text-[10px] text-slate-500 whitespace-nowrap">收幣</div>
+                        <div className="text-xs text-slate-400 font-medium whitespace-nowrap">收幣</div>
                         <div className="text-xs font-mono font-bold text-white">
                           ${row.grossRevenue.toLocaleString()}
                         </div>
                       </div>
                       <div>
-                        <div className="text-[10px] text-slate-500 whitespace-nowrap">回錢</div>
+                        <div className="text-xs text-slate-400 font-medium whitespace-nowrap">回錢</div>
                         <div className="text-xs font-mono font-bold text-rose-400">
                           -${row.cashbackDeducted.toLocaleString()}
                         </div>
                       </div>
                       <div>
-                        <div className="text-[10px] text-slate-500 whitespace-nowrap">獎品</div>
+                        <div className="text-xs text-slate-400 font-medium whitespace-nowrap">獎品</div>
                         <div className="text-xs font-mono font-bold text-sky-400">
                           -${row.totalDirectPrizeCost.toLocaleString()}
                         </div>
                       </div>
                       <div>
-                        <div className="text-[10px] text-slate-500 whitespace-nowrap">實付台租</div>
+                        <div className="text-xs text-slate-400 font-medium whitespace-nowrap">實付台租</div>
                         <div className="text-xs font-mono font-bold text-amber-400">
                           {row.paidRent > 0 ? `-$${row.paidRent.toLocaleString()}` : '$0'}
                         </div>
                         {row.paidRent === 0 && row.configuredMonthlyRent > 0 && (
-                          <div className="text-[9px] text-slate-500 font-mono">待繳 ${row.configuredMonthlyRent.toLocaleString()}</div>
+                          <div className="text-[11px] text-slate-400 font-mono">待繳 ${row.configuredMonthlyRent.toLocaleString()}</div>
                         )}
                       </div>
                     </div>
@@ -1160,19 +1160,19 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
 
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] font-mono text-center pt-2 border-t border-slate-800/80">
                       <div>
-                        <div className="text-[10px] text-slate-500">毛收幣</div>
+                        <div className="text-[11px] text-slate-400 font-medium">毛收幣</div>
                         <div className="font-bold text-white">${fin.grossCoinRevenue.toLocaleString()}</div>
                       </div>
                       <div>
-                        <div className="text-[10px] text-slate-500">回錢</div>
+                        <div className="text-[11px] text-slate-400 font-medium">回錢</div>
                         <div className="font-bold text-rose-400">-${fin.totalCashbackDeducted.toLocaleString()}</div>
                       </div>
                       <div>
-                        <div className="text-[10px] text-slate-500">獎品成本</div>
+                        <div className="text-[11px] text-slate-400 font-medium">獎品成本</div>
                         <div className="font-bold text-sky-400">-${fin.claimedPrizeCost.toLocaleString()}</div>
                       </div>
                       <div>
-                        <div className="text-[10px] text-slate-500">每洞均投</div>
+                        <div className="text-[11px] text-slate-400 font-medium">每洞均投</div>
                         <div className="font-bold text-amber-400">${avgPerHole}/洞</div>
                       </div>
                     </div>

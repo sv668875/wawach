@@ -84,7 +84,7 @@ export const AnalogCounterWheel: React.FC<AnalogCounterWheelProps> = ({
             const placeNames = ['十萬', '萬', '千', '百', '十', '個'];
             return (
               <div key={idx} className="flex flex-col items-center">
-                <span className="text-[10px] text-slate-500 font-mono mb-1">
+                <span className="text-[11px] text-slate-400 font-mono mb-1">
                   {placeNames[idx]}
                 </span>
                 <button
@@ -95,8 +95,7 @@ export const AnalogCounterWheel: React.FC<AnalogCounterWheelProps> = ({
                 >
                   <ChevronUp className="w-4 h-4" />
                 </button>
-                <div className="w-full py-2.5 bg-[#05070A] border-x border-slate-800 flex items-center justify-center relative overflow-hidden">
-                  <div className="absolute inset-x-0 top-0 h-2 bg-gradient-to-b from-black/70 to-transparent pointer-events-none" />
+                <div className="w-full py-2.5 bg-[#05070A] border-x border-slate-800 flex items-center justify-center relative">
                   <span
                     className={`font-mono tabular-nums text-2xl sm:text-3xl font-bold tracking-wider ${
                       isDropped ? 'text-amber-300' : 'text-slate-50'
@@ -104,7 +103,6 @@ export const AnalogCounterWheel: React.FC<AnalogCounterWheelProps> = ({
                   >
                     {digit}
                   </span>
-                  <div className="absolute inset-x-0 bottom-0 h-2 bg-gradient-to-t from-black/70 to-transparent pointer-events-none" />
                 </div>
                 <button
                   type="button"

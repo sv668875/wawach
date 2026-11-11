@@ -568,10 +568,10 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                     setCustomMountTitle('');
                     setIsMountModalOpen(true);
                   }}
-                  className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs flex items-center gap-1 shadow-sm whitespace-nowrap active:scale-95 transition-all"
+                  className="min-h-[36px] px-3.5 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-slate-950 font-bold text-xs flex items-center gap-1.5 shadow-sm whitespace-nowrap active:scale-95 transition-all touch-manipulation"
                 >
                   <Plus className="w-3.5 h-3.5" />
-                  上新板 (可自訂刮數)
+                  上新板
                 </button>
               </div>
             </div>
@@ -691,28 +691,28 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                 {/* 4 格關鍵損益數字 */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
                   <div className="bg-[#0B0F17] rounded-lg p-2.5 border border-slate-800/80">
-                    <div className="text-[10px] text-slate-400">面板收幣</div>
+                    <div className="text-xs text-slate-400 font-medium">面板收幣</div>
                     <div className="text-base font-mono font-bold text-white">
                       ${boardFinancials.grossCoinRevenue.toLocaleString()}
                     </div>
                   </div>
 
                   <div className="bg-[#0B0F17] rounded-lg p-2.5 border border-slate-800/80">
-                    <div className="text-[10px] text-slate-400">回錢扣幣</div>
+                    <div className="text-xs text-slate-400 font-medium">回錢扣幣</div>
                     <div className="text-base font-mono font-bold text-amber-400">
                       -${boardFinancials.totalCashbackDeducted.toLocaleString()}
                     </div>
                   </div>
 
                   <div className="bg-[#0B0F17] rounded-lg p-2.5 border border-slate-800/80">
-                    <div className="text-[10px] text-slate-400">實質幣量</div>
+                    <div className="text-xs text-slate-400 font-medium">實質幣量</div>
                     <div className="text-base font-mono font-bold text-white">
                       ${boardFinancials.netCoinRevenue.toLocaleString()}
                     </div>
                   </div>
 
                   <div className="bg-[#0B0F17] rounded-lg p-2.5 border border-slate-800/80">
-                    <div className="text-[10px] text-slate-400">本版賺賠</div>
+                    <div className="text-xs text-slate-400 font-medium">本版賺賠</div>
                     <div
                       className={`text-base font-mono font-bold ${
                         boardFinancials.netProfit >= 0
@@ -1500,28 +1500,28 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                         </span>
                       </div>
 
-                      {/* 需求 3 & 7：4 格核心指標 (含被刮洞數與每洞均出) */}
-                      <div className="grid grid-cols-4 gap-2 text-center text-xs font-mono">
+                      {/* 4 格核心指標 (含被刮洞數與每洞均出，手機端 2x2 佈局) */}
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-xs font-mono">
                         <div className="bg-[#0B0F17] p-2 rounded-lg border border-slate-800/60">
-                          <div className="text-[10px] text-slate-500">面板總收幣</div>
+                          <div className="text-[11px] text-slate-400 font-medium">面板總收幣</div>
                           <div className="font-bold text-white">
                             ${fin.grossCoinRevenue.toLocaleString()}
                           </div>
                         </div>
                         <div className="bg-[#0B0F17] p-2 rounded-lg border border-slate-800/60">
-                          <div className="text-[10px] text-slate-500">實際刮開</div>
+                          <div className="text-[11px] text-slate-400 font-medium">實際刮開</div>
                           <div className="font-bold text-amber-400">
                             {scratchedCount} 洞
                           </div>
                         </div>
                         <div className="bg-[#0B0F17] p-2 rounded-lg border border-slate-800/60">
-                          <div className="text-[10px] text-slate-500">每洞均投</div>
+                          <div className="text-[11px] text-slate-400 font-medium">每洞均投</div>
                           <div className="font-bold text-sky-400">
                             ${avgRevenuePerHole}/洞
                           </div>
                         </div>
                         <div className="bg-[#0B0F17] p-2 rounded-lg border border-slate-800/60">
-                          <div className="text-[10px] text-slate-500">實質實收</div>
+                          <div className="text-[11px] text-slate-400 font-medium">實質實收</div>
                           <div className="font-bold text-emerald-400">
                             ${fin.netCoinRevenue.toLocaleString()}
                           </div>
@@ -1674,7 +1674,7 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                               ? `+$${((s.direct_exit_profit !== undefined ? s.direct_exit_profit : s.cumulative_board_profit)).toLocaleString()}`
                               : `-$${Math.abs((s.direct_exit_profit !== undefined ? s.direct_exit_profit : s.cumulative_board_profit)).toLocaleString()}`}
                           </span>
-                          <span className="text-[9px] text-slate-500 font-mono">
+                          <span className="text-[11px] text-slate-400 font-mono">
                             出貨即時損益
                           </span>
                         </div>
@@ -1710,7 +1710,7 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                                 ? `+$${((s.direct_exit_profit !== undefined ? s.direct_exit_profit : s.cumulative_board_profit)).toLocaleString()}`
                                 : `-$${Math.abs((s.direct_exit_profit !== undefined ? s.direct_exit_profit : s.cumulative_board_profit)).toLocaleString()}`}
                             </span>
-                            <span className="text-[9px] text-slate-500 font-mono">
+                            <span className="text-[11px] text-slate-400 font-mono">
                               {s.early_exit_loss_count ? `${s.early_exit_loss_count} 次提早虧損` : '出貨即時損益'}
                             </span>
                           </div>
@@ -1755,11 +1755,11 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                   );
                   setChoiceModalPrize(null);
                 }}
-                className="py-3 px-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-sm flex flex-col items-center justify-center gap-1 shadow-lg shadow-emerald-950/40 transition-colors"
+                className="py-3 px-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-slate-950 font-bold text-sm flex flex-col items-center justify-center gap-1 shadow-sm transition-all touch-manipulation"
               >
                 <span className="text-base">🎁</span>
                 <span>拿獎</span>
-                <span className="text-[10px] font-mono opacity-80">(扣成本 ${choiceModalPrize.prize_cost})</span>
+                <span className="text-xs font-mono opacity-90">(扣成本 ${choiceModalPrize.prize_cost})</span>
               </button>
 
               <button
@@ -1772,11 +1772,11 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                   );
                   setChoiceModalPrize(null);
                 }}
-                className="py-3 px-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-sm flex flex-col items-center justify-center gap-1 shadow-lg shadow-amber-950/40 transition-colors"
+                className="py-3 px-2 rounded-xl bg-amber-500 hover:bg-amber-400 active:scale-95 text-slate-950 font-bold text-sm flex flex-col items-center justify-center gap-1 shadow-sm transition-all touch-manipulation"
               >
                 <span className="text-base">💵</span>
                 <span>回錢</span>
-                <span className="text-[10px] font-mono opacity-80">(退現金 ${choiceModalPrize.cashback_amount})</span>
+                <span className="text-xs font-mono opacity-90">(退現金 ${choiceModalPrize.cashback_amount})</span>
               </button>
             </div>
 
@@ -1939,20 +1939,17 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
         </div>
       )}
 
-      {/* 依需求：獎項全部出清自動提示下版彈窗 */}
+      {/* 獎項全部出清自動提示下版彈窗 */}
       {isAllClaimedPromptOpen && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#111827] border border-emerald-500/50 rounded-2xl p-5 max-w-sm w-full space-y-4 shadow-2xl text-center">
-            <div className="w-12 h-12 mx-auto rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-xl">
+          <div className="bg-[#111827] border border-emerald-500/40 rounded-2xl p-5 max-w-sm w-full space-y-4 shadow-xl text-center">
+            <div className="w-12 h-12 mx-auto rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 flex items-center justify-center text-xl">
               🎉
             </div>
             <div className="space-y-1.5">
-              <h3 className="text-white font-bold text-sm">本版大獎已全數出清！</h3>
+              <h3 className="text-white font-bold text-base">獎項已全數開出</h3>
               <p className="text-slate-300 text-xs leading-relaxed">
-                恭喜！目前板上的所有獎項號碼已經全部被客人開出開清。
-              </p>
-              <p className="text-amber-300/90 text-[11px] font-medium">
-                請問是否要直接前往進行下版結算，清算本版最終盈虧並準備上新版？
+                本板所有獎項號碼均已兌領，是否直接前往下版結算？
               </p>
             </div>
 
@@ -1960,9 +1957,9 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
               <button
                 type="button"
                 onClick={() => setIsAllClaimedPromptOpen(false)}
-                className="py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 text-xs font-bold transition-colors"
+                className="py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-300 text-xs font-bold transition-all touch-manipulation"
               >
-                暫不下版
+                稍後結算
               </button>
               <button
                 type="button"
@@ -1970,7 +1967,7 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                   setIsAllClaimedPromptOpen(false);
                   setIsSettleModalOpen(true);
                 }}
-                className="py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold transition-colors shadow-lg shadow-emerald-950/40"
+                className="py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-slate-950 text-xs font-bold transition-all shadow-sm touch-manipulation"
               >
                 前往下版結算
               </button>

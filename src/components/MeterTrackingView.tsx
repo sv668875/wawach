@@ -500,9 +500,9 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
                       <MapPin className="w-3.5 h-3.5 text-amber-400/70" />
                       <span>{newMachineLocation || selectedLocation}</span>
                     </span>
-                    <span className="text-[10px] text-slate-500 font-mono">（鎖定當前場地）</span>
+                    <span className="text-[11px] text-slate-500 font-mono">（鎖定當前場地）</span>
                   </div>
-                  <p className="text-[10px] text-slate-500 mt-1">
+                  <p className="text-[11px] text-slate-400 mt-1">
                     📍 新增機台將直接歸屬於當前選定的「{newMachineLocation || selectedLocation}」場地
                   </p>
                 </div>
@@ -520,16 +520,16 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
 
             {/* 二手機台滾輪底數設定 */}
             <div className="bg-[#0B0F17] p-3 rounded-xl border border-slate-800 space-y-2">
-              <div className="text-[11px] font-bold text-amber-400 flex items-center gap-1">
+              <div className="text-xs font-bold text-amber-400 flex items-center gap-1">
                 <SlidersHorizontal className="w-3.5 h-3.5" />
                 二手錶頭初始底數設定 (選填)
               </div>
-              <p className="text-[10px] text-slate-400 leading-tight">
+              <p className="text-[11px] text-slate-400 leading-tight">
                 若為二手或已使用過機台，請填寫目前錶頭起始讀數，避免第一次抄錶誤算為爆額營收。
               </p>
               <div className="grid grid-cols-2 gap-2 pt-1">
                 <div>
-                  <label className="block text-[10px] text-slate-400 mb-0.5">起始投幣底數</label>
+                  <label className="block text-xs text-slate-400 mb-0.5">起始投幣底數</label>
                   <input
                     type="number"
                     min={0}
@@ -541,7 +541,7 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] text-slate-400 mb-0.5">起始出貨底數</label>
+                  <label className="block text-xs text-slate-400 mb-0.5">起始出貨底數</label>
                   <input
                     type="number"
                     min={0}
@@ -557,7 +557,7 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
 
             <button
               type="submit"
-              className="w-full py-2.5 rounded-xl bg-amber-500 text-slate-950 font-bold text-xs"
+              className="w-full py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 active:scale-95 text-slate-950 font-bold text-xs shadow-sm touch-manipulation"
             >
               確認新增
             </button>
@@ -623,7 +623,7 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
               </button>
               <button
                 type="submit"
-                className="px-4 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold shadow-md"
+                className="px-4 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold shadow-sm"
               >
                 建立並新增機台
               </button>
@@ -660,7 +660,7 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
               setAddLocationError(null);
               setIsAddLocationModalOpen(true);
             }}
-            className="px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-black inline-flex items-center gap-1.5 shadow-lg shadow-amber-950/30 transition-colors"
+            className="px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 active:scale-95 text-slate-950 text-xs font-bold inline-flex items-center gap-1.5 shadow-sm transition-all touch-manipulation"
           >
             <Plus className="w-4 h-4" />
             新增第一個場地
@@ -673,7 +673,7 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
               <Building className="w-3.5 h-3.5 text-amber-400" />
               <span>選擇場地</span>
             </span>
-            <span className="text-[10px] text-slate-400 font-mono">
+            <span className="text-xs text-slate-400 font-mono">
               {selectedLocation || '未選取'}
             </span>
           </div>
@@ -698,7 +698,7 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
                   <MapPin className="w-3 h-3" />
                   <span>{loc}</span>
                   <span
-                    className={`text-[9px] px-1 py-0.2 rounded font-mono ${
+                    className={`text-[11px] px-1 py-0.2 rounded font-mono ${
                       isSelected ? 'bg-slate-950/30 text-slate-950' : 'bg-slate-800 text-slate-400'
                     }`}
                   >
@@ -1059,17 +1059,14 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
               className="w-full bg-[#0B0F17] border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-amber-500"
             />
 
-            {/* 單一核心收幣大按鈕 (需求 4：改為記錄收幣) */}
+            {/* 單一核心收幣大按鈕 */}
             <button
               type="button"
               onClick={() => handleExecuteClearRecord('SEGMENT_CLEAR')}
-              className="w-full flex items-center justify-center gap-2 py-3.5 px-4 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-sm transition-all shadow-md shadow-amber-950/30"
+              className="w-full flex items-center justify-center gap-2 py-3.5 px-4 rounded-xl bg-amber-500 hover:bg-amber-400 active:bg-amber-600 active:scale-95 text-slate-950 font-bold text-sm transition-all shadow-sm touch-manipulation"
             >
               <RotateCcw className="w-4 h-4" />
-              <span>【記錄收幣】</span>
-              <span className="text-[11px] font-semibold opacity-75 ml-1">
-                (續留看板 · 登記收幣)
-              </span>
+              <span>記錄收幣</span>
             </button>
           </div>
         ) : (
@@ -1163,36 +1160,33 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
 
             <div className="grid grid-cols-3 gap-2 bg-[#0B0F17] p-3 rounded-xl border border-slate-800 text-center">
               <div>
-                <div className="text-[10px] text-slate-500">本期投幣</div>
+                <div className="text-xs text-slate-400 font-medium">本期投幣</div>
                 <div className="text-sm font-mono font-bold text-white">
                   +{sessionMetrics.coinDelta}
                 </div>
               </div>
               <div>
-                <div className="text-[10px] text-slate-500">換算營收</div>
+                <div className="text-xs text-slate-400 font-medium">換算營收</div>
                 <div className="text-sm font-mono font-bold text-amber-400">
                   ${sessionMetrics.revenue.toLocaleString()}
                 </div>
               </div>
               <div>
-                <div className="text-[10px] text-slate-500">本期出貨</div>
+                <div className="text-xs text-slate-400 font-medium">本期出貨</div>
                 <div className="text-sm font-mono font-bold text-emerald-400">
                   {sessionMetrics.prizeDelta} 件
                 </div>
               </div>
             </div>
 
-            {/* 單一核心抄錶收幣大按鈕 (需求 4：改為記錄收幣) */}
+            {/* 單一核心抄錶收幣大按鈕 */}
             <button
               type="button"
               onClick={() => handleExecuteClearRecord('SEGMENT_CLEAR')}
-              className="w-full flex items-center justify-center gap-2 py-3.5 px-4 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-sm transition-all shadow-md shadow-amber-950/30"
+              className="w-full flex items-center justify-center gap-2 py-3.5 px-4 rounded-xl bg-amber-500 hover:bg-amber-400 active:bg-amber-600 active:scale-95 text-slate-950 font-bold text-sm transition-all shadow-sm touch-manipulation"
             >
               <RotateCcw className="w-4 h-4" />
-              <span>【記錄收幣】</span>
-              <span className="text-[11px] font-semibold opacity-75 ml-1">
-                (續留看板 · 抄錶登記)
-              </span>
+              <span>記錄收幣</span>
             </button>
           </div>
         )}
@@ -1218,7 +1212,7 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
               >
                 <div className="flex items-center gap-2.5 min-w-0">
                   <span
-                    className={`shrink-0 px-2 py-0.5 rounded text-[10px] font-bold whitespace-nowrap ${
+                    className={`shrink-0 px-2 py-0.5 rounded text-[11px] font-bold whitespace-nowrap ${
                       r.clear_action === 'BOARD_CLOSE_CLEAR'
                         ? 'bg-emerald-500/15 text-emerald-400'
                         : 'bg-amber-500/15 text-amber-400'
@@ -1230,7 +1224,7 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
                     <div className="text-xs font-medium text-slate-200 truncate">
                       {r.notes || '收幣紀錄'}
                     </div>
-                    <div className="text-[10px] font-mono text-slate-500">
+                    <div className="text-[11px] font-mono text-slate-500">
                       {new Date(r.read_at).toLocaleString('zh-TW', {
                         month: '2-digit',
                         day: '2-digit',
@@ -1544,33 +1538,32 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
       {renderAddMachineModal()}
       {renderAddLocationModal()}
 
-      {/* 數位面板歸零提醒彈窗 (需求 4：數位機台記錄收幣後，彈窗提醒台主轉機板鑰匙清0，滾輪機台不跳) */}
+      {/* 數位面板歸零提醒彈窗 */}
       {isZeroReminderModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
-          <div className="bg-[#111827] border border-amber-500/50 rounded-2xl max-w-sm w-full p-5 space-y-4 text-center shadow-2xl">
-            <div className="w-12 h-12 rounded-full bg-amber-500/20 border border-amber-500 text-amber-400 mx-auto flex items-center justify-center text-xl">
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#111827] border border-amber-500/40 rounded-2xl max-w-sm w-full p-5 space-y-4 text-center shadow-xl">
+            <div className="w-12 h-12 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-400 mx-auto flex items-center justify-center text-xl">
               🔑
             </div>
-            <div>
-              <h3 className="text-base font-bold text-white">收幣已記錄 · 記得機板歸零！</h3>
-              <p className="text-xs text-slate-300 mt-2 leading-relaxed">
-                已成功記錄 [{selectedMachine?.code}] 收幣{' '}
+            <div className="space-y-1.5">
+              <h3 className="text-base font-bold text-white">收幣已記錄</h3>
+              <p className="text-xs text-slate-300 leading-relaxed">
+                已記錄 [{selectedMachine?.code}] 收幣{' '}
                 <span className="font-mono font-bold text-amber-400">
                   ${zeroReminderAmount.toLocaleString()}
                 </span>{' '}
                 元。
-                <br />
-                <span className="text-amber-300 font-semibold block mt-1">
-                  ⚠️ 請拿機台鑰匙轉動機板，將數位計數面板歸零 (清0)！
-                </span>
+              </p>
+              <p className="text-xs text-amber-400/90 font-medium">
+                請以鑰匙將機板數位面板清零，確保下次讀數準確。
               </p>
             </div>
             <button
               type="button"
               onClick={() => setIsZeroReminderModalOpen(false)}
-              className="w-full py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs transition-colors shadow-lg"
+              className="w-full min-h-[42px] py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 active:bg-amber-600 active:scale-95 text-slate-950 font-bold text-xs transition-all shadow-sm touch-manipulation"
             >
-              好，我已歸零
+              確認已歸零
             </button>
           </div>
         </div>

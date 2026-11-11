@@ -164,7 +164,7 @@ export const OverheadExpensesView: React.FC<OverheadExpensesViewProps> = ({
         <div className="flex items-center justify-between">
           <div>
             <div className="text-xs text-slate-400">本月固定支出</div>
-            <div className="text-2xl font-mono font-black text-amber-400">
+            <div className="text-2xl font-mono font-bold text-amber-400">
               ${overheadSummary.grandTotalOverhead.toLocaleString()}
             </div>
             <div className="text-[11px] text-slate-400 mt-1 flex flex-wrap items-center gap-1.5">
@@ -360,7 +360,7 @@ export const OverheadExpensesView: React.FC<OverheadExpensesViewProps> = ({
                           setPayAmount(totalMonthly);
                           setPayNote('');
                         }}
-                        className="h-8 px-3 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs whitespace-nowrap transition-all active:scale-95 shadow-sm touch-manipulation min-h-[32px] flex items-center justify-center"
+                        className="h-8 px-3 rounded-lg bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-slate-950 font-bold text-xs whitespace-nowrap transition-all active:scale-95 shadow-sm touch-manipulation min-h-[32px] flex items-center justify-center"
                       >
                         登記已付
                       </button>

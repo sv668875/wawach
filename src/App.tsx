@@ -1496,13 +1496,13 @@ export default function App() {
           {/* Compact Profit Pill + Theme Switcher */}
           <div className="flex items-center gap-2 sm:gap-3 text-right">
             <div>
-              <div className="text-[10px] text-slate-400 leading-none">實收</div>
+              <div className="text-[11px] text-slate-400 leading-none">實收</div>
               <div className="text-xs font-mono font-bold text-amber-400">
                 ${topStats.netRevenue.toLocaleString()}
               </div>
             </div>
             <div>
-              <div className="text-[10px] text-slate-400 leading-none">淨利</div>
+              <div className="text-[11px] text-slate-400 leading-none">淨利</div>
               <div
                 className={`text-xs font-mono font-bold ${
                   topStats.trueNetProfit >= 0
