@@ -272,3 +272,214 @@ describe('formatProfit (金額正負號與字串防呆)', () => {
     expect(formatProfit(0)).toBe('+$0');
   });
 });
+
+describe('computeMonthlyFinancialTrends (近6個月損益與雙棲混營趨勢計算)', () => {
+  const { computeMonthlyFinancialTrends } = require('./calculations');
+
+  const mockMachines = [
+    {
+      machine_id: 'm_std',
+      code: 'A01',
+      name: '純公仔機',
+      machine_type: 'STANDARD',
+      rent_monthly: 4000,
+      is_active: true,
+      payment_records: [
+        {
+          payment_id: 'p1',
+          machine_id: 'm_std',
+          title: '2026-11 台租',
+          amount: 4000,
+          period_label: '2026-11',
+          status: 'PAID',
+          paid_at: '2026-11-01T08:00:00Z',
+        },
+      ],
+    },
+    {
+      machine_id: 'm_scratch',
+      code: 'B01',
+      name: '一番賞刮板機',
+      machine_type: 'SCRATCH_HYBRID',
+      rent_monthly: 5000,
+      is_active: true,
+      payment_records: [
+        {
+          payment_id: 'p2',
+          machine_id: 'm_scratch',
+          title: '2026-11 台租',
+          amount: 5000,
+          period_label: '2026-11',
+          status: 'PAID',
+          paid_at: '2026-11-01T08:00:00Z',
+        },
+      ],
+    },
+  ];
+
+  const mockReadings = [
+    {
+      machine_id: 'm_std',
+      read_at: '2026-11-05T12:00:00Z',
+      revenue_amount: 12000,
+      prize_delta: 20,
+    },
+    {
+      machine_id: 'm_scratch',
+      read_at: '2026-11-06T12:00:00Z',
+      revenue_amount: 18000,
+      prize_delta: 10,
+    },
+  ];
+
+  const mockBoards = [
+    {
+      board_id: 'b1',
+      machine_id: 'm_scratch',
+      title: 'B01 A板',
+      status: 'ACTIVE',
+      prizes: [
+        {
+          item_id: 'prz1',
+          number_label: 1,
+          is_claimed: true,
+          claimed_at: '2026-11-06T14:00:00Z',
+          claim_type: 'PHYSICAL',
+          prize_cost: 3000,
+          is_cashback: false,
+          cashback_amount: 0,
+        },
+        {
+          item_id: 'prz2',
+          number_label: 2,
+          is_claimed: true,
+          claimed_at: '2026-11-07T14:00:00Z',
+          claim_type: 'CASHBACK',
+          prize_cost: 0,
+          is_cashback: true,
+          cashback_amount: 1000,
+        },
+      ],
+    },
+  ];
+
+  it('預設全場合併計算時，總收幣應涵蓋純機台與刮板機，正確扣除台租、商品成本與回錢', () => {
+    const trends = computeMonthlyFinancialTrends(
+      mockReadings,
+      mockMachines,
+      [],
+      mockBoards,
+      { monthsCount: 6, referenceDate: new Date('2026-11-15T00:00:00Z'), fleetFilter: 'ALL' }
+    );
+
+    expect(trends.length).toBe(6);
+    const nov = trends.find((t) => t.period_label === '2026-11');
+    expect(nov).toBeDefined();
+
+    // 總收幣 = 12000 (純機) + 18000 (刮板) = 30000
+    expect(nov?.gross_coin_revenue).toBe(30000);
+    expect(nov?.standard_machine_revenue).toBe(12000);
+    expect(nov?.scratch_machine_revenue).toBe(18000);
+
+    // 獎品成本 = 3000, 回錢 = 1000, 台租 = 4000 + 5000 = 9000
+    expect(nov?.product_cost).toBe(3000);
+    expect(nov?.cashback_deducted).toBe(1000);
+    expect(nov?.rent_and_overhead).toBe(9000);
+
+    // 淨利 = 30000 - 3000 - 1000 - 9000 = 17000
+    expect(nov?.net_profit).toBe(17000);
+    expect(nov?.payout_count).toBe(30);
+  });
+
+  it('切換為只看純娃娃機時，應僅包含純機台營收與台租，排除刮板獎品與回錢', () => {
+    const trends = computeMonthlyFinancialTrends(
+      mockReadings,
+      mockMachines,
+      [],
+      mockBoards,
+      { monthsCount: 6, referenceDate: new Date('2026-11-15T00:00:00Z'), fleetFilter: 'STANDARD' }
+    );
+
+    const nov = trends.find((t) => t.period_label === '2026-11');
+    expect(nov?.gross_coin_revenue).toBe(12000);
+    expect(nov?.standard_machine_revenue).toBe(12000);
+    expect(nov?.scratch_machine_revenue).toBe(0);
+    expect(nov?.product_cost).toBe(0);
+    expect(nov?.cashback_deducted).toBe(0);
+    expect(nov?.rent_and_overhead).toBe(4000);
+    expect(nov?.net_profit).toBe(8000); // 12000 - 4000
+  });
+
+  it('切換為只看刮板機台時，應僅包含刮板機台營收、台租、獎品成本與回錢', () => {
+    const trends = computeMonthlyFinancialTrends(
+      mockReadings,
+      mockMachines,
+      [],
+      mockBoards,
+      { monthsCount: 6, referenceDate: new Date('2026-11-15T00:00:00Z'), fleetFilter: 'SCRATCH_HYBRID' }
+    );
+
+    const nov = trends.find((t) => t.period_label === '2026-11');
+    expect(nov?.gross_coin_revenue).toBe(18000);
+    expect(nov?.standard_machine_revenue).toBe(0);
+    expect(nov?.scratch_machine_revenue).toBe(18000);
+    expect(nov?.product_cost).toBe(3000);
+    expect(nov?.cashback_deducted).toBe(1000);
+    expect(nov?.rent_and_overhead).toBe(5000);
+    expect(nov?.net_profit).toBe(9000); // 18000 - 3000 - 1000 - 5000 = 9000
+  });
+
+  it('雜項開銷 (Expense) 正確依 incurred_date 納入台租與固定開銷扣除', () => {
+    const mockExpenses = [
+      {
+        expense_id: 'exp1',
+        machine_id: 'm_std',
+        title: '爪套彈力繩',
+        amount: 500,
+        is_advanced_amortized: false,
+        spread_days: 0,
+        incurred_date: '2026-11-04T10:00:00Z',
+        note: '',
+      },
+      {
+        expense_id: 'exp2',
+        machine_id: null, // 全場共用
+        title: '全場公家電費',
+        amount: 1200,
+        is_advanced_amortized: false,
+        spread_days: 0,
+        incurred_date: '2026-11-04T10:00:00Z',
+        note: '',
+      },
+    ];
+
+    const trends = computeMonthlyFinancialTrends(
+      mockReadings,
+      mockMachines,
+      mockExpenses as any,
+      mockBoards,
+      { monthsCount: 6, referenceDate: new Date('2026-11-15T00:00:00Z'), fleetFilter: 'ALL' }
+    );
+
+    const nov = trends.find((t) => t.period_label === '2026-11');
+    // 台租 9000 + 爪套 500 + 全場電費 1200 = 10700
+    expect(nov?.rent_and_overhead).toBe(10700);
+    // 淨利 = 30000 - 3000 - 1000 - 10700 = 15300
+    expect(nov?.net_profit).toBe(15300);
+  });
+
+  it('當月無營收時，淨利率應安全防呆為 0%，絕不輸出 NaN 或 Infinity', () => {
+    const trends = computeMonthlyFinancialTrends(
+      [],
+      mockMachines,
+      [],
+      [],
+      { monthsCount: 6, referenceDate: new Date('2026-11-15T00:00:00Z'), fleetFilter: 'ALL' }
+    );
+
+    const nov = trends.find((t) => t.period_label === '2026-11');
+    expect(nov?.gross_coin_revenue).toBe(0);
+    expect(nov?.net_margin_pct).toBe(0);
+    expect(isNaN(nov?.net_margin_pct || 0)).toBe(false);
+  });
+});

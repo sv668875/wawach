@@ -1,6 +1,7 @@
 import {
   Expense,
   Machine,
+  MonthlyFinancialTrend,
   NumberLuckStat,
   ReadingInput,
   ScratchBoard,
@@ -535,4 +536,156 @@ export function generateSampleMeterPhotoBase64(
   drawCounterBox(240, 'PRIZE OUT 出貨錶', 'OPTICAL SENSOR COUNTER', prizeVal, '#10b981');
 
   return canvas.toDataURL('image/jpeg', 0.92);
+}
+
+/**
+ * 計算近 N 個月 (預設 6 個月) 連續財務損益趨勢
+ * 支援全場合併、純娃娃機專屬、或刮板機專屬分流視角
+ */
+export function computeMonthlyFinancialTrends(
+  readings: { machine_id: string; read_at: string; revenue_amount: number; prize_delta?: number }[],
+  machines: Machine[],
+  expenses: Expense[],
+  scratchBoards: ScratchBoard[],
+  options?: {
+    monthsCount?: number;
+    fleetFilter?: 'ALL' | 'STANDARD' | 'SCRATCH_HYBRID';
+    referenceDate?: Date;
+  }
+): MonthlyFinancialTrend[] {
+  const monthsCount = options?.monthsCount ?? 6;
+  const fleetFilter = options?.fleetFilter ?? 'ALL';
+  const refDate = options?.referenceDate ? new Date(options.referenceDate) : new Date();
+
+  // 1. 建立近 monthsCount 個月份清單 (從舊到新，例如 6月 -> 11月)
+  const monthSlots: { year: number; month: number; label: string; name: string; start: Date; end: Date }[] = [];
+  for (let i = monthsCount - 1; i >= 0; i--) {
+    const d = new Date(refDate.getFullYear(), refDate.getMonth() - i, 1);
+    const y = d.getFullYear();
+    const m = d.getMonth() + 1;
+    const start = new Date(y, m - 1, 1, 0, 0, 0, 0);
+    const end = new Date(y, m, 0, 23, 59, 59, 999);
+    monthSlots.push({
+      year: y,
+      month: m,
+      label: `${y}-${String(m).padStart(2, '0')}`,
+      name: `${m}月`,
+      start,
+      end,
+    });
+  }
+
+  // 2. 建立機台屬性速查表 (純機台 vs 刮板機)
+  const machineTypeMap = new Map<string, 'STANDARD' | 'SCRATCH_HYBRID'>();
+  machines.forEach((m) => {
+    const isScratch = m.machine_type === 'SCRATCH_HYBRID' || Boolean(m.active_board_id);
+    machineTypeMap.set(m.machine_id, isScratch ? 'SCRATCH_HYBRID' : 'STANDARD');
+  });
+
+  const isMachineMatched = (machineId: string) => {
+    if (fleetFilter === 'ALL') return true;
+    const type = machineTypeMap.get(machineId) || 'STANDARD';
+    return type === fleetFilter;
+  };
+
+  const results: MonthlyFinancialTrend[] = [];
+
+  for (const slot of monthSlots) {
+    const startTime = slot.start.getTime();
+    const endTime = slot.end.getTime();
+
+    let grossCoinRevenue = 0;
+    let standardRevenue = 0;
+    let scratchRevenue = 0;
+    let payoutCount = 0;
+
+    for (const r of readings) {
+      const rt = new Date(r.read_at).getTime();
+      if (isNaN(rt) || rt < startTime || rt > endTime) continue;
+      if (!isMachineMatched(r.machine_id)) continue;
+
+      const amt = Number(r.revenue_amount) || 0;
+      grossCoinRevenue += amt;
+      payoutCount += Math.max(0, Number(r.prize_delta) || 0);
+
+      const mType = machineTypeMap.get(r.machine_id) || 'STANDARD';
+      if (mType === 'STANDARD') {
+        standardRevenue += amt;
+      } else {
+        scratchRevenue += amt;
+      }
+    }
+
+    let scratchPrizeCost = 0;
+    let scratchCashback = 0;
+
+    if (fleetFilter !== 'STANDARD') {
+      for (const b of scratchBoards) {
+        if (!isMachineMatched(b.machine_id)) continue;
+        for (const p of b.prizes) {
+          if (!p.is_claimed || !p.claimed_at) continue;
+          const ct = new Date(p.claimed_at).getTime();
+          if (isNaN(ct) || ct < startTime || ct > endTime) continue;
+
+          if (p.claim_type === 'CASHBACK') {
+            scratchCashback += Number(p.cashback_amount) || 0;
+          } else {
+            scratchPrizeCost += Number(p.prize_cost) || 0;
+          }
+        }
+      }
+    }
+
+    let rentAndOverhead = 0;
+    for (const m of machines) {
+      if (!isMachineMatched(m.machine_id)) continue;
+      const paidThisMonth = (m.payment_records || []).filter((rec) => {
+        if (rec.status !== 'PAID') return false;
+        if (rec.period_label === slot.label) return true;
+        const pt = new Date(rec.paid_at).getTime();
+        return !isNaN(pt) && pt >= startTime && pt <= endTime;
+      });
+      for (const rec of paidThisMonth) {
+        rentAndOverhead += Number(rec.amount) || 0;
+      }
+    }
+
+    for (const exp of expenses) {
+      const dateStr = exp.incurred_date || (exp as any).expense_date;
+      const et = new Date(dateStr).getTime();
+      if (isNaN(et) || et < startTime || et > endTime) continue;
+      if (exp.machine_id) {
+        if (isMachineMatched(exp.machine_id)) {
+          rentAndOverhead += Number(exp.amount) || 0;
+        }
+      } else if (fleetFilter === 'ALL') {
+        rentAndOverhead += Number(exp.amount) || 0;
+      }
+    }
+
+    const totalProductCost = scratchPrizeCost;
+    const netProfit = grossCoinRevenue - totalProductCost - scratchCashback - rentAndOverhead;
+    const netMarginPct = grossCoinRevenue > 0 ? Math.round((netProfit / grossCoinRevenue) * 1000) / 10 : 0;
+    const avgCoinPerPrize = payoutCount > 0 ? Math.round(grossCoinRevenue / payoutCount) : undefined;
+
+    results.push({
+      period_label: slot.label,
+      year: slot.year,
+      month: slot.month,
+      month_name: slot.name,
+      gross_coin_revenue: grossCoinRevenue,
+      standard_machine_revenue: standardRevenue,
+      scratch_machine_revenue: scratchRevenue,
+      product_cost: totalProductCost,
+      cashback_deducted: scratchCashback,
+      rent_and_overhead: rentAndOverhead,
+      net_profit: netProfit,
+      net_margin_pct: netMarginPct,
+      payout_count: payoutCount,
+      avg_coin_per_prize: avgCoinPerPrize,
+      active_machines_count: machines.filter((m) => m.is_active && isMachineMatched(m.machine_id)).length,
+    });
+  }
+
+  return results;
 }

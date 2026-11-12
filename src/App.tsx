@@ -18,9 +18,11 @@ import {
   MachineCustomFee,
   MachineModel,
   MachinePaymentRecord,
+  MachineType,
   MeterReading,
   ScratchBoard,
   SettleBoardPayload,
+  StockedItem,
 } from './types';
 import {
   INITIAL_CATEGORIES,
@@ -1338,6 +1340,65 @@ export default function App() {
     );
   };
 
+  const handleUpdateMachineType = (
+    machineId: string,
+    machineType: MachineType,
+    extra?: { guaranteed_amount?: number; target_payout_rate?: number }
+  ) => {
+    pushUndo(`變更機台型態為 ${machineType === 'STANDARD' ? '純出貨娃娃機' : '刮板一番賞機'}`);
+    setMachines((prev) =>
+      prev.map((m) =>
+        m.machine_id === machineId
+          ? {
+              ...m,
+              machine_type: machineType,
+              guaranteed_amount: extra?.guaranteed_amount ?? m.guaranteed_amount,
+              target_payout_rate: extra?.target_payout_rate ?? m.target_payout_rate,
+            }
+          : m
+      )
+    );
+    showToast(
+      machineType === 'STANDARD'
+        ? '已設為純出貨娃娃機模式（已隱藏刮板設定）'
+        : '已設為刮板一番賞機模式（可進行上版與獎項管理）'
+    );
+  };
+
+  const handleRestockMachine = (
+    machineId: string,
+    stock: StockedItem,
+    sourceInventoryItemId?: string
+  ) => {
+    pushUndo(`機台補貨 ${stock.item_name} x${stock.quantity}`);
+    setMachines((prev) =>
+      prev.map((m) => {
+        if (m.machine_id !== machineId) return m;
+        const currentStocked = m.stocked_items || [];
+        return {
+          ...m,
+          stocked_items: [stock, ...currentStocked],
+        };
+      })
+    );
+
+    // 若從倉庫扣庫存
+    if (sourceInventoryItemId) {
+      setInventoryItems((prev) =>
+        prev
+          .map((item) => {
+            if (item.item_id !== sourceInventoryItemId) return item;
+            const remainingQty = item.quantity - stock.quantity;
+            return remainingQty > 0
+              ? { ...item, quantity: remainingQty }
+              : null;
+          })
+          .filter(Boolean) as InventoryItem[]
+      );
+    }
+    showToast(`機台已補入 ${stock.quantity} 件「${stock.item_name}」`);
+  };
+
   const handleAddCategory = (newCat: string) => {
     if (categories.includes(newCat)) return;
     setCategories((prev) => [...prev, newCat]);
@@ -1515,13 +1576,35 @@ export default function App() {
     };
   }, [machines, scratchBoards, readings, expenses]);
 
-  const NAV_ITEMS: { key: TabKey; label: string; icon: React.ReactNode }[] = [
-    { key: 'meter', label: '收幣', icon: <Gauge className="w-4 h-4" /> },
-    { key: 'scratch', label: '刮板', icon: <Grid className="w-4 h-4" /> },
-    { key: 'inventory', label: '庫存', icon: <Package className="w-4 h-4" /> },
-    { key: 'overhead', label: '台租', icon: <Wrench className="w-4 h-4" /> },
-    { key: 'analytics', label: '損益', icon: <BarChart3 className="w-4 h-4" /> },
-  ];
+  // 需求 1：純娃娃機台主不需看到刮板干擾；雙棲台主或有刮板時自動保留刮板分頁
+  const hasScratchFleet = useMemo(() => {
+    const hasHybridMachine = machines.some(
+      (m) => (m.machine_type || (m.active_board_id ? 'SCRATCH_HYBRID' : 'STANDARD')) === 'SCRATCH_HYBRID'
+    );
+    const hasBoards = scratchBoards.length > 0;
+    return hasHybridMachine || hasBoards;
+  }, [machines, scratchBoards]);
+
+  useEffect(() => {
+    if (!hasScratchFleet && activeTab === 'scratch') {
+      setActiveTab('meter');
+    }
+  }, [hasScratchFleet, activeTab]);
+
+  const NAV_ITEMS = useMemo(() => {
+    const items: { key: TabKey; label: string; icon: React.ReactNode }[] = [
+      { key: 'meter', label: '收幣', icon: <Gauge className="w-4 h-4" /> },
+    ];
+    if (hasScratchFleet) {
+      items.push({ key: 'scratch', label: '刮板', icon: <Grid className="w-4 h-4" /> });
+    }
+    items.push(
+      { key: 'inventory', label: '庫存', icon: <Package className="w-4 h-4" /> },
+      { key: 'overhead', label: '台租', icon: <Wrench className="w-4 h-4" /> },
+      { key: 'analytics', label: '損益', icon: <BarChart3 className="w-4 h-4" /> }
+    );
+    return items;
+  }, [hasScratchFleet]);
 
   return (
     <div className={`min-h-screen bg-[#0B0F17] text-slate-100 flex flex-col pb-28 md:pb-6 theme-${theme} transition-colors duration-200`}>
@@ -1650,6 +1733,7 @@ export default function App() {
             machines={machines}
             readings={readings}
             scratchBoards={scratchBoards}
+            inventoryItems={inventoryItems}
             selectedMachineId={activeMachineId}
             onSelectMachine={setActiveMachineId}
             onSaveReading={handleSaveReading}
@@ -1658,6 +1742,8 @@ export default function App() {
             onDeleteMachine={handleDeleteMachine}
             onCalibrateCounters={handleCalibrateMachineCounters}
             onSwitchMachineModel={handleSwitchMachineModel}
+            onUpdateMachineType={handleUpdateMachineType}
+            onRestockMachine={handleRestockMachine}
             onDeleteReading={handleDeleteReading}
             onJumpToScratchBoard={(boardId) => {
               if (boardId) setTargetScratchBoardId(boardId);
@@ -1735,7 +1821,10 @@ export default function App() {
 
       {/* Mobile Bottom Navigation Bar */}
       <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-[#111827]/95 backdrop-blur border-t border-[#1E293B] px-2 pt-1.5 pb-[max(env(safe-area-inset-bottom),10px)]">
-        <div className="grid grid-cols-5 gap-1 max-w-md mx-auto">
+        <div
+          className="grid gap-1 max-w-md mx-auto"
+          style={{ gridTemplateColumns: `repeat(${NAV_ITEMS.length}, minmax(0, 1fr))` }}
+        >
           {NAV_ITEMS.map((item) => {
             const isActive = activeTab === item.key;
             return (

@@ -1,4 +1,14 @@
 export type MachineModel = 'DIGITAL' | 'ANALOG';
+export type MachineType = 'STANDARD' | 'SCRATCH_HYBRID'; // 'STANDARD' (純娃娃機/出貨台) | 'SCRATCH_HYBRID' (刮板連動機)
+export type FleetFilter = 'ALL' | 'STANDARD' | 'SCRATCH_HYBRID'; // 損益分流篩選：全場、純娃娃機、刮板台
+
+export interface StockedItem {
+  item_id: string;
+  item_name: string;
+  cost: number;
+  quantity: number;
+  added_at: string;
+}
 
 export type CounterResetMode = 'NORMAL' | 'OVERFLOW' | 'REPLACED';
 
@@ -53,6 +63,10 @@ export interface Machine {
   last_coin_counter: number;     // 類比幣錶讀數 或 數位面板累計參考值
   last_prize_counter: number;    // 類比出貨錶讀數
   active_board_id?: string | null; // 當前主要刮板 (保留相容)
+  machine_type?: MachineType;    // 'STANDARD' (純娃娃機/出貨台) | 'SCRATCH_HYBRID' (刮板連動機)
+  guaranteed_amount?: number;    // 保夾金額 (選填)
+  target_payout_rate?: number;   // 預期均出金額 (例如 $400/件)
+  stocked_items?: StockedItem[]; // 台內在台商品 (補貨管理)
   last_read_at: string;
   is_active: boolean;
 }
@@ -203,4 +217,23 @@ export interface SessionMetricsResult {
   hasCounterDropWarning: boolean;
   coinDropped: boolean;
   prizeDropped: boolean;
+}
+
+// 8. 連續月度財務趨勢指標 (手機圖表化展示近 6 個月損益與結構)
+export interface MonthlyFinancialTrend {
+  period_label: string;             // 例如 "2026-11"
+  year: number;
+  month: number;
+  month_name: string;               // 例如 "11月"
+  gross_coin_revenue: number;       // 總收幣
+  standard_machine_revenue: number; // 純娃娃機收幣
+  scratch_machine_revenue: number;  // 刮板台收幣
+  product_cost: number;             // 商品/獎品出貨成本
+  cashback_deducted: number;        // 刮板回錢折現
+  rent_and_overhead: number;        // 已付台租與固定開銷
+  net_profit: number;               // 最終淨利
+  net_margin_pct: number;           // 淨利率
+  payout_count: number;             // 出貨件數
+  avg_coin_per_prize?: number;      // 平均均投 (元/件)
+  active_machines_count: number;    // 當月在營運機台數
 }

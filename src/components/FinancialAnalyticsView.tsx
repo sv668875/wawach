@@ -10,6 +10,8 @@ import {
   Calendar,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
   AlertTriangle,
   FileText,
   Check,
@@ -18,17 +20,21 @@ import {
   Layers,
   Building,
   Filter,
+  Package,
 } from 'lucide-react';
 import {
   Expense,
+  FleetFilter,
   InventoryItem,
   Machine,
   MeterReading,
+  MonthlyFinancialTrend,
   ScratchBoard,
 } from '../types';
 import {
   calculateScratchBoardFinancials,
   calculateSimpleOverhead,
+  computeMonthlyFinancialTrends,
   formatProfit,
 } from '../utils/calculations';
 
@@ -91,6 +97,48 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
   const [boardStatusFilter, setBoardStatusFilter] = useState<
     'ALL' | 'ACTIVE' | 'SETTLED'
   >('ALL');
+
+  // 需求 2：近 6 個月損益趨勢與雙棲混營視角篩選狀態
+  const [monthlyFleetFilter, setMonthlyFleetFilter] = useState<FleetFilter>('ALL');
+  const [selectedTrendMonthKey, setSelectedTrendMonthKey] = useState<string>('');
+  const [expandedMonthCards, setExpandedMonthCards] = useState<Record<string, boolean>>({});
+
+  const mappedReadings = useMemo(() => {
+    return readings.map((r) => ({
+      machine_id: r.machine_id,
+      read_at: r.read_at,
+      revenue_amount: r.cash_collected || r.panel_amount || 0,
+      prize_delta: r.prizes_delta || 0,
+    }));
+  }, [readings]);
+
+  const monthlyTrends = useMemo(() => {
+    return computeMonthlyFinancialTrends(
+      mappedReadings,
+      machines,
+      expenses,
+      scratchBoards,
+      {
+        monthsCount: 6,
+        fleetFilter: monthlyFleetFilter,
+      }
+    );
+  }, [mappedReadings, machines, expenses, scratchBoards, monthlyFleetFilter]);
+
+  const activeTrendMonth = useMemo(() => {
+    if (selectedTrendMonthKey) {
+      const match = monthlyTrends.find((m) => m.period_label === selectedTrendMonthKey);
+      if (match) return match;
+    }
+    return monthlyTrends[monthlyTrends.length - 1] || null;
+  }, [monthlyTrends, selectedTrendMonthKey]);
+
+  const toggleMonthCardExpanded = (periodLabel: string) => {
+    setExpandedMonthCards((prev) => ({
+      ...prev,
+      [periodLabel]: !prev[periodLabel],
+    }));
+  };
 
   // 需求 8：匯入 JSON 預覽與確認狀態
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -593,6 +641,367 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
       {/* 維度 1：全場損益總覽 (OVERVIEW) */}
       {analyticsDimension === 'OVERVIEW' && (
         <>
+          {/* 需求 2：近 6 個月損益走勢 (手機圖表化 · 支援全場總帳與雙棲分流) */}
+          <div className="bg-[#111827] border border-[#1E293B] rounded-xl p-4 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+              <div className="flex items-center gap-2">
+                <BarChart3 className="w-4 h-4 text-amber-400" />
+                <div>
+                  <h3 className="text-sm font-bold text-white">近 6 個月營運損益走勢</h3>
+                  <p className="text-[11px] text-slate-400">免橫向滾動圖表 · 點擊柱狀切換焦點月份</p>
+                </div>
+              </div>
+
+              {/* 3-way 雙棲混營視角切換膠囊 (全場總帳預設合併、可分流純機與刮板) */}
+              <div className="flex items-center bg-[#0B0F17] p-0.5 rounded-lg border border-slate-800 self-start sm:self-auto">
+                <button
+                  type="button"
+                  onClick={() => setMonthlyFleetFilter('ALL')}
+                  className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition-all ${
+                    monthlyFleetFilter === 'ALL'
+                      ? 'bg-amber-500 text-slate-950 shadow-sm'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  全場合計
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMonthlyFleetFilter('STANDARD')}
+                  className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition-all ${
+                    monthlyFleetFilter === 'STANDARD'
+                      ? 'bg-amber-500 text-slate-950 shadow-sm'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  純娃娃機
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMonthlyFleetFilter('SCRATCH_HYBRID')}
+                  className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition-all ${
+                    monthlyFleetFilter === 'SCRATCH_HYBRID'
+                      ? 'bg-amber-500 text-slate-950 shadow-sm'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  刮板台
+                </button>
+              </div>
+            </div>
+
+            {/* 6 欄縱向長條柱狀走勢圖 */}
+            {(() => {
+              const maxPos = Math.max(1, ...monthlyTrends.map((m) => Math.max(0, m.net_profit)));
+              const maxNeg = Math.max(0, ...monthlyTrends.map((m) => Math.max(0, -m.net_profit)));
+              const hasNegative = maxNeg > 0;
+              const posRatio = hasNegative ? maxPos / (maxPos + maxNeg) : 1;
+              const chartHeightPx = 140;
+              const zeroLineTopPx = Math.round(chartHeightPx * posRatio);
+
+              return (
+                <div className="bg-[#0B0F17] p-3 rounded-xl border border-slate-800 space-y-2">
+                  <div className="relative h-[140px] w-full flex items-stretch justify-between gap-1">
+                    {/* 0 軸水平基準虛線 */}
+                    {hasNegative && (
+                      <div
+                        className="absolute inset-x-0 border-t border-slate-700/60 border-dashed z-0 pointer-events-none"
+                        style={{ top: `${zeroLineTopPx}px` }}
+                      >
+                        <span className="absolute left-1 -top-2.5 text-[9px] font-mono text-slate-400 bg-[#0B0F17] px-1">
+                          $0
+                        </span>
+                      </div>
+                    )}
+
+                    {monthlyTrends.map((trend) => {
+                      const isSelected = (activeTrendMonth?.period_label === trend.period_label);
+                      const isProfit = trend.net_profit >= 0;
+                      // 計算柱子高度
+                      let barHeightPct = 0;
+                      if (isProfit) {
+                        barHeightPct = Math.min(100, Math.max(6, Math.round((trend.net_profit / maxPos) * 100)));
+                      } else {
+                        barHeightPct = Math.min(100, Math.max(6, Math.round((-trend.net_profit / (maxNeg || 1)) * 100)));
+                      }
+
+                      const profitLabel = isProfit
+                        ? `+$${Math.abs(trend.net_profit) >= 1000 ? (trend.net_profit / 1000).toFixed(1) + 'k' : trend.net_profit}`
+                        : `-$${Math.abs(trend.net_profit) >= 1000 ? (Math.abs(trend.net_profit) / 1000).toFixed(1) + 'k' : Math.abs(trend.net_profit)}`;
+
+                      return (
+                        <div
+                          key={trend.period_label}
+                          onClick={() => setSelectedTrendMonthKey(trend.period_label)}
+                          className={`relative flex-1 flex flex-col justify-end items-center cursor-pointer select-none rounded-lg p-1 transition-all group ${
+                            isSelected
+                              ? 'bg-amber-500/10 ring-1 ring-amber-400/60'
+                              : 'hover:bg-slate-800/40'
+                          }`}
+                        >
+                          {/* 柱頂金額標籤 */}
+                          <div
+                            className={`text-[10px] font-mono font-bold leading-none mb-1 text-center whitespace-nowrap ${
+                              isProfit ? 'text-emerald-400' : 'text-rose-400'
+                            }`}
+                          >
+                            {profitLabel}
+                          </div>
+
+                          {/* 柱狀體軌道 */}
+                          <div className="relative w-full flex-1 flex items-stretch">
+                            {hasNegative ? (
+                              <div className="w-full h-full flex flex-col">
+                                {/* 正向區域 */}
+                                <div className="flex-1 flex flex-col justify-end items-center">
+                                  {isProfit && (
+                                    <div
+                                      className={`w-full max-w-[28px] bg-emerald-500 rounded-t transition-all ${
+                                        isSelected ? 'brightness-125 shadow-sm shadow-emerald-500/30' : 'opacity-85'
+                                      }`}
+                                      style={{ height: `${barHeightPct}%` }}
+                                    />
+                                  )}
+                                </div>
+                                {/* 負向區域 */}
+                                <div className="flex-1 flex flex-col justify-start items-center">
+                                  {!isProfit && (
+                                    <div
+                                      className={`w-full max-w-[28px] bg-rose-500 rounded-b transition-all ${
+                                        isSelected ? 'brightness-125 shadow-sm shadow-rose-500/30' : 'opacity-85'
+                                      }`}
+                                      style={{ height: `${barHeightPct}%` }}
+                                    />
+                                  )}
+                                </div>
+                              </div>
+                            ) : (
+                              /* 全正數狀態簡化高度 */
+                              <div className="w-full h-full flex flex-col justify-end items-center">
+                                <div
+                                  className={`w-full max-w-[28px] bg-emerald-500 rounded-t transition-all ${
+                                    isSelected ? 'brightness-125 shadow-sm shadow-emerald-500/30' : 'opacity-85'
+                                  }`}
+                                  style={{ height: `${barHeightPct}%` }}
+                                />
+                              </div>
+                            )}
+                          </div>
+
+                          {/* 月份標籤 */}
+                          <div
+                            className={`text-[10px] font-mono mt-1 text-center whitespace-nowrap ${
+                              isSelected
+                                ? 'text-amber-400 font-bold'
+                                : 'text-slate-400 group-hover:text-slate-200'
+                            }`}
+                          >
+                            {trend.month_name.replace(' (本月)', '')}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <div className="flex items-center justify-between text-[11px] text-slate-400 font-mono pt-1 border-t border-slate-800/80">
+                    <span className="flex items-center gap-1 text-emerald-400">
+                      ● 翠綠為獲利月份
+                    </span>
+                    <span className="flex items-center gap-1 text-rose-400">
+                      ● 石榴紅為虧損月份
+                    </span>
+                    <span className="text-amber-400 font-bold">
+                      當前焦點：{activeTrendMonth?.month_name}
+                    </span>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* 選定月份營收流向 4 色光條 (Selected Month Stream Bar) */}
+            {activeTrendMonth && (() => {
+              const gross = Math.max(1, activeTrendMonth.gross_coin_revenue);
+              const rentP = Math.min(100, Math.round((activeTrendMonth.rent_and_overhead / gross) * 100));
+              const prizeP = Math.min(100, Math.round((activeTrendMonth.product_cost / gross) * 100));
+              const cashbackP = Math.min(100, Math.round((activeTrendMonth.cashback_deducted / gross) * 100));
+              const profitP = Math.max(0, 100 - rentP - prizeP - cashbackP);
+
+              return (
+                <div className="bg-[#0B0F17] p-3 rounded-xl border border-slate-800 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <div className="text-xs font-bold text-white flex items-center gap-1.5">
+                      <span>[{activeTrendMonth.month_name}] 營收流向結構</span>
+                      <span className="text-[10px] font-mono text-slate-400">
+                        (總收幣 ${activeTrendMonth.gross_coin_revenue.toLocaleString()})
+                      </span>
+                    </div>
+                    <div
+                      className={`text-xs font-mono font-bold ${
+                        activeTrendMonth.net_profit >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                      }`}
+                    >
+                      淨利 {formatProfit(activeTrendMonth.net_profit)} ({activeTrendMonth.net_margin_pct}%)
+                    </div>
+                  </div>
+
+                  {/* 4 色比例分段光條 */}
+                  <div className="w-full h-3 bg-slate-900 rounded-full overflow-hidden flex border border-slate-800">
+                    {profitP > 0 && (
+                      <div
+                        className="h-full bg-emerald-500 transition-all"
+                        style={{ width: `${profitP}%` }}
+                        title={`淨利 ${profitP}%`}
+                      />
+                    )}
+                    {rentP > 0 && (
+                      <div
+                        className="h-full bg-amber-500 transition-all"
+                        style={{ width: `${rentP}%` }}
+                        title={`台租 ${rentP}%`}
+                      />
+                    )}
+                    {prizeP > 0 && (
+                      <div
+                        className="h-full bg-sky-500 transition-all"
+                        style={{ width: `${prizeP}%` }}
+                        title={`商品成本 ${prizeP}%`}
+                      />
+                    )}
+                    {cashbackP > 0 && (
+                      <div
+                        className="h-full bg-rose-500 transition-all"
+                        style={{ width: `${cashbackP}%` }}
+                        title={`回錢 ${cashbackP}%`}
+                      />
+                    )}
+                  </div>
+
+                  {/* 4 項指標數據 */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                    <div className="bg-[#111827] p-2 rounded-lg border border-slate-800">
+                      <div className="text-slate-400 text-[11px]">實質淨利</div>
+                      <div className={`font-mono font-bold ${activeTrendMonth.net_profit >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                        {formatProfit(activeTrendMonth.net_profit)}
+                      </div>
+                    </div>
+                    <div className="bg-[#111827] p-2 rounded-lg border border-slate-800">
+                      <div className="text-slate-400 text-[11px]">實付台租</div>
+                      <div className="font-mono font-bold text-amber-400">
+                        -${activeTrendMonth.rent_and_overhead.toLocaleString()}
+                      </div>
+                    </div>
+                    <div className="bg-[#111827] p-2 rounded-lg border border-slate-800">
+                      <div className="text-slate-400 text-[11px]">商品成本</div>
+                      <div className="font-mono font-bold text-sky-400">
+                        -${activeTrendMonth.product_cost.toLocaleString()}
+                      </div>
+                    </div>
+                    <div className="bg-[#111827] p-2 rounded-lg border border-slate-800">
+                      <div className="text-slate-400 text-[11px]">回錢給付</div>
+                      <div className="font-mono font-bold text-rose-400">
+                        -${activeTrendMonth.cashback_deducted.toLocaleString()}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* 手風琴月度體質卡片清單 (取代生硬 8 欄大表格，手機大拇指好點閱) */}
+            <div className="space-y-2">
+              <div className="text-xs font-bold text-slate-300">
+                月度體質明細卡 (點擊展開明細)
+              </div>
+              <div className="space-y-1.5">
+                {[...monthlyTrends].reverse().map((m) => {
+                  const isExpanded = !!expandedMonthCards[m.period_label];
+                  const isSelected = activeTrendMonth?.period_label === m.period_label;
+                  return (
+                    <div
+                      key={m.period_label}
+                      className={`rounded-xl border transition-all overflow-hidden ${
+                        isSelected
+                          ? 'bg-[#0B0F17] border-amber-500/40 shadow-sm'
+                          : 'bg-[#0B0F17] border-slate-800/80 hover:border-slate-700'
+                      }`}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedTrendMonthKey(m.period_label);
+                          toggleMonthCardExpanded(m.period_label);
+                        }}
+                        className="w-full flex items-center justify-between p-3 text-left transition-colors"
+                      >
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`font-mono font-bold text-xs px-2 py-0.5 rounded ${
+                              isSelected
+                                ? 'bg-amber-500 text-slate-950'
+                                : 'bg-slate-800 text-slate-300'
+                            }`}
+                          >
+                            {m.month_name}
+                          </span>
+                          <span className="text-xs text-slate-300 font-mono">
+                            收 ${m.gross_coin_revenue.toLocaleString()}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span
+                            className={`text-xs font-mono font-bold ${
+                              m.net_profit >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                            }`}
+                          >
+                            {formatProfit(m.net_profit)}
+                          </span>
+                          <span className="text-[10px] text-slate-400 font-mono">
+                            ({m.net_margin_pct}%)
+                          </span>
+                          {isExpanded ? (
+                            <ChevronUp className="w-4 h-4 text-slate-400" />
+                          ) : (
+                            <ChevronDown className="w-4 h-4 text-slate-400" />
+                          )}
+                        </div>
+                      </button>
+
+                      {isExpanded && (
+                        <div className="px-3 pb-3 pt-1 border-t border-slate-800/80 grid grid-cols-2 sm:grid-cols-3 gap-2 text-[11px] font-mono">
+                          <div className="p-2 rounded-lg bg-[#111827] border border-slate-800">
+                            <span className="text-slate-400 block text-[10px]">🧸 純機收幣</span>
+                            <span className="text-white font-bold">${m.standard_machine_revenue.toLocaleString()}</span>
+                          </div>
+                          <div className="p-2 rounded-lg bg-[#111827] border border-slate-800">
+                            <span className="text-slate-400 block text-[10px]">🎟️ 刮板收幣</span>
+                            <span className="text-amber-400 font-bold">${m.scratch_machine_revenue.toLocaleString()}</span>
+                          </div>
+                          <div className="p-2 rounded-lg bg-[#111827] border border-slate-800">
+                            <span className="text-slate-400 block text-[10px]">🏢 實付台租</span>
+                            <span className="text-amber-400 font-bold">-${m.rent_and_overhead.toLocaleString()}</span>
+                          </div>
+                          <div className="p-2 rounded-lg bg-[#111827] border border-slate-800">
+                            <span className="text-slate-400 block text-[10px]">📦 獎品成本</span>
+                            <span className="text-sky-400 font-bold">-${m.product_cost.toLocaleString()}</span>
+                          </div>
+                          <div className="p-2 rounded-lg bg-[#111827] border border-slate-800">
+                            <span className="text-slate-400 block text-[10px]">💸 回錢給付</span>
+                            <span className="text-rose-400 font-bold">-${m.cashback_deducted.toLocaleString()}</span>
+                          </div>
+                          <div className="p-2 rounded-lg bg-[#111827] border border-slate-800">
+                            <span className="text-slate-400 block text-[10px]">🎯 累計出貨</span>
+                            <span className="text-emerald-400 font-bold">{m.payout_count} 件 {m.avg_coin_per_prize ? `(均投 $${m.avg_coin_per_prize})` : ''}</span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
           {/* 1. 核心總損益與營收結構量表 (Gauge & Stacked Chart) */}
           <div className="bg-[#111827] border border-[#1E293B] rounded-xl p-4 space-y-4">
             <div className="flex items-center justify-between">
