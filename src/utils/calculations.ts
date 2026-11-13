@@ -543,7 +543,13 @@ export function generateSampleMeterPhotoBase64(
  * 支援全場合併、純娃娃機專屬、或刮板機專屬分流視角
  */
 export function computeMonthlyFinancialTrends(
-  readings: { machine_id: string; read_at: string; revenue_amount: number; prize_delta?: number }[],
+  readings: {
+    machine_id: string;
+    read_at: string;
+    revenue_amount: number;
+    prize_delta?: number;
+    board_id?: string | null;
+  }[],
   machines: Machine[],
   expenses: Expense[],
   scratchBoards: ScratchBoard[],
@@ -599,23 +605,74 @@ export function computeMonthlyFinancialTrends(
     let scratchRevenue = 0;
     let payoutCount = 0;
 
+    // 1. 累加抄錶與收幣紀錄 (readings)
     for (const r of readings) {
       const rt = new Date(r.read_at).getTime();
       if (isNaN(rt) || rt < startTime || rt > endTime) continue;
       if (!isMachineMatched(r.machine_id)) continue;
 
       const amt = Number(r.revenue_amount) || 0;
-      grossCoinRevenue += amt;
       payoutCount += Math.max(0, Number(r.prize_delta) || 0);
 
-      const mType = machineTypeMap.get(r.machine_id) || 'STANDARD';
-      if (mType === 'STANDARD') {
-        standardRevenue += amt;
-      } else {
+      const isScratchReading = Boolean(r.board_id) || machineTypeMap.get(r.machine_id) === 'SCRATCH_HYBRID';
+
+      if (fleetFilter === 'STANDARD' && isScratchReading) continue;
+      if (fleetFilter === 'SCRATCH_HYBRID' && !isScratchReading) continue;
+
+      grossCoinRevenue += amt;
+      if (isScratchReading) {
         scratchRevenue += amt;
+      } else {
+        standardRevenue += amt;
       }
     }
 
+    // 2. 自動補齊與對齊刮板分批巡場記錄 (check_logs) 中尚未建立獨立 reading 的收幣
+    if (fleetFilter !== 'STANDARD') {
+      for (const b of scratchBoards) {
+        if (!isMachineMatched(b.machine_id)) continue;
+
+        // A. 檢查該板的巡場紀錄 (check_logs)
+        for (const log of b.check_logs || []) {
+          const cash = Number(log.recorded_cash_added) || 0;
+          if (cash <= 0) continue;
+
+          const lt = new Date(log.logged_at).getTime();
+          if (isNaN(lt) || lt < startTime || lt > endTime) continue;
+
+          // 判斷此筆巡場收幣是否已經在 readings 中存在 (避免重複累加)
+          const isAlreadyInReadings = readings.some((r) => {
+            if (r.board_id !== b.board_id) return false;
+            const rt = new Date(r.read_at).getTime();
+            const amt = Number(r.revenue_amount) || 0;
+            return Math.abs(rt - lt) < 60_000 && amt === cash;
+          });
+
+          if (!isAlreadyInReadings) {
+            grossCoinRevenue += cash;
+            scratchRevenue += cash;
+          }
+        }
+
+        // B. 檢查刮板建立當月是否有未被 readings/check_logs 覆蓋的總收幣 (如初始種子資料或手動調整)
+        const bCreated = new Date(b.created_at).getTime();
+        if (!isNaN(bCreated) && bCreated >= startTime && bCreated <= endTime) {
+          const boardTotalGross = Number(b.gross_coin_revenue) || 0;
+          const allLogsSum = (b.check_logs || []).reduce((s, l) => s + (Number(l.recorded_cash_added) || 0), 0);
+          const allReadingsSum = readings
+            .filter((r) => r.board_id === b.board_id)
+            .reduce((s, r) => s + (Number(r.revenue_amount) || 0), 0);
+          const maxCaptured = Math.max(allLogsSum, allReadingsSum);
+          const diff = Math.max(0, boardTotalGross - maxCaptured);
+          if (diff > 0) {
+            grossCoinRevenue += diff;
+            scratchRevenue += diff;
+          }
+        }
+      }
+    }
+
+    // 3. 計算當月刮板獎項支出、回錢與空板成本
     let scratchPrizeCost = 0;
     let scratchCashback = 0;
 
@@ -623,8 +680,9 @@ export function computeMonthlyFinancialTrends(
       for (const b of scratchBoards) {
         if (!isMachineMatched(b.machine_id)) continue;
         for (const p of b.prizes) {
-          if (!p.is_claimed || !p.claimed_at) continue;
-          const ct = new Date(p.claimed_at).getTime();
+          if (!p.is_claimed) continue;
+          const claimDateStr = p.claimed_at || b.settled_at || b.created_at;
+          const ct = new Date(claimDateStr).getTime();
           if (isNaN(ct) || ct < startTime || ct > endTime) continue;
 
           if (p.claim_type === 'CASHBACK') {
@@ -633,9 +691,16 @@ export function computeMonthlyFinancialTrends(
             scratchPrizeCost += Number(p.prize_cost) || 0;
           }
         }
+
+        // 當月上新板的空板用紙成本
+        const bCreated = new Date(b.created_at).getTime();
+        if (!isNaN(bCreated) && bCreated >= startTime && bCreated <= endTime) {
+          scratchPrizeCost += Number(b.board_cost) || 0;
+        }
       }
     }
 
+    // 4. 計算已付台租與固定耗材開銷
     let rentAndOverhead = 0;
     for (const m of machines) {
       if (!isMachineMatched(m.machine_id)) continue;

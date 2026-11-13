@@ -817,7 +817,37 @@ export default function App() {
       })
     );
 
-    // 3. 若有傳入類比錶頭最新讀數，自動同步更新該機台之 last_coin_counter (免去重複打錶)
+    // 3. 若本次巡場有收幣，同步寫入收幣抄錶紀錄 (確保收幣紀錄完整、月度財務報表 100% 同步計入)
+    const addedCash = Number(payload.addedCashRevenue) || 0;
+    const targetMachine = machines.find((m) => m.machine_id === targetBoard.machine_id);
+    if (addedCash > 0) {
+      const coinUnit = targetMachine?.coin_unit_value || 10;
+      const coinsDelta = Math.round(addedCash / coinUnit);
+      const newReading: MeterReading = {
+        reading_id: `read_patrol_${Date.now()}`,
+        machine_id: targetBoard.machine_id,
+        board_id: targetBoard.board_id,
+        entry_mode: targetMachine?.machine_model || 'DIGITAL',
+        clear_action: 'SEGMENT_CLEAR',
+        read_at: nowIso,
+        panel_amount: addedCash,
+        cash_collected: addedCash,
+        last_coin_counter: targetMachine?.last_coin_counter || 0,
+        coin_counter:
+          typeof payload.newCoinCounter === 'number' && payload.newCoinCounter >= 0
+            ? payload.newCoinCounter
+            : (targetMachine?.last_coin_counter || 0) + coinsDelta,
+        last_prize_counter: targetMachine?.last_prize_counter || 0,
+        prize_counter: targetMachine?.last_prize_counter || 0,
+        reset_mode: 'NORMAL',
+        coins_delta: coinsDelta,
+        prizes_delta: 0,
+        notes: payload.note || '分批巡場收幣',
+      };
+      setReadings((prev) => [newReading, ...prev]);
+    }
+
+    // 4. 若有傳入類比錶頭最新讀數，自動同步更新該機台之 last_coin_counter (免去重複打錶)
     if (typeof payload.newCoinCounter === 'number' && payload.newCoinCounter >= 0) {
       setMachines((prev) =>
         prev.map((m) =>

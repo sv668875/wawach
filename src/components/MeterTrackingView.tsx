@@ -23,6 +23,8 @@ import {
   MapPin,
   Boxes,
   Package,
+  Repeat,
+  Target,
 } from 'lucide-react';
 import {
   ClearActionType,
@@ -588,8 +590,8 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
               </div>
               <p className="text-[11px] text-slate-500 mt-1">
                 {newMachineType === 'STANDARD'
-                  ? '🧸 純出貨娃娃機：不顯示刮板干擾資訊，專注出貨件數、均出率與機台補貨'
-                  : '🎟️ 刮板一番賞機：支援隨時上板、貼獎號、巡場進度與回錢扣減'}
+                  ? '純出貨娃娃機：不顯示刮板干擾資訊，專注出貨件數、均出率與機台補貨'
+                  : '刮板一番賞機：支援隨時上板、貼獎號、巡場進度與回錢扣減'}
               </p>
             </div>
 
@@ -1095,7 +1097,10 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
                     <div className="text-xs font-bold whitespace-nowrap">{m.name}</div>
                     <div className="text-[10px] font-mono flex items-center gap-1.5 mt-0.5">
                       {isPure ? (
-                        <span className="text-sky-400 font-medium">🧸 純出貨</span>
+                        <span className="text-sky-400 font-medium flex items-center gap-1">
+                          <Package className="w-3 h-3 shrink-0" />
+                          純出貨
+                        </span>
                       ) : (
                         <span className={hasBoard ? 'text-emerald-400' : 'text-slate-500'}>
                           {hasBoard ? '● 有版' : '○ 無版'}
@@ -1156,10 +1161,11 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
                     <button
                       type="button"
                       onClick={() => onUpdateMachineType(selectedMachine.machine_id, 'SCRATCH_HYBRID')}
-                      className="text-[11px] font-bold text-amber-400 hover:text-amber-300 bg-amber-500/10 border border-amber-500/30 px-2.5 py-1.5 rounded-lg active:scale-95 transition-all shrink-0"
+                      className="h-8 px-2.5 rounded-lg border border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 text-xs font-semibold flex items-center gap-1.5 transition-colors shrink-0"
                       title="若要在此機台舉辦刮刮樂活動，可隨時轉為刮板一番賞機"
                     >
-                      轉為刮板台 ➔
+                      <Repeat className="w-3.5 h-3.5 text-amber-400" />
+                      <span>轉為刮板台</span>
                     </button>
                   )}
                 </div>
@@ -1283,10 +1289,11 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
                       <button
                         type="button"
                         onClick={() => onUpdateMachineType(selectedMachine.machine_id, 'STANDARD')}
-                        className="text-[11px] font-bold text-slate-400 hover:text-white bg-slate-800 px-2 py-1 rounded-lg active:scale-95 transition-all"
+                        className="h-8 px-2.5 rounded-lg border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold flex items-center gap-1.5 transition-colors shrink-0"
                         title="切換此機台為純出貨娃娃機"
                       >
-                        轉為純娃娃機 ➔
+                        <Repeat className="w-3.5 h-3.5 text-sky-400" />
+                        <span>轉為純娃娃機</span>
                       </button>
                     )}
                   </div>
@@ -1340,10 +1347,11 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
                         <button
                           type="button"
                           onClick={() => onUpdateMachineType(selectedMachine.machine_id, 'STANDARD')}
-                          className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 text-[11px] font-bold transition-colors"
+                          className="h-7 px-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold flex items-center gap-1 transition-colors"
                           title="切換此機台為純出貨娃娃機"
                         >
-                          轉純機
+                          <Repeat className="w-3 h-3 text-sky-400" />
+                          <span>轉純娃娃機</span>
                         </button>
                       )}
                       <button
@@ -1414,14 +1422,14 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
 
                 {/* 數位 / 類比切換小鈕與刪除按鈕 */}
                 <div className="flex items-center gap-2">
-                  <div className="flex items-center bg-[#0B0F17] p-0.5 rounded-lg border border-slate-800">
+                  <div className="grid grid-cols-2 w-40 h-7 bg-[#0B0F17] p-0.5 rounded-lg border border-slate-800">
                     <button
                       type="button"
                       onClick={() => onSwitchMachineModel(selectedMachine.machine_id, 'DIGITAL')}
-                      className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition-colors whitespace-nowrap ${
+                      className={`h-full rounded text-[11px] font-bold flex items-center justify-center transition-colors whitespace-nowrap ${
                         isDigitalMode
-                          ? 'bg-amber-500 text-slate-950'
-                          : 'text-slate-400'
+                          ? 'bg-amber-500 text-slate-950 shadow-sm'
+                          : 'text-slate-400 hover:text-white'
                       }`}
                     >
                       數位面板
@@ -1429,10 +1437,10 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
                     <button
                       type="button"
                       onClick={() => onSwitchMachineModel(selectedMachine.machine_id, 'ANALOG')}
-                      className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition-colors whitespace-nowrap ${
+                      className={`h-full rounded text-[11px] font-bold flex items-center justify-center transition-colors whitespace-nowrap ${
                         !isDigitalMode
-                          ? 'bg-amber-500 text-slate-950'
-                          : 'text-slate-400'
+                          ? 'bg-amber-500 text-slate-950 shadow-sm'
+                          : 'text-slate-400 hover:text-white'
                       }`}
                     >
                       傳統滾輪
@@ -1457,16 +1465,19 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
                   <span>收幣記錄流向：</span>
                 </span>
                 {isPureMachine ? (
-                  <span className="font-mono text-sky-400 font-bold flex items-center gap-1 text-[11px] bg-sky-500/10 px-2 py-0.5 rounded border border-sky-500/30">
-                    <span>🧸 純出貨機台（直接計入此台投幣營收與出貨率）</span>
+                  <span className="font-mono text-sky-400 font-bold flex items-center gap-1.5 text-[11px] bg-sky-500/10 px-2 py-0.5 rounded border border-sky-500/30">
+                    <Package className="w-3.5 h-3.5 shrink-0" />
+                    <span>純出貨機台（直接計入此台投幣營收與出貨率）</span>
                   </span>
                 ) : machineActiveBoards.length > 0 ? (
-                  <span className="font-mono text-emerald-400 font-bold flex items-center gap-1 text-[11px] bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/30">
-                    <span>🎯 直接匯入現有 [{machineActiveBoards[0].board_letter || 'A'}板]</span>
+                  <span className="font-mono text-emerald-400 font-bold flex items-center gap-1.5 text-[11px] bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/30">
+                    <Target className="w-3.5 h-3.5 shrink-0" />
+                    <span>直接匯入現有 [{machineActiveBoards[0].board_letter || 'A'}板]</span>
                   </span>
                 ) : (
-                  <span className="font-mono text-slate-400 text-[11px] bg-slate-800/80 px-2 py-0.5 rounded border border-slate-700">
-                    🎰 無進行中看板（直接匯入機台本身幣量）
+                  <span className="font-mono text-slate-400 text-[11px] bg-slate-800/80 px-2 py-0.5 rounded border border-slate-700 flex items-center gap-1.5">
+                    <Layers className="w-3.5 h-3.5 shrink-0" />
+                    <span>無進行中看板（直接匯入機台本身幣量）</span>
                   </span>
                 )}
               </div>

@@ -19,8 +19,13 @@ import {
   Trash2,
   Layers,
   Building,
+  Building2,
   Filter,
   Package,
+  Ticket,
+  Box,
+  ArrowDownLeft,
+  Target,
 } from 'lucide-react';
 import {
   Expense,
@@ -109,6 +114,7 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
       read_at: r.read_at,
       revenue_amount: r.cash_collected || r.panel_amount || 0,
       prize_delta: r.prizes_delta || 0,
+      board_id: r.board_id,
     }));
   }, [readings]);
 
@@ -185,10 +191,18 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
     return scratchBoards.filter((b) => {
       const createdT = new Date(b.created_at).getTime();
       const settledT = b.settled_at ? new Date(b.settled_at).getTime() : 0;
-      return (
-        (createdT >= dateRange.start.getTime() && createdT <= dateRange.end.getTime()) ||
-        (settledT >= dateRange.start.getTime() && settledT <= dateRange.end.getTime())
-      );
+      const inCreated = !isNaN(createdT) && createdT >= dateRange.start.getTime() && createdT <= dateRange.end.getTime();
+      const inSettled = !isNaN(settledT) && settledT >= dateRange.start.getTime() && settledT <= dateRange.end.getTime();
+      const hasLogsInRange = (b.check_logs || []).some((l) => {
+        const lt = new Date(l.logged_at).getTime();
+        return !isNaN(lt) && lt >= dateRange.start.getTime() && lt <= dateRange.end.getTime();
+      });
+      const hasPrizesInRange = (b.prizes || []).some((p) => {
+        if (!p.is_claimed || !p.claimed_at) return false;
+        const pt = new Date(p.claimed_at).getTime();
+        return !isNaN(pt) && pt >= dateRange.start.getTime() && pt <= dateRange.end.getTime();
+      });
+      return inCreated || inSettled || hasLogsInRange || hasPrizesInRange || b.status === 'ACTIVE';
     });
   }, [scratchBoards, dateRange]);
 
@@ -223,32 +237,93 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
       });
       const mAdjustedOverhead = mRawOverhead.grandTotalOverhead;
 
-      let boardGrossCoin = 0;
-      let boardCashbackDeducted = 0;
-      let boardNetCoin = 0;
-      let boardPrizeCost = 0;
-      let boardPaperCost = 0;
+      let grossRevenue = 0;
+      let cashbackDeducted = 0;
+      let prizeCost = 0;
+      let paperCost = 0;
 
-      mBoards.forEach((b) => {
-        const fin = calculateScratchBoardFinancials(
-          b.board_cost,
-          b.gross_coin_revenue,
-          b.prizes
-        );
-        boardGrossCoin += fin.grossCoinRevenue;
-        boardCashbackDeducted += fin.totalCashbackDeducted;
-        boardNetCoin += fin.netCoinRevenue;
-        boardPrizeCost += fin.claimedPrizeCost;
-        boardPaperCost += Number(b.board_cost) || 0;
-      });
+      if (!dateRange) {
+        // 全場累計維度 (ALL TIME)
+        mBoards.forEach((b) => {
+          const fin = calculateScratchBoardFinancials(
+            b.board_cost,
+            b.gross_coin_revenue,
+            b.prizes
+          );
+          grossRevenue += fin.grossCoinRevenue;
+          cashbackDeducted += fin.totalCashbackDeducted;
+          prizeCost += fin.claimedPrizeCost;
+          paperCost += Number(b.board_cost) || 0;
+        });
 
-      const standaloneReadingsRevenue = mReadings
-        .filter((r) => !r.board_id)
-        .reduce((sum, r) => sum + (Number(r.cash_collected) || 0), 0);
+        const standaloneReadingsRevenue = mReadings
+          .filter((r) => !r.board_id)
+          .reduce((sum, r) => sum + (Number(r.cash_collected || r.panel_amount) || 0), 0);
+        grossRevenue += standaloneReadingsRevenue;
+      } else {
+        // 指定期間維度 (MONTH / WEEK / YEAR)：嚴格以該區間內發生的收幣與支出事件結算，保證與月度總結完全吻合
+        const rangeStart = dateRange.start.getTime();
+        const rangeEnd = dateRange.end.getTime();
 
-      const grossRevenue = boardGrossCoin + standaloneReadingsRevenue;
-      const netRevenueAfterCashback = boardNetCoin + standaloneReadingsRevenue;
-      const totalDirectPrizeCost = boardPrizeCost + boardPaperCost;
+        // 1. 該區間內此機台所有收幣抄錶紀錄 (包含純機抄錶與刮板收幣)
+        mReadings.forEach((r) => {
+          grossRevenue += Number(r.cash_collected || r.panel_amount) || 0;
+        });
+
+        // 2. 該區間內刮板巡場收幣 (若尚未在 readings 中)
+        mBoards.forEach((b) => {
+          (b.check_logs || []).forEach((log) => {
+            const cash = Number(log.recorded_cash_added) || 0;
+            if (cash <= 0) return;
+            const lt = new Date(log.logged_at).getTime();
+            if (isNaN(lt) || lt < rangeStart || lt > rangeEnd) return;
+            const isAlreadyInReadings = mReadings.some(
+              (r) =>
+                r.board_id === b.board_id &&
+                Math.abs(new Date(r.read_at).getTime() - lt) < 60_000 &&
+                (r.cash_collected === cash || r.panel_amount === cash)
+            );
+            if (!isAlreadyInReadings) {
+              grossRevenue += cash;
+            }
+          });
+
+          // 若刮板建立於該區間，補齊未被 readings/check_logs 覆蓋的差額
+          const bCreated = new Date(b.created_at).getTime();
+          if (!isNaN(bCreated) && bCreated >= rangeStart && bCreated <= rangeEnd) {
+            paperCost += Number(b.board_cost) || 0;
+            const boardTotalGross = Number(b.gross_coin_revenue) || 0;
+            const allLogsSum = (b.check_logs || []).reduce(
+              (s, l) => s + (Number(l.recorded_cash_added) || 0),
+              0
+            );
+            const allReadingsSum = readings
+              .filter((r) => r.board_id === b.board_id)
+              .reduce((s, r) => s + (Number(r.cash_collected || r.panel_amount) || 0), 0);
+            const maxCaptured = Math.max(allLogsSum, allReadingsSum);
+            const diff = Math.max(0, boardTotalGross - maxCaptured);
+            if (diff > 0) {
+              grossRevenue += diff;
+            }
+          }
+
+          // 3. 該區間內中獎開出的獎項成本與回錢折現
+          (b.prizes || []).forEach((p) => {
+            if (!p.is_claimed) return;
+            const claimDateStr = p.claimed_at || b.settled_at || b.created_at;
+            const ct = new Date(claimDateStr).getTime();
+            if (isNaN(ct) || ct < rangeStart || ct > rangeEnd) return;
+            if (p.claim_type === 'CASHBACK') {
+              cashbackDeducted += Number(p.cashback_amount) || 0;
+            } else {
+              prizeCost += Number(p.prize_cost) || 0;
+            }
+          });
+        });
+      }
+
+      const netRevenueAfterCashback = grossRevenue - cashbackDeducted;
+      const totalDirectPrizeCost = prizeCost + paperCost;
       const netProfit =
         netRevenueAfterCashback -
         totalDirectPrizeCost -
@@ -258,7 +333,7 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
         machine: m,
         boardsCount: mBoards.length,
         grossRevenue,
-        cashbackDeducted: boardCashbackDeducted,
+        cashbackDeducted,
         netRevenueAfterCashback,
         totalDirectPrizeCost,
         fixedOverhead: mAdjustedOverhead,
@@ -511,8 +586,8 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
             <span>時間範圍</span>
           </div>
 
-          {/* 週 / 月 / 年 / 全部切換 */}
-          <div className="flex items-center bg-[#0B0F17] p-0.5 rounded-lg border border-slate-800">
+          {/* 週 / 月 / 年 / 全部切換 (防擠壓網格) */}
+          <div className="grid grid-cols-4 sm:flex items-center bg-[#0B0F17] p-1 rounded-xl border border-slate-800">
             {(['ALL', 'WEEK', 'MONTH', 'YEAR'] as PeriodType[]).map((type) => (
               <button
                 key={type}
@@ -526,7 +601,7 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
                   }
                   if (type === 'YEAR') setSelectedYear(now.getFullYear());
                 }}
-                className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition-all ${
+                className={`h-7 px-2.5 rounded-lg text-xs font-semibold transition-colors text-center whitespace-nowrap ${
                   periodType === type
                     ? 'bg-amber-500 text-slate-950 shadow-sm'
                     : 'text-slate-400 hover:text-white'
@@ -652,12 +727,12 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
                 </div>
               </div>
 
-              {/* 3-way 雙棲混營視角切換膠囊 (全場總帳預設合併、可分流純機與刮板) */}
-              <div className="flex items-center bg-[#0B0F17] p-0.5 rounded-lg border border-slate-800 self-start sm:self-auto">
+              {/* 3-way 雙棲混營視角切換膠囊 (防擠壓、滿寬網格) */}
+              <div className="grid grid-cols-3 sm:flex items-center bg-[#0B0F17] p-1 rounded-xl border border-slate-800 w-full sm:w-auto">
                 <button
                   type="button"
                   onClick={() => setMonthlyFleetFilter('ALL')}
-                  className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition-all ${
+                  className={`h-8 sm:h-7 px-3 rounded-lg text-xs font-semibold transition-colors text-center whitespace-nowrap ${
                     monthlyFleetFilter === 'ALL'
                       ? 'bg-amber-500 text-slate-950 shadow-sm'
                       : 'text-slate-400 hover:text-white'
@@ -668,7 +743,7 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
                 <button
                   type="button"
                   onClick={() => setMonthlyFleetFilter('STANDARD')}
-                  className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition-all ${
+                  className={`h-8 sm:h-7 px-3 rounded-lg text-xs font-semibold transition-colors text-center whitespace-nowrap ${
                     monthlyFleetFilter === 'STANDARD'
                       ? 'bg-amber-500 text-slate-950 shadow-sm'
                       : 'text-slate-400 hover:text-white'
@@ -679,7 +754,7 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
                 <button
                   type="button"
                   onClick={() => setMonthlyFleetFilter('SCRATCH_HYBRID')}
-                  className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition-all ${
+                  className={`h-8 sm:h-7 px-3 rounded-lg text-xs font-semibold transition-colors text-center whitespace-nowrap ${
                     monthlyFleetFilter === 'SCRATCH_HYBRID'
                       ? 'bg-amber-500 text-slate-950 shadow-sm'
                       : 'text-slate-400 hover:text-white'
@@ -970,27 +1045,45 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
                       {isExpanded && (
                         <div className="px-3 pb-3 pt-1 border-t border-slate-800/80 grid grid-cols-2 sm:grid-cols-3 gap-2 text-[11px] font-mono">
                           <div className="p-2 rounded-lg bg-[#111827] border border-slate-800">
-                            <span className="text-slate-400 block text-[10px]">🧸 純機收幣</span>
+                            <span className="flex items-center gap-1 text-slate-400 text-[10px] mb-0.5">
+                              <Package className="w-3 h-3 text-sky-400 shrink-0" />
+                              純機收幣
+                            </span>
                             <span className="text-white font-bold">${m.standard_machine_revenue.toLocaleString()}</span>
                           </div>
                           <div className="p-2 rounded-lg bg-[#111827] border border-slate-800">
-                            <span className="text-slate-400 block text-[10px]">🎟️ 刮板收幣</span>
+                            <span className="flex items-center gap-1 text-slate-400 text-[10px] mb-0.5">
+                              <Ticket className="w-3 h-3 text-amber-400 shrink-0" />
+                              刮板收幣
+                            </span>
                             <span className="text-amber-400 font-bold">${m.scratch_machine_revenue.toLocaleString()}</span>
                           </div>
                           <div className="p-2 rounded-lg bg-[#111827] border border-slate-800">
-                            <span className="text-slate-400 block text-[10px]">🏢 實付台租</span>
+                            <span className="flex items-center gap-1 text-slate-400 text-[10px] mb-0.5">
+                              <Building2 className="w-3 h-3 text-amber-400 shrink-0" />
+                              實付台租
+                            </span>
                             <span className="text-amber-400 font-bold">-${m.rent_and_overhead.toLocaleString()}</span>
                           </div>
                           <div className="p-2 rounded-lg bg-[#111827] border border-slate-800">
-                            <span className="text-slate-400 block text-[10px]">📦 獎品成本</span>
+                            <span className="flex items-center gap-1 text-slate-400 text-[10px] mb-0.5">
+                              <Box className="w-3 h-3 text-sky-400 shrink-0" />
+                              獎品成本
+                            </span>
                             <span className="text-sky-400 font-bold">-${m.product_cost.toLocaleString()}</span>
                           </div>
                           <div className="p-2 rounded-lg bg-[#111827] border border-slate-800">
-                            <span className="text-slate-400 block text-[10px]">💸 回錢給付</span>
+                            <span className="flex items-center gap-1 text-slate-400 text-[10px] mb-0.5">
+                              <ArrowDownLeft className="w-3 h-3 text-rose-400 shrink-0" />
+                              回錢給付
+                            </span>
                             <span className="text-rose-400 font-bold">-${m.cashback_deducted.toLocaleString()}</span>
                           </div>
                           <div className="p-2 rounded-lg bg-[#111827] border border-slate-800">
-                            <span className="text-slate-400 block text-[10px]">🎯 累計出貨</span>
+                            <span className="flex items-center gap-1 text-slate-400 text-[10px] mb-0.5">
+                              <Target className="w-3 h-3 text-emerald-400 shrink-0" />
+                              累計出貨
+                            </span>
                             <span className="text-emerald-400 font-bold">{m.payout_count} 件 {m.avg_coin_per_prize ? `(均投 $${m.avg_coin_per_prize})` : ''}</span>
                           </div>
                         </div>

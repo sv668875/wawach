@@ -482,4 +482,66 @@ describe('computeMonthlyFinancialTrends (近6個月損益與雙棲混營趨勢�
     expect(nov?.net_margin_pct).toBe(0);
     expect(isNaN(nov?.net_margin_pct || 0)).toBe(false);
   });
+
+  it('刮板巡場收幣 (check_logs) 與刮板累計收幣，即使未有獨立 reading 也百分之百計入 11 月總結算', () => {
+    // 模擬使用者在 11 月進行刮板分批巡場收幣 $2,500，且板上有未單獨建錶的初始收幣 $1,000
+    const boardsWithPatrol: ScratchBoard[] = [
+      {
+        board_id: 'brd-patrol-1',
+        machine_id: 'mac-2',
+        title: '巡場測試板',
+        total_holes: 100,
+        remaining_holes: 60,
+        board_cost: 50,
+        status: 'ACTIVE',
+        gross_coin_revenue: 3500, // 總收幣 3500 (2500 來自巡場 log + 1000 來自初始建板)
+        total_cashback_deducted: 0,
+        net_coin_revenue: 3500,
+        total_prize_cost: 0,
+        net_profit: 3450,
+        prizes: [],
+        check_logs: [
+          {
+            check_id: 'chk-test-1',
+            logged_at: '2026-11-06T15:00:00Z',
+            remaining_holes: 60,
+            recorded_cash_added: 2500,
+            note: '11月巡場收幣',
+          },
+        ],
+        created_at: '2026-11-02T10:00:00Z',
+      },
+    ];
+
+    // 純機台有一筆 11 月收幣 4000
+    const testReadings = [
+      {
+        machine_id: 'mac-1',
+        read_at: '2026-11-05T12:00:00Z',
+        revenue_amount: 4000,
+        prize_delta: 5,
+        board_id: null,
+      },
+    ];
+
+    const trends = computeMonthlyFinancialTrends(
+      testReadings,
+      mockMachines,
+      [],
+      boardsWithPatrol,
+      { monthsCount: 6, referenceDate: new Date('2026-11-15T00:00:00Z'), fleetFilter: 'ALL' }
+    );
+
+    const nov = trends.find((t) => t.period_label === '2026-11');
+    // 11月總收幣 = 純機 4000 + 刮板巡場 2500 + 初始建板差額 1000 = 7500
+    expect(nov?.gross_coin_revenue).toBe(7500);
+    expect(nov?.standard_machine_revenue).toBe(4000);
+    expect(nov?.scratch_machine_revenue).toBe(3500);
+    // 空板成本 50
+    expect(nov?.product_cost).toBe(50);
+    // 台租 9000 (m_std 4000 + m_scratch 5000)
+    expect(nov?.rent_and_overhead).toBe(9000);
+    // 淨利 = 7500 - 50 - 9000 = -1550
+    expect(nov?.net_profit).toBe(-1550);
+  });
 });
