@@ -1370,30 +1370,6 @@ export default function App() {
     );
   };
 
-  const handleUpdateMachineType = (
-    machineId: string,
-    machineType: MachineType,
-    extra?: { guaranteed_amount?: number; target_payout_rate?: number }
-  ) => {
-    pushUndo(`變更機台型態為 ${machineType === 'STANDARD' ? '純出貨娃娃機' : '刮板一番賞機'}`);
-    setMachines((prev) =>
-      prev.map((m) =>
-        m.machine_id === machineId
-          ? {
-              ...m,
-              machine_type: machineType,
-              guaranteed_amount: extra?.guaranteed_amount ?? m.guaranteed_amount,
-              target_payout_rate: extra?.target_payout_rate ?? m.target_payout_rate,
-            }
-          : m
-      )
-    );
-    showToast(
-      machineType === 'STANDARD'
-        ? '已設為純出貨娃娃機模式（已隱藏刮板設定）'
-        : '已設為刮板一番賞機模式（可進行上版與獎項管理）'
-    );
-  };
 
   const handleRestockMachine = (
     machineId: string,
@@ -1772,7 +1748,6 @@ export default function App() {
             onDeleteMachine={handleDeleteMachine}
             onCalibrateCounters={handleCalibrateMachineCounters}
             onSwitchMachineModel={handleSwitchMachineModel}
-            onUpdateMachineType={handleUpdateMachineType}
             onRestockMachine={handleRestockMachine}
             onDeleteReading={handleDeleteReading}
             onJumpToScratchBoard={(boardId) => {

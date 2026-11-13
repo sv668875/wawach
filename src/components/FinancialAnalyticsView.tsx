@@ -716,52 +716,15 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
       {/* 維度 1：全場損益總覽 (OVERVIEW) */}
       {analyticsDimension === 'OVERVIEW' && (
         <>
-          {/* 需求 2：近 6 個月損益走勢 (手機圖表化 · 支援全場總帳與雙棲分流) */}
+          {/* 需求 2：近 6 個月損益走勢 (手機圖表化 · 免橫向滾動) */}
           <div className="bg-[#111827] border border-[#1E293B] rounded-xl p-4 space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+            <div className="flex items-center justify-between gap-2.5">
               <div className="flex items-center gap-2">
                 <BarChart3 className="w-4 h-4 text-amber-400" />
                 <div>
                   <h3 className="text-sm font-bold text-white">近 6 個月營運損益走勢</h3>
                   <p className="text-[11px] text-slate-400">免橫向滾動圖表 · 點擊柱狀切換焦點月份</p>
                 </div>
-              </div>
-
-              {/* 3-way 雙棲混營視角切換膠囊 (防擠壓、滿寬網格) */}
-              <div className="grid grid-cols-3 sm:flex items-center bg-[#0B0F17] p-1 rounded-xl border border-slate-800 w-full sm:w-auto">
-                <button
-                  type="button"
-                  onClick={() => setMonthlyFleetFilter('ALL')}
-                  className={`h-8 sm:h-7 px-3 rounded-lg text-xs font-semibold transition-colors text-center whitespace-nowrap ${
-                    monthlyFleetFilter === 'ALL'
-                      ? 'bg-amber-500 text-slate-950 shadow-sm'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  全場合計
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setMonthlyFleetFilter('STANDARD')}
-                  className={`h-8 sm:h-7 px-3 rounded-lg text-xs font-semibold transition-colors text-center whitespace-nowrap ${
-                    monthlyFleetFilter === 'STANDARD'
-                      ? 'bg-amber-500 text-slate-950 shadow-sm'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  純娃娃機
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setMonthlyFleetFilter('SCRATCH_HYBRID')}
-                  className={`h-8 sm:h-7 px-3 rounded-lg text-xs font-semibold transition-colors text-center whitespace-nowrap ${
-                    monthlyFleetFilter === 'SCRATCH_HYBRID'
-                      ? 'bg-amber-500 text-slate-950 shadow-sm'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  刮板台
-                </button>
               </div>
             </div>
 

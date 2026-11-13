@@ -68,11 +68,6 @@ interface MeterTrackingViewProps {
   onDeleteMachine: (machineId: string) => void;
   onCalibrateCounters: (machineId: string, initialCoin: number, initialPrize: number) => void;
   onSwitchMachineModel: (machineId: string, model: MachineModel) => void;
-  onUpdateMachineType?: (
-    machineId: string,
-    machineType: MachineType,
-    extra?: { guaranteed_amount?: number; target_payout_rate?: number }
-  ) => void;
   onRestockMachine?: (
     machineId: string,
     stock: StockedItem,
@@ -97,7 +92,6 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
   onDeleteMachine,
   onCalibrateCounters,
   onSwitchMachineModel,
-  onUpdateMachineType,
   onRestockMachine,
   onDeleteReading,
   onJumpToScratchBoard,
@@ -238,7 +232,6 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
   const [isAddMachineOpen, setIsAddMachineOpen] = useState(false);
   const [newMachineCode, setNewMachineCode] = useState(() => getNextMachineCode(machines));
   const [newMachineName, setNewMachineName] = useState('');
-  const [newMachineType, setNewMachineType] = useState<MachineType>('STANDARD');
   const [newMachineGuaranteedAmount, setNewMachineGuaranteedAmount] = useState<number>(1980);
   const [newMachineTargetPayoutRate, setNewMachineTargetPayoutRate] = useState<number>(400);
   const [newMachineModel, setNewMachineModel] = useState<MachineModel>('DIGITAL');
@@ -412,7 +405,6 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
   const openAddMachineModal = (loc?: string) => {
     setNewMachineCode(getNextMachineCode(machines));
     setNewMachineName('');
-    setNewMachineType('STANDARD');
     setNewMachineGuaranteedAmount(1980);
     setNewMachineTargetPayoutRate(400);
     setNewMachineLocation(loc || selectedLocation || allLocations[0] || '');
@@ -452,9 +444,9 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
       code: trimmedCode,
       name: newMachineName.trim(),
       machine_model: newMachineModel,
-      machine_type: newMachineType,
-      guaranteed_amount: newMachineType === 'STANDARD' ? (Number(newMachineGuaranteedAmount) || undefined) : undefined,
-      target_payout_rate: newMachineType === 'STANDARD' ? (Number(newMachineTargetPayoutRate) || undefined) : undefined,
+      machine_type: 'STANDARD',
+      guaranteed_amount: Number(newMachineGuaranteedAmount) || undefined,
+      target_payout_rate: Number(newMachineTargetPayoutRate) || undefined,
       location: finalLocation,
       rent_monthly: Number(newMachineRent) || 4500,
       other_fixed_fee: 0,
@@ -559,70 +551,33 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
               </div>
             </div>
 
-            {/* 需求 1：純機台 vs 刮板台 模式切換 */}
-            <div>
-              <label className="block text-[11px] text-slate-400 mb-1">經營型態</label>
-              <div className="grid grid-cols-2 gap-1.5 bg-[#0B0F17] p-1 rounded-xl border border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => setNewMachineType('STANDARD')}
-                  className={`py-2 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
-                    newMachineType === 'STANDARD'
-                      ? 'bg-amber-500 text-slate-950 shadow-sm'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  <Package className="w-3.5 h-3.5" />
-                  <span>純出貨娃娃機</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setNewMachineType('SCRATCH_HYBRID')}
-                  className={`py-2 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
-                    newMachineType === 'SCRATCH_HYBRID'
-                      ? 'bg-amber-500 text-slate-950 shadow-sm'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  <Grid className="w-3.5 h-3.5" />
-                  <span>刮板一番賞機</span>
-                </button>
+            {/* 保夾金額與預期均出 (選填) */}
+            <div className="grid grid-cols-2 gap-2 bg-[#0B0F17] p-2.5 rounded-xl border border-slate-800">
+              <div>
+                <label className="block text-[11px] text-slate-400 mb-1">保夾金額 ($)</label>
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  value={newMachineGuaranteedAmount === 0 ? '' : newMachineGuaranteedAmount}
+                  onFocus={(e) => { if (e.target.value === '0') e.target.value = ''; e.target.select(); }}
+                  onChange={(e) => setNewMachineGuaranteedAmount(e.target.value === '' ? 0 : Number(e.target.value))}
+                  placeholder="例如 1980"
+                  className="w-full bg-[#111827] border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs font-mono text-white"
+                />
               </div>
-              <p className="text-[11px] text-slate-500 mt-1">
-                {newMachineType === 'STANDARD'
-                  ? '純出貨娃娃機：不顯示刮板干擾資訊，專注出貨件數、均出率與機台補貨'
-                  : '刮板一番賞機：支援隨時上板、貼獎號、巡場進度與回錢扣減'}
-              </p>
+              <div>
+                <label className="block text-[11px] text-slate-400 mb-1">預期均出 ($/件)</label>
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  value={newMachineTargetPayoutRate === 0 ? '' : newMachineTargetPayoutRate}
+                  onFocus={(e) => { if (e.target.value === '0') e.target.value = ''; e.target.select(); }}
+                  onChange={(e) => setNewMachineTargetPayoutRate(e.target.value === '' ? 0 : Number(e.target.value))}
+                  placeholder="例如 450"
+                  className="w-full bg-[#111827] border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs font-mono text-white"
+                />
+              </div>
             </div>
-
-            {newMachineType === 'STANDARD' && (
-              <div className="grid grid-cols-2 gap-2 bg-[#0B0F17] p-2.5 rounded-xl border border-slate-800">
-                <div>
-                  <label className="block text-[11px] text-slate-400 mb-1">保夾金額 ($)</label>
-                  <input
-                    type="number"
-                    inputMode="numeric"
-                    value={newMachineGuaranteedAmount === 0 ? '' : newMachineGuaranteedAmount}
-                    onFocus={(e) => { if (e.target.value === '0') e.target.value = ''; e.target.select(); }}
-                    onChange={(e) => setNewMachineGuaranteedAmount(e.target.value === '' ? 0 : Number(e.target.value))}
-                    placeholder="例如 1980"
-                    className="w-full bg-[#111827] border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs font-mono text-white"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[11px] text-slate-400 mb-1">預期均出 ($/件)</label>
-                  <input
-                    type="number"
-                    inputMode="numeric"
-                    value={newMachineTargetPayoutRate === 0 ? '' : newMachineTargetPayoutRate}
-                    onFocus={(e) => { if (e.target.value === '0') e.target.value = ''; e.target.select(); }}
-                    onChange={(e) => setNewMachineTargetPayoutRate(e.target.value === '' ? 0 : Number(e.target.value))}
-                    placeholder="例如 450"
-                    className="w-full bg-[#111827] border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs font-mono text-white"
-                  />
-                </div>
-              </div>
-            )}
 
             <div className="grid grid-cols-2 gap-2">
               <div>
@@ -1072,7 +1027,6 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
               const hasBoard = scratchBoards.some(
                 (b) => b.machine_id === m.machine_id && b.status === 'ACTIVE'
               );
-              const isPure = (m.machine_type || (m.active_board_id ? 'SCRATCH_HYBRID' : 'STANDARD')) === 'STANDARD';
               return (
                 <button
                   key={m.machine_id}
@@ -1096,14 +1050,15 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
                   <div>
                     <div className="text-xs font-bold whitespace-nowrap">{m.name}</div>
                     <div className="text-[10px] font-mono flex items-center gap-1.5 mt-0.5">
-                      {isPure ? (
-                        <span className="text-sky-400 font-medium flex items-center gap-1">
-                          <Package className="w-3 h-3 shrink-0" />
-                          純出貨
+                      {hasBoard ? (
+                        <span className="text-emerald-400 font-medium flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
+                          刮板中
                         </span>
                       ) : (
-                        <span className={hasBoard ? 'text-emerald-400' : 'text-slate-500'}>
-                          {hasBoard ? '● 有版' : '○ 無版'}
+                        <span className="text-slate-500 flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-slate-600 shrink-0" />
+                          出貨台
                         </span>
                       )}
                     </div>
@@ -1127,7 +1082,6 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
 
       {/* 3. 第三層：只有在新增機台並選擇機台後，才會出現其他設定！ */}
       {selectedMachine && (() => {
-        const isPureMachine = (selectedMachine.machine_type || (selectedMachine.active_board_id ? 'SCRATCH_HYBRID' : 'STANDARD')) === 'STANDARD';
         const totalStockValuation = (selectedMachine.stocked_items || []).reduce(
           (sum, s) => sum + s.cost * s.quantity,
           0
@@ -1138,276 +1092,205 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
 
         return (
           <>
-            {/* 機台模式頂部區塊：純出貨台 vs 刮板台 (需求 1：純機台絕不出現「目前無版・一鍵上版」干擾資訊) */}
-            {isPureMachine ? (
-              <div className="bg-[#111827] border border-sky-500/30 rounded-xl p-4 space-y-3.5">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-lg bg-sky-500/15 flex items-center justify-center text-sky-400 shrink-0">
-                      <Package className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <div className="text-sm font-bold text-white flex items-center gap-2">
-                        <span>純出貨娃娃機營運</span>
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-400 border border-sky-500/30 font-medium">
-                          公仔 / 零食出貨
+            {/* 1. 機台營運指標與即時均投比卡片 */}
+            <div className="bg-[#111827] border border-[#1E293B] rounded-xl p-4 space-y-3.5">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-amber-500/15 flex items-center justify-center text-amber-400 shrink-0 font-mono font-bold text-xs">
+                    {selectedMachine.code}
+                  </div>
+                  <div>
+                    <div className="text-sm font-bold text-white flex items-center gap-2">
+                      <span>{selectedMachine.name}</span>
+                      {machineActiveBoards.length > 0 ? (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-medium">
+                          刮板活動中 ({machineActiveBoards.length} 版)
                         </span>
-                      </div>
-                      <div className="text-[11px] text-slate-400">專注均出投幣比與在台壓貨補貨</div>
+                      ) : (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700 font-medium">
+                          一般出貨機台
+                        </span>
+                      )}
                     </div>
-                  </div>
-
-                  {onUpdateMachineType && (
-                    <button
-                      type="button"
-                      onClick={() => onUpdateMachineType(selectedMachine.machine_id, 'SCRATCH_HYBRID')}
-                      className="h-8 px-2.5 rounded-lg border border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 text-xs font-semibold flex items-center gap-1.5 transition-colors shrink-0"
-                      title="若要在此機台舉辦刮刮樂活動，可隨時轉為刮板一番賞機"
-                    >
-                      <Repeat className="w-3.5 h-3.5 text-amber-400" />
-                      <span>轉為刮板台</span>
-                    </button>
-                  )}
-                </div>
-
-                {/* 關鍵營運指標：累計出貨件數、投幣累計、均出投幣比 */}
-                <div className="grid grid-cols-3 gap-2 bg-[#0B0F17] p-3 rounded-xl border border-slate-800 text-center">
-                  <div>
-                    <div className="text-xs text-slate-400 font-medium">累計出貨</div>
-                    <div className="text-sm font-mono font-bold text-emerald-400">
-                      {totalPrizeCount.toLocaleString()} 件
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-xs text-slate-400 font-medium">累計投幣</div>
-                    <div className="text-sm font-mono font-bold text-amber-400">
-                      ${totalCoinCollected.toLocaleString()}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-xs text-slate-400 font-medium">即時均投比</div>
-                    <div className="text-sm font-mono font-bold text-white">
-                      {totalPrizeCount > 0 ? `$${avgPayoutPerPrize}/件` : '尚未出貨'}
+                    <div className="text-[11px] text-slate-400">
+                      {selectedMachine.location || '機台營運'} · {selectedMachine.machine_model === 'DIGITAL' ? '改裝數位面板' : '傳統類比滾輪'}
                     </div>
                   </div>
                 </div>
 
-                {/* 均投健康度與保夾提示 */}
-                {(selectedMachine.target_payout_rate || selectedMachine.guaranteed_amount) && (
-                  <div className="bg-[#0B0F17] p-2.5 rounded-xl border border-slate-800 text-xs flex flex-wrap items-center justify-between gap-2">
-                    {selectedMachine.target_payout_rate ? (
-                      <div className="flex items-center gap-1.5 font-mono">
-                        <span className="text-slate-400">目標均出：</span>
-                        <span className="text-white font-bold">${selectedMachine.target_payout_rate}/件</span>
-                        {totalPrizeCount > 0 && (
-                          <span
-                            className={`text-[10px] px-1.5 py-0.2 rounded font-bold ${
-                              avgPayoutPerPrize >= selectedMachine.target_payout_rate * 0.9
-                                ? 'bg-emerald-500/15 text-emerald-400'
-                                : 'bg-rose-500/15 text-rose-400'
-                            }`}
-                          >
-                            {avgPayoutPerPrize >= selectedMachine.target_payout_rate
-                              ? '毛利達標'
-                              : '出貨偏快'}
-                          </span>
-                        )}
-                      </div>
-                    ) : null}
+                {/* 上刮板動作按鈕 */}
+                <button
+                  type="button"
+                  onClick={() => setIsMountModalOpen(true)}
+                  className="h-8 px-2.5 rounded-lg border border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 text-xs font-semibold flex items-center gap-1.5 transition-colors shrink-0"
+                  title="在此機台上刮板/一番賞活動"
+                >
+                  <Plus className="w-3.5 h-3.5 text-amber-400" />
+                  <span>{machineActiveBoards.length > 0 ? '再上一版' : '上新刮板'}</span>
+                </button>
+              </div>
 
-                    {selectedMachine.guaranteed_amount ? (
-                      <div className="text-slate-400 font-mono text-[11px]">
-                        保夾金額：<span className="text-amber-400 font-bold">${selectedMachine.guaranteed_amount}</span>
-                      </div>
-                    ) : null}
+              {/* 關鍵營運指標：累計出貨件數、投幣累計、均出投幣比 */}
+              <div className="grid grid-cols-3 gap-2 bg-[#0B0F17] p-3 rounded-xl border border-slate-800 text-center">
+                <div>
+                  <div className="text-xs text-slate-400 font-medium">累計出貨</div>
+                  <div className="text-sm font-mono font-bold text-emerald-400">
+                    {totalPrizeCount.toLocaleString()} 件
                   </div>
-                )}
-
-                {/* 在台壓貨商品列表與補貨按鈕 */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
-                      <Boxes className="w-3.5 h-3.5 text-amber-400" />
-                      <span>在台壓貨商品 (總值 ${totalStockValuation.toLocaleString()})</span>
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setRestockQty(1);
-                        setCustomItemName('');
-                        setCustomItemCost(350);
-                        setIsRestockModalOpen(true);
-                      }}
-                      className="px-2.5 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold flex items-center gap-1 active:scale-95 transition-all shadow-sm"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      <span>登記機台補貨</span>
-                    </button>
+                </div>
+                <div>
+                  <div className="text-xs text-slate-400 font-medium">累計投幣</div>
+                  <div className="text-sm font-mono font-bold text-amber-400">
+                    ${totalCoinCollected.toLocaleString()}
                   </div>
-
-                  {(!selectedMachine.stocked_items || selectedMachine.stocked_items.length === 0) ? (
-                    <div className="p-3 rounded-xl bg-[#0B0F17] border border-slate-800/80 text-center text-xs text-slate-500">
-                      目前尚未登記此機台壓貨商品。點擊「登記機台補貨」可從倉庫調撥商品上機。
-                    </div>
-                  ) : (
-                    <div className="space-y-1.5">
-                      {selectedMachine.stocked_items.map((stk) => (
-                        <div
-                          key={stk.item_id}
-                          className="flex items-center justify-between p-2.5 rounded-lg bg-[#0B0F17] border border-slate-800 text-xs"
-                        >
-                          <div className="flex items-center gap-2">
-                            <span className="w-1.5 h-1.5 rounded-full bg-sky-400 shrink-0" />
-                            <span className="font-bold text-white">{stk.item_name}</span>
-                            <span className="text-slate-400 font-mono text-[11px]">x {stk.quantity} 件</span>
-                          </div>
-                          <div className="font-mono text-slate-300 text-[11px]">
-                            成本 ${stk.cost.toLocaleString()}/件 (總值 ${(stk.cost * stk.quantity).toLocaleString()})
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                </div>
+                <div>
+                  <div className="text-xs text-slate-400 font-medium">即時均投比</div>
+                  <div className="text-sm font-mono font-bold text-white">
+                    {totalPrizeCount > 0 ? `$${avgPayoutPerPrize}/件` : '尚未出貨'}
+                  </div>
                 </div>
               </div>
-            ) : (
-              /* 刮板一番賞機營運卡片 (支援同機台多板並存、個別下版) */
-              machineActiveBoards.length === 0 ? (
-                <div className="bg-[#111827] border border-amber-500/40 rounded-xl p-4 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 rounded-lg bg-amber-500/15 flex items-center justify-center text-amber-400">
-                        <Grid className="w-4 h-4" />
-                      </div>
-                      <div>
-                        <div className="text-sm font-bold text-white">目前無版・一鍵上版</div>
-                        <div className="text-[11px] text-slate-400">選刮數即上版，獎號可事後貼入</div>
-                      </div>
+
+              {/* 均投健康度與保夾提示 */}
+              {(selectedMachine.target_payout_rate || selectedMachine.guaranteed_amount) && (
+                <div className="bg-[#0B0F17] p-2.5 rounded-xl border border-slate-800 text-xs flex flex-wrap items-center justify-between gap-2">
+                  {selectedMachine.target_payout_rate ? (
+                    <div className="flex items-center gap-1.5 font-mono">
+                      <span className="text-slate-400">目標均出：</span>
+                      <span className="text-white font-bold">${selectedMachine.target_payout_rate}/件</span>
+                      {totalPrizeCount > 0 && (
+                        <span
+                          className={`text-[10px] px-1.5 py-0.2 rounded font-bold ${
+                            avgPayoutPerPrize >= selectedMachine.target_payout_rate * 0.9
+                              ? 'bg-emerald-500/15 text-emerald-400'
+                              : 'bg-rose-500/15 text-rose-400'
+                          }`}
+                        >
+                          {avgPayoutPerPrize >= selectedMachine.target_payout_rate
+                            ? '毛利達標'
+                            : '出貨偏快'}
+                        </span>
+                      )}
                     </div>
+                  ) : null}
 
-                    {onUpdateMachineType && (
-                      <button
-                        type="button"
-                        onClick={() => onUpdateMachineType(selectedMachine.machine_id, 'STANDARD')}
-                        className="h-8 px-2.5 rounded-lg border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold flex items-center gap-1.5 transition-colors shrink-0"
-                        title="切換此機台為純出貨娃娃機"
-                      >
-                        <Repeat className="w-3.5 h-3.5 text-sky-400" />
-                        <span>轉為純娃娃機</span>
-                      </button>
-                    )}
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    {QUICK_HOLE_OPTIONS.map((num) => (
-                      <button
-                        key={num}
-                        type="button"
-                        onClick={() => setMountHoleCount(num)}
-                        className={`px-2.5 py-1.5 rounded-lg text-xs font-mono font-bold transition-colors ${
-                          mountHoleCount === num
-                            ? 'bg-amber-500 text-slate-950'
-                            : 'bg-[#0B0F17] text-slate-300 border border-slate-800'
-                        }`}
-                      >
-                        {num}刮
-                      </button>
-                    ))}
-                    <div className="flex items-center gap-1 bg-[#0B0F17] border border-slate-800 rounded-lg px-2 py-1">
-                      <input
-                        type="number"
-                        min={10}
-                        max={500}
-                        value={mountHoleCount}
-                        onChange={(e) => setMountHoleCount(Number(e.target.value))}
-                        className="w-12 bg-transparent text-xs font-mono font-bold text-amber-400 text-center focus:outline-none"
-                      />
-                      <span className="text-[11px] text-slate-500">刮</span>
+                  {selectedMachine.guaranteed_amount ? (
+                    <div className="text-slate-400 font-mono text-[11px]">
+                      保夾金額：<span className="text-amber-400 font-bold">${selectedMachine.guaranteed_amount}</span>
                     </div>
-                  </div>
+                  ) : null}
+                </div>
+              )}
 
+              {/* 在台壓貨商品列表與補貨按鈕 */}
+              <div className="space-y-2 pt-1 border-t border-slate-800/80">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                    <Boxes className="w-3.5 h-3.5 text-amber-400" />
+                    <span>在台壓貨商品 (總值 ${totalStockValuation.toLocaleString()})</span>
+                  </span>
                   <button
                     type="button"
-                    onClick={() => onQuickMountBoard(selectedMachine.machine_id, mountHoleCount)}
-                    className="w-full py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-xs flex items-center justify-center gap-1.5 shadow-md"
+                    onClick={() => {
+                      setRestockQty(1);
+                      setCustomItemName('');
+                      setCustomItemCost(350);
+                      setIsRestockModalOpen(true);
+                    }}
+                    className="px-2.5 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold flex items-center gap-1 active:scale-95 transition-all shadow-sm"
                   >
-                    <CheckCircle2 className="w-4 h-4" />
-                    確認上版 ({mountHoleCount} 刮)
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>登記機台補貨</span>
                   </button>
                 </div>
-              ) : (
-                <div className="bg-[#111827] border border-emerald-500/30 rounded-xl p-3.5 space-y-2.5">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-400">
-                      <Layers className="w-4 h-4" />
-                      <span>台上進行中看板 ({machineActiveBoards.length} 版)</span>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      {onUpdateMachineType && (
-                        <button
-                          type="button"
-                          onClick={() => onUpdateMachineType(selectedMachine.machine_id, 'STANDARD')}
-                          className="h-7 px-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold flex items-center gap-1 transition-colors"
-                          title="切換此機台為純出貨娃娃機"
-                        >
-                          <Repeat className="w-3 h-3 text-sky-400" />
-                          <span>轉純娃娃機</span>
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => setIsMountModalOpen(true)}
-                        className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-300 text-xs font-bold transition-colors"
-                      >
-                        <Plus className="w-3.5 h-3.5" />
-                        再上一版
-                      </button>
-                    </div>
+
+                {(!selectedMachine.stocked_items || selectedMachine.stocked_items.length === 0) ? (
+                  <div className="p-2.5 rounded-lg bg-[#0B0F17] border border-slate-800/80 text-center text-xs text-slate-500">
+                    目前尚未登記此機台壓貨商品。點擊「登記機台補貨」可從倉庫調撥商品上機。
                   </div>
-
-                  <div className="space-y-2">
-                    {machineActiveBoards.map((b) => (
+                ) : (
+                  <div className="space-y-1.5">
+                    {selectedMachine.stocked_items.map((stk) => (
                       <div
-                        key={b.board_id}
-                        className="bg-[#0B0F17] border border-slate-800 rounded-xl p-3 flex items-center justify-between gap-2.5"
+                        key={stk.item_id}
+                        className="flex items-center justify-between p-2.5 rounded-lg bg-[#0B0F17] border border-slate-800 text-xs"
                       >
-                        <div className="min-w-0 flex items-center gap-2">
-                          <div className="w-7 h-7 rounded-lg bg-emerald-500/15 text-emerald-400 flex items-center justify-center shrink-0 font-mono font-bold text-xs">
-                            {b.board_seq ? `${b.board_seq}號` : '板'}
-                          </div>
-                          <div className="min-w-0">
-                            <div className="text-xs font-bold text-white truncate">
-                              {b.title}
-                            </div>
-                            <div className="flex items-center gap-2 text-[10px] font-mono text-slate-400 mt-0.5">
-                              <span>剩 {b.remaining_holes}/{b.total_holes} 洞</span>
-                              <span>·</span>
-                              <span className="text-amber-400">
-                                收 ${b.gross_coin_revenue.toLocaleString()}
-                              </span>
-                              <span>·</span>
-                              <span className="text-emerald-400">
-                                獎 {b.prizes.filter((p) => p.is_claimed).length}/{b.prizes.length}
-                              </span>
-                            </div>
-                          </div>
+                        <div className="flex items-center gap-2">
+                          <span className="w-1.5 h-1.5 rounded-full bg-sky-400 shrink-0" />
+                          <span className="font-bold text-white">{stk.item_name}</span>
+                          <span className="text-slate-400 font-mono text-[11px]">x {stk.quantity} 件</span>
                         </div>
-
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          <button
-                            type="button"
-                            onClick={() => onJumpToScratchBoard(b.board_id)}
-                            className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-amber-300 text-xs font-bold whitespace-nowrap flex items-center gap-1"
-                          >
-                            <span>管理獎項</span>
-                            <ArrowRight className="w-3 h-3" />
-                          </button>
+                        <div className="font-mono text-slate-300 text-[11px]">
+                          成本 ${stk.cost.toLocaleString()}/件 (總值 ${(stk.cost * stk.quantity).toLocaleString()})
                         </div>
                       </div>
                     ))}
                   </div>
+                )}
+              </div>
+            </div>
+
+            {/* 2. 台上進行中看板列表 (若有上板才顯示，乾淨俐落) */}
+            {machineActiveBoards.length > 0 && (
+              <div className="bg-[#111827] border border-emerald-500/30 rounded-xl p-3.5 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-400">
+                    <Layers className="w-4 h-4" />
+                    <span>台上進行中看板 ({machineActiveBoards.length} 版)</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsMountModalOpen(true)}
+                    className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-300 text-xs font-bold transition-colors"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    再上一版
+                  </button>
                 </div>
-              )
+
+                <div className="space-y-2">
+                  {machineActiveBoards.map((b) => (
+                    <div
+                      key={b.board_id}
+                      className="bg-[#0B0F17] border border-slate-800 rounded-xl p-3 flex items-center justify-between gap-2.5"
+                    >
+                      <div className="min-w-0 flex items-center gap-2">
+                        <div className="w-7 h-7 rounded-lg bg-emerald-500/15 text-emerald-400 flex items-center justify-center shrink-0 font-mono font-bold text-xs">
+                          {b.board_seq ? `${b.board_seq}號` : '板'}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="text-xs font-bold text-white truncate">
+                            {b.title}
+                          </div>
+                          <div className="flex items-center gap-2 text-[10px] font-mono text-slate-400 mt-0.5">
+                            <span>剩 {b.remaining_holes}/{b.total_holes} 洞</span>
+                            <span>·</span>
+                            <span className="text-amber-400">
+                              收 ${b.gross_coin_revenue.toLocaleString()}
+                            </span>
+                            <span>·</span>
+                            <span className="text-emerald-400">
+                              獎 {b.prizes.filter((p) => p.is_claimed).length}/{b.prizes.length}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => onJumpToScratchBoard(b.board_id)}
+                          className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-amber-300 text-xs font-bold whitespace-nowrap flex items-center gap-1"
+                        >
+                          <span>管理獎項</span>
+                          <ArrowRight className="w-3 h-3" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
             )}
 
             {/* 3. 核心收幣面板 */}
@@ -1458,26 +1341,21 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
                 </div>
               </div>
 
-              {/* 收幣流向清晰提示徽章 (純機台直接匯入機台營收，刮板台直接入板) */}
+              {/* 收幣流向清晰提示徽章 */}
               <div className="bg-[#0B0F17] px-3.5 py-2.5 rounded-xl border border-slate-800 flex items-center justify-between text-xs">
                 <span className="flex items-center gap-1.5 font-bold text-slate-300">
                   <Coins className="w-3.5 h-3.5 text-amber-400" />
                   <span>收幣記錄流向：</span>
                 </span>
-                {isPureMachine ? (
-                  <span className="font-mono text-sky-400 font-bold flex items-center gap-1.5 text-[11px] bg-sky-500/10 px-2 py-0.5 rounded border border-sky-500/30">
-                    <Package className="w-3.5 h-3.5 shrink-0" />
-                    <span>純出貨機台（直接計入此台投幣營收與出貨率）</span>
-                  </span>
-                ) : machineActiveBoards.length > 0 ? (
+                {machineActiveBoards.length > 0 ? (
                   <span className="font-mono text-emerald-400 font-bold flex items-center gap-1.5 text-[11px] bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/30">
                     <Target className="w-3.5 h-3.5 shrink-0" />
                     <span>直接匯入現有 [{machineActiveBoards[0].board_letter || 'A'}板]</span>
                   </span>
                 ) : (
-                  <span className="font-mono text-slate-400 text-[11px] bg-slate-800/80 px-2 py-0.5 rounded border border-slate-700 flex items-center gap-1.5">
-                    <Layers className="w-3.5 h-3.5 shrink-0" />
-                    <span>無進行中看板（直接匯入機台本身幣量）</span>
+                  <span className="font-mono text-sky-400 font-bold flex items-center gap-1.5 text-[11px] bg-sky-500/10 px-2 py-0.5 rounded border border-sky-500/30">
+                    <Package className="w-3.5 h-3.5 shrink-0" />
+                    <span>純出貨機台（直接計入此台投幣營收與出貨率）</span>
                   </span>
                 )}
               </div>
