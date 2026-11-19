@@ -15,6 +15,7 @@ import {
   Cpu,
   Gauge,
   DollarSign,
+  ChevronDown,
 } from 'lucide-react';
 import {
   InventoryItem,
@@ -327,6 +328,7 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
   );
   const [batchSelectedNumbers, setBatchSelectedNumbers] = useState<number[]>([]);
   const [batchAddedCash, setBatchAddedCash] = useState<number>(0);
+  const [isCheckLogsExpanded, setIsCheckLogsExpanded] = useState<boolean>(false);
 
   // 當切換刮板、切換機台、或該刮板的剩餘刮數因分批巡場/下版/編輯異動時，嚴格自動同步剩餘洞數欄位為該板當前最新剩餘刮數
   useEffect(() => {
@@ -1272,130 +1274,6 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                 </form>
               </div>
 
-              {/* 需求 5：本板分批巡場明細歷史清單 (記錄幾洞、多少錢、均出多少、出哪些獎品、當次輸贏與累計輸贏) */}
-              <div className="bg-[#111827] border border-[#1E293B] rounded-xl p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="text-xs font-bold text-white flex items-center gap-1.5">
-                    <History className="w-4 h-4 text-amber-400" />
-                    <span>分批巡場紀錄歷程 ({formattedCheckLogs.length} 筆)</span>
-                  </div>
-                  <span className="text-[11px] text-slate-400 font-mono">
-                    最新紀錄於上方
-                  </span>
-                </div>
-
-                {formattedCheckLogs.length === 0 ? (
-                  <div className="bg-[#0B0F17] border border-slate-800 rounded-xl p-4 text-center text-xs text-slate-500">
-                    目前尚未有分批巡場紀錄。填寫上方表單並點擊「儲存分批紀錄」即可建立本板巡場歷程。
-                  </div>
-                ) : (
-                  <div className="space-y-2.5">
-                    {formattedCheckLogs.map((log, idx) => (
-                      <div
-                        key={log.check_id}
-                        className="bg-[#0B0F17] border border-slate-800/90 rounded-xl p-3 space-y-2.5"
-                      >
-                        {/* 頂部：時間戳記、第幾次巡場、開出洞數與剩餘 */}
-                        <div className="flex items-center justify-between text-xs flex-wrap gap-2">
-                          <div className="flex items-center gap-2">
-                            <span className="px-1.5 py-0.5 rounded bg-slate-800 font-mono text-[10px] text-slate-300 font-bold">
-                              #{formattedCheckLogs.length - idx}
-                            </span>
-                            <span className="font-mono text-slate-400 text-[11px]">
-                              {new Date(log.logged_at).toLocaleString('zh-TW', {
-                                month: '2-digit',
-                                day: '2-digit',
-                                hour: '2-digit',
-                                minute: '2-digit',
-                              })}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-2 font-mono text-xs">
-                            <span className="text-amber-400 font-bold">
-                              開出 Δ {log.scratched_in_batch} 洞
-                            </span>
-                            <span className="text-slate-500">·</span>
-                            <span className="text-slate-400">
-                              剩 {log.remaining_holes} / {selectedBoard.total_holes} 洞
-                            </span>
-                          </div>
-                        </div>
-
-                        {/* 中間：收幣、均出、當次輸贏、累計輸贏 (4 欄對稱網格) */}
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 text-xs font-mono">
-                          <div className="bg-[#111827] p-2 rounded-lg border border-slate-800/80">
-                            <span className="block text-[10px] text-slate-400 mb-0.5">當次收幣</span>
-                            <span className="text-white font-bold">
-                              {log.recorded_cash_added > 0 ? `+$${log.recorded_cash_added.toLocaleString()}` : '$0'}
-                            </span>
-                            <span className="block text-[9px] text-slate-500 mt-0.5">
-                              累計 ${log.cumulative_revenue.toLocaleString()}
-                            </span>
-                          </div>
-
-                          <div className="bg-[#111827] p-2 rounded-lg border border-slate-800/80">
-                            <span className="block text-[10px] text-slate-400 mb-0.5">均投 / 均出</span>
-                            <span className="text-sky-400 font-bold">
-                              ${log.avg_revenue_per_hole_batch}/洞
-                            </span>
-                            <span className="block text-[9px] text-slate-500 mt-0.5">
-                              全板均投 ${log.avg_revenue_per_hole_cumul}/洞
-                            </span>
-                          </div>
-
-                          <div className="bg-[#111827] p-2 rounded-lg border border-slate-800/80">
-                            <span className="block text-[10px] text-slate-400 mb-0.5">當次輸贏</span>
-                            <span className={`font-bold ${log.batch_profit >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                              {formatProfit(log.batch_profit)}
-                            </span>
-                            <span className="block text-[9px] text-slate-500 mt-0.5">
-                              {log.batch_cashback > 0 ? `回錢 $${log.batch_cashback}` : (log.batch_prize_cost > 0 ? `貨本 $${log.batch_prize_cost}` : '無獎品支出')}
-                            </span>
-                          </div>
-
-                          <div className="bg-[#111827] p-2 rounded-lg border border-slate-800/80">
-                            <span className="block text-[10px] text-slate-400 mb-0.5">累計輸贏</span>
-                            <span className={`font-bold ${log.cumulative_profit >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                              {formatProfit(log.cumulative_profit)}
-                            </span>
-                            <span className="block text-[9px] text-slate-500 mt-0.5">
-                              至此巡場淨利
-                            </span>
-                          </div>
-                        </div>
-
-                        {/* 開出獎品標籤清單 */}
-                        <div className="flex items-center gap-1.5 flex-wrap pt-0.5 text-[11px] font-mono">
-                          <span className="text-slate-400 text-[10px]">開出獎品：</span>
-                          {log.claimed_prizes.length === 0 ? (
-                            <span className="text-slate-500 text-[10px]">（本批巡場無大獎開出）</span>
-                          ) : (
-                            log.claimed_prizes.map((p) => (
-                              <span
-                                key={p.number_label}
-                                className={`px-2 py-0.5 rounded text-[10px] font-bold border flex items-center gap-1 ${
-                                  p.claim_type === 'CASHBACK'
-                                    ? 'bg-amber-500/10 border-amber-500/30 text-amber-300'
-                                    : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
-                                }`}
-                              >
-                                <span>#{p.number_label}</span>
-                                <span>{p.prize_name}</span>
-                                <span>
-                                  {p.claim_type === 'CASHBACK'
-                                    ? `(回錢 $${p.cost_or_cashback})`
-                                    : `(拿獎 成本 $${p.cost_or_cashback})`}
-                                </span>
-                              </span>
-                            ))
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
               {/* 獎項管理區塊 (貼入獎號 / 獎項清單) */}
               <div className="bg-[#111827] border border-[#1E293B] rounded-xl p-4 space-y-3">
                 <div className="flex items-center justify-between">
@@ -1697,6 +1575,143 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                         </button>
                       </div>
                     ))}
+                  </div>
+                )}
+              </div>
+
+              {/* 需求 5：本板分批巡場明細歷史清單 (置於獎項清單下方，預設收合) */}
+              <div className="bg-[#111827] border border-[#1E293B] rounded-xl overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => setIsCheckLogsExpanded((prev) => !prev)}
+                  className="w-full p-4 flex items-center justify-between text-left hover:bg-[#1E293B]/30 transition-colors"
+                >
+                  <div className="text-xs font-bold text-white flex items-center gap-1.5">
+                    <History className="w-4 h-4 text-amber-400" />
+                    <span>分批巡場紀錄歷程 ({formattedCheckLogs.length} 筆)</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-xs text-slate-400 font-bold">
+                    <span>{isCheckLogsExpanded ? '收合' : '展開'}</span>
+                    <ChevronDown
+                      className={`w-4 h-4 transition-transform duration-200 ${
+                        isCheckLogsExpanded ? 'rotate-180' : ''
+                      }`}
+                    />
+                  </div>
+                </button>
+
+                {isCheckLogsExpanded && (
+                  <div className="px-4 pb-4 space-y-2.5 border-t border-slate-800/80 pt-3">
+                    {formattedCheckLogs.length === 0 ? (
+                      <div className="bg-[#0B0F17] border border-slate-800 rounded-xl p-4 text-center text-xs text-slate-500">
+                        目前尚未有分批巡場紀錄。填寫上方表單並點擊「儲存分批紀錄」即可建立本板巡場歷程。
+                      </div>
+                    ) : (
+                      <div className="space-y-2.5">
+                        {formattedCheckLogs.map((log, idx) => (
+                          <div
+                            key={log.check_id}
+                            className="bg-[#0B0F17] border border-slate-800/90 rounded-xl p-3 space-y-2.5"
+                          >
+                            {/* 頂部：時間戳記、第幾次巡場、開出洞數與剩餘 */}
+                            <div className="flex items-center justify-between text-xs flex-wrap gap-2">
+                              <div className="flex items-center gap-2">
+                                <span className="px-1.5 py-0.5 rounded bg-slate-800 font-mono text-[10px] text-slate-300 font-bold">
+                                  #{formattedCheckLogs.length - idx}
+                                </span>
+                                <span className="font-mono text-slate-400 text-[11px]">
+                                  {new Date(log.logged_at).toLocaleString('zh-TW', {
+                                    month: '2-digit',
+                                    day: '2-digit',
+                                    hour: '2-digit',
+                                    minute: '2-digit',
+                                  })}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-2 font-mono text-xs">
+                                <span className="text-amber-400 font-bold">
+                                  開出 Δ {log.scratched_in_batch} 洞
+                                </span>
+                                <span className="text-slate-500">·</span>
+                                <span className="text-slate-400">
+                                  剩 {log.remaining_holes} / {selectedBoard.total_holes} 洞
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* 中間：收幣、均出、當次輸贏、累計輸贏 (4 欄對稱網格) */}
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 text-xs font-mono">
+                              <div className="bg-[#111827] p-2 rounded-lg border border-slate-800/80">
+                                <span className="block text-[10px] text-slate-400 mb-0.5">當次收幣</span>
+                                <span className="text-white font-bold">
+                                  {log.recorded_cash_added > 0 ? `+$${log.recorded_cash_added.toLocaleString()}` : '$0'}
+                                </span>
+                                <span className="block text-[9px] text-slate-500 mt-0.5">
+                                  累計 ${log.cumulative_revenue.toLocaleString()}
+                                </span>
+                              </div>
+
+                              <div className="bg-[#111827] p-2 rounded-lg border border-slate-800/80">
+                                <span className="block text-[10px] text-slate-400 mb-0.5">均投 / 均出</span>
+                                <span className="text-sky-400 font-bold">
+                                  ${log.avg_revenue_per_hole_batch}/洞
+                                </span>
+                                <span className="block text-[9px] text-slate-500 mt-0.5">
+                                  全板均投 ${log.avg_revenue_per_hole_cumul}/洞
+                                </span>
+                              </div>
+
+                              <div className="bg-[#111827] p-2 rounded-lg border border-slate-800/80">
+                                <span className="block text-[10px] text-slate-400 mb-0.5">當次輸贏</span>
+                                <span className={`font-bold ${log.batch_profit >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                  {formatProfit(log.batch_profit)}
+                                </span>
+                                <span className="block text-[9px] text-slate-500 mt-0.5">
+                                  {log.batch_cashback > 0 ? `回錢 $${log.batch_cashback}` : (log.batch_prize_cost > 0 ? `貨本 $${log.batch_prize_cost}` : '無獎品支出')}
+                                </span>
+                              </div>
+
+                              <div className="bg-[#111827] p-2 rounded-lg border border-slate-800/80">
+                                <span className="block text-[10px] text-slate-400 mb-0.5">累計輸贏</span>
+                                <span className={`font-bold ${log.cumulative_profit >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                  {formatProfit(log.cumulative_profit)}
+                                </span>
+                                <span className="block text-[9px] text-slate-500 mt-0.5">
+                                  至此巡場淨利
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* 開出獎品標籤清單 */}
+                            <div className="flex items-center gap-1.5 flex-wrap pt-0.5 text-[11px] font-mono">
+                              <span className="text-slate-400 text-[10px]">開出獎品：</span>
+                              {log.claimed_prizes.length === 0 ? (
+                                <span className="text-slate-500 text-[10px]">（本批巡場無大獎開出）</span>
+                              ) : (
+                                log.claimed_prizes.map((p) => (
+                                  <span
+                                    key={p.number_label}
+                                    className={`px-2 py-0.5 rounded text-[10px] font-bold border flex items-center gap-1 ${
+                                      p.claim_type === 'CASHBACK'
+                                        ? 'bg-amber-500/10 border-amber-500/30 text-amber-300'
+                                        : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+                                    }`}
+                                  >
+                                    <span>#{p.number_label}</span>
+                                    <span>{p.prize_name}</span>
+                                    <span>
+                                      {p.claim_type === 'CASHBACK'
+                                        ? `(回錢 $${p.cost_or_cashback})`
+                                        : `(拿獎 成本 $${p.cost_or_cashback})`}
+                                    </span>
+                                  </span>
+                                ))
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
