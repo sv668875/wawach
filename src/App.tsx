@@ -38,6 +38,8 @@ import {
   calculateScratchBoardFinancials,
   calculateSessionMetrics,
   calculateSimpleOverhead,
+  computeMonthlyFinancialTrends,
+  formatProfit,
 } from './utils/calculations';
 import { MeterTrackingView } from './components/MeterTrackingView';
 import { ScratchBoardView } from './components/ScratchBoardView';
@@ -1798,6 +1800,8 @@ export default function App() {
     showToast('已重置範例資料');
   };
 
+  const [topStatMode, setTopStatMode] = useState<'MONTH' | 'ALL'>('MONTH');
+
   const topStats = useMemo(() => {
     const overhead = calculateSimpleOverhead(machines, expenses, 'ALL');
 
@@ -1818,12 +1822,34 @@ export default function App() {
       .reduce((s, r) => s + (Number(r.cash_collected) || 0), 0);
 
     const netRevenue = boardNetCoin + standaloneCoin;
-    const trueNetProfit =
+    const allTimeNetProfit =
       netRevenue - boardPrizeCost - overhead.grandTotalOverhead;
 
+    const mappedReadings = readings.map((r) => ({
+      machine_id: r.machine_id,
+      read_at: r.read_at,
+      revenue_amount: r.cash_collected || r.panel_amount || 0,
+      prize_delta: r.prizes_delta || 0,
+      board_id: r.board_id,
+    }));
+    const currentMonthTrend = computeMonthlyFinancialTrends(
+      mappedReadings,
+      machines,
+      expenses,
+      scratchBoards,
+      { monthsCount: 1, fleetFilter: 'ALL' }
+    );
+    const thisMonthNetProfit = currentMonthTrend[0]?.net_profit ?? 0;
+
+    const totalCoinBox = machines.reduce(
+      (sum, m) => sum + Math.max(0, Number(m.coin_box_balance) || 0),
+      0
+    );
+
     return {
-      netRevenue,
-      trueNetProfit,
+      thisMonthNetProfit,
+      allTimeNetProfit,
+      totalCoinBox,
     };
   }, [machines, scratchBoards, readings, expenses]);
 
@@ -1906,27 +1932,41 @@ export default function App() {
             ))}
           </nav>
 
-          {/* Compact Profit Pill + Theme Switcher */}
+          {/* Compact Clickable Profit + CoinBox Pill & Theme Switcher */}
           <div className="flex items-center gap-2 sm:gap-3 text-right">
-            <div>
-              <div className="text-[11px] text-slate-400 leading-none">實收</div>
-              <div className="text-xs font-mono font-bold text-amber-400">
-                ${topStats.netRevenue.toLocaleString()}
+            <button
+              type="button"
+              onClick={() => setTopStatMode((prev) => (prev === 'MONTH' ? 'ALL' : 'MONTH'))}
+              className="flex items-center gap-2.5 sm:gap-3 px-2 py-1 rounded-lg hover:bg-slate-800/50 active:scale-95 transition-all text-right touch-manipulation"
+              title="點擊切換：本月淨利 ↔ 總淨利"
+            >
+              <div>
+                <div className="text-[11px] text-slate-400 leading-none">
+                  {topStatMode === 'MONTH' ? '本月淨利' : '總淨利'}
+                </div>
+                {(() => {
+                  const val =
+                    topStatMode === 'MONTH'
+                      ? topStats.thisMonthNetProfit
+                      : topStats.allTimeNetProfit;
+                  return (
+                    <div
+                      className={`text-xs font-mono font-bold mt-0.5 ${
+                        val >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                      }`}
+                    >
+                      {formatProfit(val)}
+                    </div>
+                  );
+                })()}
               </div>
-            </div>
-            <div>
-              <div className="text-[11px] text-slate-400 leading-none">淨利</div>
-              <div
-                className={`text-xs font-mono font-bold ${
-                  topStats.trueNetProfit >= 0
-                    ? 'text-emerald-400'
-                    : 'text-rose-400'
-                }`}
-              >
-                {topStats.trueNetProfit >= 0 ? '+' : ''}$
-                {topStats.trueNetProfit.toLocaleString()}
+              <div className="pl-2 border-l border-slate-800">
+                <div className="text-[11px] text-slate-400 leading-none">錢箱</div>
+                <div className="text-xs font-mono font-bold text-amber-400 mt-0.5">
+                  ${topStats.totalCoinBox.toLocaleString()}
+                </div>
               </div>
-            </div>
+            </button>
 
             {/* 3 種風格切換按鈕 (亮 / 中間值 / 暗) */}
             <button
