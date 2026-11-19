@@ -679,3 +679,66 @@ describe('computeMonthlyFinancialTrends (近6個月損益與雙棲混營趨勢�
     expect(nov?.net_profit).toBe(-1550);
   });
 });
+
+describe('calculateCoinBoxSummary (機台錢箱現有餘額與取出明細統計)', () => {
+  const { calculateCoinBoxSummary } = require('./calculations');
+
+  it('正確彙總仍在錢箱內總額與各用途已取出金額', () => {
+    const machines = [
+      { machine_id: 'm1', coin_box_balance: 1500 },
+      { machine_id: 'm2', coin_box_balance: 2300 },
+      { machine_id: 'm3', coin_box_balance: 0 },
+    ];
+    const withdrawals = [
+      {
+        withdrawal_id: 'w1',
+        machine_id: 'm1',
+        amount: 3000,
+        purpose: 'BANK_DEPOSIT',
+        withdrawn_at: '2026-11-10T10:00:00Z',
+      },
+      {
+        withdrawal_id: 'w2',
+        machine_id: 'm2',
+        amount: 1200,
+        purpose: 'EXCHANGE_NOTES',
+        withdrawn_at: '2026-11-18T10:00:00Z',
+      },
+    ];
+
+    const summary = calculateCoinBoxSummary(machines, withdrawals);
+    expect(summary.totalInCoinBoxes).toBe(3800);
+    expect(summary.totalWithdrawn).toBe(4200);
+    expect(summary.allTimeWithdrawn).toBe(4200);
+    expect(summary.byPurpose.BANK_DEPOSIT).toBe(3000);
+    expect(summary.byPurpose.EXCHANGE_NOTES).toBe(1200);
+  });
+
+  it('時間區間篩選時應僅統計該區間內的已取出金額，同時保留總餘額', () => {
+    const machines = [{ machine_id: 'm1', coin_box_balance: 800 }];
+    const withdrawals = [
+      {
+        withdrawal_id: 'w_old',
+        machine_id: 'm1',
+        amount: 2000,
+        purpose: 'BANK_DEPOSIT',
+        withdrawn_at: '2026-10-10T10:00:00Z',
+      },
+      {
+        withdrawal_id: 'w_new',
+        machine_id: 'm1',
+        amount: 1000,
+        purpose: 'EXCHANGE_NOTES',
+        withdrawn_at: '2026-11-10T10:00:00Z',
+      },
+    ];
+
+    const summary = calculateCoinBoxSummary(machines, withdrawals, {
+      start: new Date('2026-11-01T00:00:00Z').getTime(),
+      end: new Date('2026-11-30T23:59:59Z').getTime(),
+    });
+    expect(summary.totalInCoinBoxes).toBe(800);
+    expect(summary.totalWithdrawn).toBe(1000);
+    expect(summary.allTimeWithdrawn).toBe(3000);
+  });
+});

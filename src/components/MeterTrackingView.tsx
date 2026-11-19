@@ -26,10 +26,12 @@ import {
   Repeat,
   Target,
   ChevronDown,
+  Wallet,
 } from 'lucide-react';
 import { FEATURE_FLAGS } from '../config/features';
 import {
   ClearActionType,
+  CoinWithdrawalPurpose,
   CounterResetMode,
   InventoryItem,
   Machine,
@@ -64,6 +66,7 @@ interface MeterTrackingViewProps {
     resetMode: CounterResetMode;
     notes: string;
     targetBoardId?: string | null;
+    isWithdrawn?: boolean;
   }) => void;
   onQuickMountBoard: (machineId: string, totalHoles: number, customTitle?: string) => void;
   onAddMachine: (newMachine: Omit<Machine, 'machine_id' | 'last_read_at'>) => void;
@@ -76,6 +79,13 @@ interface MeterTrackingViewProps {
     sourceInventoryItemId?: string
   ) => void;
   onDeleteReading?: (readingId: string) => void;
+  onWithdrawCoinBox?: (payload: {
+    machineId: string | 'ALL';
+    amount?: number;
+    purpose: CoinWithdrawalPurpose;
+    note?: string;
+  }) => void;
+  onCalibrateCoinBox?: (machineId: string, newBalance: number) => void;
   onJumpToScratchBoard: (boardId?: string) => void;
 }
 
@@ -96,6 +106,8 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
   onSwitchMachineModel,
   onRestockMachine,
   onDeleteReading,
+  onWithdrawCoinBox,
+  onCalibrateCoinBox,
   onJumpToScratchBoard,
 }) => {
   const [internalMachineId, setInternalMachineId] = useState<string>(
@@ -242,6 +254,16 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
   const [newMachineInitialPrize, setNewMachineInitialPrize] = useState(0);
   const [isInitialCountersOpen, setIsInitialCountersOpen] = useState(false);
 
+  // 機台錢箱與流程收斂狀態
+  const [isWithdrawnOnSave, setIsWithdrawnOnSave] = useState(false);
+  const [targetBoardIdForReading, setTargetBoardIdForReading] = useState<string>('');
+  const [isWithdrawModalOpen, setIsWithdrawModalOpen] = useState(false);
+  const [withdrawAmountInput, setWithdrawAmountInput] = useState<number>(0);
+  const [withdrawPurpose, setWithdrawPurpose] = useState<CoinWithdrawalPurpose>('EXCHANGE_NOTES');
+  const [withdrawNote, setWithdrawNote] = useState('');
+  const [isCoinBoxCalibrateOpen, setIsCoinBoxCalibrateOpen] = useState(false);
+  const [calibrateCoinBoxInput, setCalibrateCoinBoxInput] = useState<number>(0);
+
   const [isOcrModalOpen, setIsOcrModalOpen] = useState(false);
   const [ocrLoading, setOcrLoading] = useState(false);
   const [ocrError, setOcrError] = useState<string | null>(null);
@@ -290,8 +312,12 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
     if (!selectedMachine) return;
     const isDigital = selectedMachine.machine_model === 'DIGITAL';
     const currentRevenue = isDigital ? panelAmount : sessionMetrics.revenue;
-    // 依需求：收幣直接記錄在該機台現有刮板上；若無刮板則直接匯入機台自己本身的幣量
-    const autoTargetBoardId = machineActiveBoards.length > 0 ? machineActiveBoards[0].board_id : null;
+    const resolvedBoardId =
+      machineActiveBoards.length > 0
+        ? machineActiveBoards.some((b) => b.board_id === targetBoardIdForReading)
+          ? targetBoardIdForReading
+          : machineActiveBoards[0].board_id
+        : null;
 
     onSaveReading({
       machineId: selectedMachine.machine_id,
@@ -304,7 +330,8 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
         : coinCounter,
       prizeCounter: isDigital ? selectedMachine.last_prize_counter : prizeCounter,
       resetMode,
-      targetBoardId: autoTargetBoardId,
+      targetBoardId: resolvedBoardId,
+      isWithdrawn: isWithdrawnOnSave,
       notes: notes.trim() || '記錄收幣',
     });
 
@@ -962,6 +989,50 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
                   <span className="text-amber-400 font-mono font-bold">${selectedMachine.guaranteed_amount}</span>
                 </div>
               )}
+
+              {/* 機台錢箱現有金額與領出/校準操作 */}
+              <div className="bg-[#0B0F17] px-3.5 py-2.5 rounded-xl border border-slate-800 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <Wallet className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <div>
+                    <div className="text-[11px] text-slate-400 font-medium leading-tight">
+                      機台錢箱現有現金
+                    </div>
+                    <div className="text-sm font-mono font-bold text-emerald-400">
+                      ${(selectedMachine.coin_box_balance || 0).toLocaleString()}
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {onCalibrateCoinBox && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCalibrateCoinBoxInput(selectedMachine.coin_box_balance || 0);
+                        setIsCoinBoxCalibrateOpen(true);
+                      }}
+                      className="h-8 px-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] font-bold transition-colors"
+                    >
+                      校準
+                    </button>
+                  )}
+                  {onWithdrawCoinBox && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setWithdrawAmountInput(selectedMachine.coin_box_balance || 0);
+                        setWithdrawPurpose('EXCHANGE_NOTES');
+                        setWithdrawNote('');
+                        setIsWithdrawModalOpen(true);
+                      }}
+                      disabled={(selectedMachine.coin_box_balance || 0) <= 0}
+                      className="h-8 px-3 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 disabled:opacity-40 disabled:pointer-events-none border border-emerald-500/30 text-emerald-300 text-xs font-bold transition-colors"
+                    >
+                      領出 / 換鈔
+                    </button>
+                  )}
+                </div>
+              </div>
             </div>
 
             {/* 2. 台上進行中看板列表 (若有上板才顯示，乾淨俐落) */}
@@ -1143,16 +1214,6 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
               placeholder="備註 (選填)"
               className="w-full bg-[#0B0F17] border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-amber-500"
             />
-
-            {/* 單一核心收幣大按鈕 */}
-            <button
-              type="button"
-              onClick={() => handleExecuteClearRecord('SEGMENT_CLEAR')}
-              className="w-full flex items-center justify-center gap-2 py-3.5 px-4 rounded-xl bg-amber-500 hover:bg-amber-400 active:bg-amber-600 active:scale-95 text-slate-950 font-bold text-sm transition-all shadow-sm touch-manipulation"
-            >
-              <RotateCcw className="w-4 h-4" />
-              <span>記錄收幣</span>
-            </button>
           </div>
         ) : (
           /* 傳統滾輪錶模式 */
@@ -1265,18 +1326,83 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
                 </div>
               </div>
             </div>
-
-            {/* 單一核心抄錶收幣大按鈕 */}
-            <button
-              type="button"
-              onClick={() => handleExecuteClearRecord('SEGMENT_CLEAR')}
-              className="w-full flex items-center justify-center gap-2 py-3.5 px-4 rounded-xl bg-amber-500 hover:bg-amber-400 active:bg-amber-600 active:scale-95 text-slate-950 font-bold text-sm transition-all shadow-sm touch-manipulation"
-            >
-              <RotateCcw className="w-4 h-4" />
-              <span>記錄收幣</span>
-            </button>
           </div>
         )}
+
+        {/* 刮板機台提示 & 多版歸屬選擇 */}
+        {machineActiveBoards.length > 0 && (
+          <div className="bg-[#0B0F17] border border-slate-800 rounded-xl p-3 space-y-2">
+            <div className="flex items-center justify-between gap-2 text-xs">
+              <span className="text-slate-300 font-medium">
+                此機台有進行中刮板，建議至【刮板頁】同步紀錄洞數與開獎
+              </span>
+              <button
+                type="button"
+                onClick={() => onJumpToScratchBoard(machineActiveBoards[0].board_id)}
+                className="shrink-0 text-amber-400 hover:text-amber-300 font-bold flex items-center gap-1 whitespace-nowrap"
+              >
+                <span>前往巡場</span>
+                <ArrowRight className="w-3 h-3" />
+              </button>
+            </div>
+            {machineActiveBoards.length > 1 && (
+              <div className="flex items-center justify-between gap-2 pt-1.5 border-t border-slate-800/80 text-xs">
+                <span className="text-slate-400">本次收幣歸屬板次：</span>
+                <select
+                  value={
+                    machineActiveBoards.some((b) => b.board_id === targetBoardIdForReading)
+                      ? targetBoardIdForReading
+                      : machineActiveBoards[0].board_id
+                  }
+                  onChange={(e) => setTargetBoardIdForReading(e.target.value)}
+                  className="bg-[#111827] border border-slate-700 rounded-lg px-2 py-1 text-xs text-white font-bold focus:outline-none focus:border-amber-500"
+                >
+                  {machineActiveBoards.map((b) => (
+                    <option key={b.board_id} value={b.board_id}>
+                      {b.board_letter ? `${b.board_letter}板` : b.title} (剩 {b.remaining_holes} 洞)
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* 錢箱去向設定 */}
+        <div className="grid grid-cols-2 bg-[#0B0F17] p-1 rounded-xl border border-slate-800 gap-1">
+          <button
+            type="button"
+            onClick={() => setIsWithdrawnOnSave(false)}
+            className={`py-2 rounded-lg text-xs font-bold transition-colors ${
+              !isWithdrawnOnSave
+                ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                : 'text-slate-400 hover:text-slate-200 border border-transparent'
+            }`}
+          >
+            留在機台錢箱 (預設)
+          </button>
+          <button
+            type="button"
+            onClick={() => setIsWithdrawnOnSave(true)}
+            className={`py-2 rounded-lg text-xs font-bold transition-colors ${
+              isWithdrawnOnSave
+                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                : 'text-slate-400 hover:text-slate-200 border border-transparent'
+            }`}
+          >
+            收幣並直接領出
+          </button>
+        </div>
+
+        {/* 單一核心抄錶收幣大按鈕 */}
+        <button
+          type="button"
+          onClick={() => handleExecuteClearRecord('SEGMENT_CLEAR')}
+          className="w-full flex items-center justify-center gap-2 py-3.5 px-4 rounded-xl bg-amber-500 hover:bg-amber-400 active:bg-amber-600 active:scale-95 text-slate-950 font-bold text-sm transition-all shadow-sm touch-manipulation"
+        >
+          <RotateCcw className="w-4 h-4" />
+          <span>{isWithdrawnOnSave ? '記錄收幣（同步領出）' : '記錄收幣（存入錢箱）'}</span>
+        </button>
       </div>
 
       {/* 4. 近期清0紀錄 (手機卡片列表，不擠壓文字) */}
@@ -1601,8 +1727,8 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
             </div>
 
             <div>
-              <label className="block text-xs text-slate-400 mb-1.5">總刮數</label>
-              <div className="flex flex-wrap items-center gap-1.5">
+              <label className="block text-xs text-slate-400 mb-1.5">總刮數 (可選預設或自訂)</label>
+              <div className="flex flex-wrap items-center gap-1.5 mb-2">
                 {QUICK_HOLE_OPTIONS.map((num) => (
                   <button
                     key={num}
@@ -1618,6 +1744,21 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
                   </button>
                 ))}
               </div>
+              <input
+                type="number"
+                inputMode="numeric"
+                min={1}
+                value={mountHoleCount === 0 ? '' : mountHoleCount}
+                onFocus={(e) => {
+                  if (e.target.value === '0') e.target.value = '';
+                  e.target.select();
+                }}
+                onChange={(e) =>
+                  setMountHoleCount(Math.max(1, Number(e.target.value) || 0))
+                }
+                placeholder="自訂洞數 (例如 80)"
+                className="w-full bg-[#0B0F17] border border-slate-700 rounded-xl px-3 py-2 text-xs font-mono font-bold text-white focus:outline-none focus:border-amber-500"
+              />
             </div>
 
             <div className="flex items-center gap-2 pt-1">
@@ -1631,13 +1772,195 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
               <button
                 type="button"
                 onClick={() => {
-                  onQuickMountBoard(selectedMachine.machine_id, mountHoleCount, mountCustomTitle);
+                  onQuickMountBoard(selectedMachine.machine_id, Math.max(1, mountHoleCount), mountCustomTitle);
                   setMountCustomTitle('');
                   setIsMountModalOpen(false);
                 }}
                 className="flex-1 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold transition-colors shadow-sm"
               >
                 確認上版
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 錢箱領出 / 換鈔 / 存銀行 彈窗 */}
+      {isWithdrawModalOpen && selectedMachine && onWithdrawCoinBox && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#111827] border border-slate-700 rounded-2xl p-5 max-w-sm w-full space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-white font-bold text-sm">
+                <Wallet className="w-4 h-4 text-emerald-400" />
+                <span>[{selectedMachine.code}] 從錢箱取出現金</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsWithdrawModalOpen(false)}
+                className="text-slate-400 hover:text-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="bg-[#0B0F17] border border-slate-800 rounded-xl p-3 flex items-center justify-between text-xs">
+              <span className="text-slate-400">目前錢箱內總額</span>
+              <span className="font-mono font-bold text-emerald-400 text-sm">
+                ${(selectedMachine.coin_box_balance || 0).toLocaleString()}
+              </span>
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
+                <span>本次取出金額 (元)</span>
+                <button
+                  type="button"
+                  onClick={() => setWithdrawAmountInput(selectedMachine.coin_box_balance || 0)}
+                  className="text-emerald-400 hover:text-emerald-300 font-bold"
+                >
+                  全部取出
+                </button>
+              </div>
+              <input
+                type="number"
+                inputMode="numeric"
+                min={0}
+                max={selectedMachine.coin_box_balance || 0}
+                value={withdrawAmountInput === 0 ? '' : withdrawAmountInput}
+                onFocus={(e) => {
+                  if (e.target.value === '0') e.target.value = '';
+                  e.target.select();
+                }}
+                onChange={(e) =>
+                  setWithdrawAmountInput(Math.max(0, Number(e.target.value) || 0))
+                }
+                className="w-full bg-[#0B0F17] border border-slate-700 rounded-xl px-3 py-2 text-base font-mono font-bold text-white focus:outline-none focus:border-emerald-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs text-slate-400 mb-1.5">現金去向 / 用途</label>
+              <div className="grid grid-cols-2 gap-1.5">
+                {[
+                  { key: 'EXCHANGE_NOTES', label: '換成鈔票' },
+                  { key: 'BANK_DEPOSIT', label: '存進銀行' },
+                  { key: 'PAY_RENT', label: '繳納台租' },
+                  { key: 'PERSONAL_USE', label: '私人領出 / 週轉' },
+                ].map((opt) => (
+                  <button
+                    key={opt.key}
+                    type="button"
+                    onClick={() => setWithdrawPurpose(opt.key as CoinWithdrawalPurpose)}
+                    className={`py-2 px-2.5 rounded-lg text-xs font-bold border transition-colors ${
+                      withdrawPurpose === opt.key
+                        ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                        : 'bg-[#0B0F17] text-slate-400 border-slate-800 hover:text-white'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs text-slate-400 mb-1">備註 (選填)</label>
+              <input
+                type="text"
+                value={withdrawNote}
+                onChange={(e) => setWithdrawNote(e.target.value)}
+                placeholder="例如：換百元鈔、存入玉山銀行"
+                className="w-full bg-[#0B0F17] border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
+              />
+            </div>
+
+            <div className="flex items-center gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setIsWithdrawModalOpen(false)}
+                className="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition-colors"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                disabled={withdrawAmountInput <= 0}
+                onClick={() => {
+                  onWithdrawCoinBox({
+                    machineId: selectedMachine.machine_id,
+                    amount: withdrawAmountInput,
+                    purpose: withdrawPurpose,
+                    note: withdrawNote,
+                  });
+                  setIsWithdrawModalOpen(false);
+                }}
+                className="flex-1 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 text-slate-950 text-xs font-bold transition-colors shadow-sm"
+              >
+                確認取出
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 錢箱現有餘額校準彈窗 */}
+      {isCoinBoxCalibrateOpen && selectedMachine && onCalibrateCoinBox && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#111827] border border-slate-700 rounded-2xl p-5 max-w-sm w-full space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-white font-bold text-sm">
+                <SlidersHorizontal className="w-4 h-4 text-amber-400" />
+                <span>[{selectedMachine.code}] 校準錢箱現有金額</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsCoinBoxCalibrateOpen(false)}
+                className="text-slate-400 hover:text-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-400 leading-relaxed">
+              若錢箱內現金與帳面有落差，或初次啟用欲直接設定目前機台內實際現金，請在此輸入目前金額（不影響歷史營收損益）。
+            </p>
+
+            <div>
+              <label className="block text-xs text-slate-400 mb-1">目前錢箱實際金額 (元)</label>
+              <input
+                type="number"
+                inputMode="numeric"
+                min={0}
+                value={calibrateCoinBoxInput === 0 ? '' : calibrateCoinBoxInput}
+                onFocus={(e) => {
+                  if (e.target.value === '0') e.target.value = '';
+                  e.target.select();
+                }}
+                onChange={(e) =>
+                  setCalibrateCoinBoxInput(Math.max(0, Number(e.target.value) || 0))
+                }
+                placeholder="0"
+                className="w-full bg-[#0B0F17] border border-slate-700 rounded-xl px-3 py-2 text-base font-mono font-bold text-white focus:outline-none focus:border-amber-500"
+              />
+            </div>
+
+            <div className="flex items-center gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setIsCoinBoxCalibrateOpen(false)}
+                className="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition-colors"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  onCalibrateCoinBox(selectedMachine.machine_id, calibrateCoinBoxInput);
+                  setIsCoinBoxCalibrateOpen(false);
+                }}
+                className="flex-1 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold transition-colors shadow-sm"
+              >
+                確認校準
               </button>
             </div>
           </div>

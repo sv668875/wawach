@@ -72,11 +72,11 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   );
 
   const onMachineItems = useMemo(
-    () => items.filter((i) => i.placement === 'ON_MACHINE'),
+    () => items.filter((i) => i.placement === 'ON_MACHINE' && i.quantity > 0),
     [items]
   );
   const inStockItems = useMemo(
-    () => items.filter((i) => i.placement === 'IN_STOCK'),
+    () => items.filter((i) => i.placement === 'IN_STOCK' && i.quantity > 0),
     [items]
   );
 

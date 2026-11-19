@@ -10,6 +10,8 @@ import {
 } from 'lucide-react';
 import {
   ClearActionType,
+  CoinBoxWithdrawal,
+  CoinWithdrawalPurpose,
   CounterResetMode,
   Expense,
   InventoryItem,
@@ -56,6 +58,7 @@ interface UndoSnapshot {
     readings: MeterReading[];
     inventoryItems: InventoryItem[];
     expenses: Expense[];
+    coinBoxWithdrawals: CoinBoxWithdrawal[];
     categories: string[];
     activeMachineId: string;
   };
@@ -68,6 +71,7 @@ const STORAGE_KEYS = {
   READINGS: 'clawops_v3_readings',
   SCRATCH_BOARDS: 'clawops_v3_scratch_boards',
   EXPENSES: 'clawops_v3_expenses',
+  COIN_WITHDRAWALS: 'clawops_v3_coin_withdrawals',
 };
 
 function loadFromStorage<T>(key: string, fallback: T): T {
@@ -100,6 +104,9 @@ export default function App() {
   );
   const [expenses, setExpenses] = useState<Expense[]>(() =>
     loadFromStorage(STORAGE_KEYS.EXPENSES, INITIAL_EXPENSES)
+  );
+  const [coinBoxWithdrawals, setCoinBoxWithdrawals] = useState<CoinBoxWithdrawal[]>(() =>
+    loadFromStorage(STORAGE_KEYS.COIN_WITHDRAWALS, [])
   );
 
   // 全域同步機台選取（收幣、刮板、損益跨頁面同步鎖定同一機台）
@@ -149,6 +156,7 @@ export default function App() {
         readings: JSON.parse(JSON.stringify(readings)),
         inventoryItems: JSON.parse(JSON.stringify(inventoryItems)),
         expenses: JSON.parse(JSON.stringify(expenses)),
+        coinBoxWithdrawals: JSON.parse(JSON.stringify(coinBoxWithdrawals)),
         categories: [...categories],
         activeMachineId,
       },
@@ -165,6 +173,7 @@ export default function App() {
     setReadings(latest.state.readings);
     setInventoryItems(latest.state.inventoryItems);
     setExpenses(latest.state.expenses);
+    setCoinBoxWithdrawals(latest.state.coinBoxWithdrawals || []);
     setCategories(latest.state.categories);
     if (latest.state.activeMachineId) {
       setActiveMachineId(latest.state.activeMachineId);
@@ -246,6 +255,17 @@ export default function App() {
     }
   }, [expenses]);
 
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        STORAGE_KEYS.COIN_WITHDRAWALS,
+        JSON.stringify(coinBoxWithdrawals)
+      );
+    } catch (e) {
+      console.error(e);
+    }
+  }, [coinBoxWithdrawals]);
+
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => {
@@ -263,6 +283,7 @@ export default function App() {
     resetMode: CounterResetMode;
     notes: string;
     targetBoardId?: string | null;
+    isWithdrawn?: boolean;
   }) => {
     pushUndo('記錄收幣');
     const targetMachine = machines.find(
@@ -325,10 +346,25 @@ export default function App() {
       reset_mode: payload.resetMode,
       coins_delta: coinsDelta,
       prizes_delta: prizesDelta,
+      is_withdrawn: !!payload.isWithdrawn,
       notes: payload.notes,
     };
 
     setReadings((prev) => [newReading, ...prev]);
+
+    if (payload.isWithdrawn && cashAdded > 0) {
+      setCoinBoxWithdrawals((prev) => [
+        {
+          withdrawal_id: `wd_${Date.now()}`,
+          machine_id: targetMachine.machine_id,
+          amount: cashAdded,
+          purpose: 'OTHER',
+          withdrawn_at: nowIso,
+          note: payload.notes ? `抄錶直領 (${payload.notes})` : '抄錶當下直接領出',
+        },
+        ...prev,
+      ]);
+    }
 
     if (activeBoardId) {
       setScratchBoards((prev) =>
@@ -341,6 +377,21 @@ export default function App() {
             b.prizes
           );
           const isClosingBoard = payload.clearAction === 'BOARD_CLOSE_CLEAR';
+          const nextLogs =
+            cashAdded > 0
+              ? [
+                  {
+                    check_id: `chk_meter_${Date.now()}`,
+                    logged_at: nowIso,
+                    remaining_holes: isClosingBoard ? 0 : b.remaining_holes,
+                    newly_claimed_numbers: [],
+                    cumulative_revenue_snapshot: nextGross,
+                    recorded_cash_added: cashAdded,
+                    note: payload.notes || '收幣頁補登',
+                  },
+                  ...(b.check_logs || []),
+                ]
+              : b.check_logs;
           return {
             ...b,
             status: isClosingBoard ? 'SETTLED' : b.status,
@@ -351,6 +402,7 @@ export default function App() {
             net_coin_revenue: fin.netCoinRevenue,
             total_prize_cost: fin.claimedPrizeCost,
             net_profit: fin.netProfit,
+            check_logs: nextLogs,
           };
         })
       );
@@ -372,10 +424,14 @@ export default function App() {
             updatedActiveBoardId = otherActive ? otherActive.board_id : null;
           }
         }
+        const nextCoinBox = payload.isWithdrawn
+          ? Math.max(0, Number(m.coin_box_balance) || 0)
+          : Math.max(0, Number(m.coin_box_balance) || 0) + cashAdded;
         return {
           ...m,
           last_coin_counter: newReading.coin_counter,
           last_prize_counter: newReading.prize_counter,
+          coin_box_balance: nextCoinBox,
           last_read_at: nowIso,
           active_board_id: updatedActiveBoardId,
         };
@@ -602,15 +658,13 @@ export default function App() {
     if (targetPrize?.inventory_item_id) {
       if (willBeClaimed && claimType === 'PHYSICAL') {
         setInventoryItems((prev) =>
-          prev
-            .map((item) => {
-              if (item.item_id !== targetPrize.inventory_item_id) return item;
-              return {
-                ...item,
-                quantity: Math.max(0, item.quantity - 1),
-              };
-            })
-            .filter((item) => item.quantity > 0)
+          prev.map((item) => {
+            if (item.item_id !== targetPrize.inventory_item_id) return item;
+            return {
+              ...item,
+              quantity: Math.max(0, item.quantity - 1),
+            };
+          })
         );
       } else if (!willBeClaimed && targetPrize.claim_type === 'PHYSICAL') {
         setInventoryItems((prev) =>
@@ -712,6 +766,7 @@ export default function App() {
       claim_type: 'PHYSICAL' | 'CASHBACK';
     }[];
     newCoinCounter?: number;
+    isWithdrawn?: boolean;
     note: string;
   }) => {
     pushUndo('分批巡場紀錄');
@@ -726,7 +781,7 @@ export default function App() {
     const nextGross =
       targetBoard.gross_coin_revenue + (Number(payload.addedCashRevenue) || 0);
 
-    // 1. 若有勾選新開出實體獎項（拿獎 PHYSICAL），即時扣減機台庫存
+    // 1. 若有勾選新開出實體獎項（拿獎 PHYSICAL），即時扣減機台庫存（保留 0 件紀錄以便誤點取消）
     const physicalInvIdsToDeduct: string[] = [];
     if (payload.claimedPrizeDetails && payload.claimedPrizeDetails.length > 0) {
       payload.claimedPrizeDetails.forEach((detail) => {
@@ -743,16 +798,14 @@ export default function App() {
 
     if (physicalInvIdsToDeduct.length > 0) {
       setInventoryItems((prev) =>
-        prev
-          .map((item) => {
-            const count = physicalInvIdsToDeduct.filter((id) => id === item.item_id).length;
-            if (count === 0) return item;
-            return {
-              ...item,
-              quantity: Math.max(0, item.quantity - count),
-            };
-          })
-          .filter((item) => item.quantity > 0)
+        prev.map((item) => {
+          const count = physicalInvIdsToDeduct.filter((id) => id === item.item_id).length;
+          if (count === 0) return item;
+          return {
+            ...item,
+            quantity: Math.max(0, item.quantity - count),
+          };
+        })
       );
     }
 
@@ -820,9 +873,14 @@ export default function App() {
     // 3. 若本次巡場有收幣，同步寫入收幣抄錶紀錄 (確保收幣紀錄完整、月度財務報表 100% 同步計入)
     const addedCash = Number(payload.addedCashRevenue) || 0;
     const targetMachine = machines.find((m) => m.machine_id === targetBoard.machine_id);
+    const coinUnit = targetMachine?.coin_unit_value || 10;
+    const coinsDelta = Math.round(addedCash / coinUnit);
+    const resolvedNewCoinCounter =
+      typeof payload.newCoinCounter === 'number' && payload.newCoinCounter >= 0
+        ? payload.newCoinCounter
+        : (targetMachine?.last_coin_counter || 0) + coinsDelta;
+
     if (addedCash > 0) {
-      const coinUnit = targetMachine?.coin_unit_value || 10;
-      const coinsDelta = Math.round(addedCash / coinUnit);
       const newReading: MeterReading = {
         reading_id: `read_patrol_${Date.now()}`,
         machine_id: targetBoard.machine_id,
@@ -833,32 +891,50 @@ export default function App() {
         panel_amount: addedCash,
         cash_collected: addedCash,
         last_coin_counter: targetMachine?.last_coin_counter || 0,
-        coin_counter:
-          typeof payload.newCoinCounter === 'number' && payload.newCoinCounter >= 0
-            ? payload.newCoinCounter
-            : (targetMachine?.last_coin_counter || 0) + coinsDelta,
+        coin_counter: resolvedNewCoinCounter,
         last_prize_counter: targetMachine?.last_prize_counter || 0,
         prize_counter: targetMachine?.last_prize_counter || 0,
         reset_mode: 'NORMAL',
         coins_delta: coinsDelta,
         prizes_delta: 0,
+        is_withdrawn: !!payload.isWithdrawn,
         notes: payload.note || '分批巡場收幣',
       };
       setReadings((prev) => [newReading, ...prev]);
+
+      if (payload.isWithdrawn) {
+        setCoinBoxWithdrawals((prev) => [
+          {
+            withdrawal_id: `wd_patrol_${Date.now()}`,
+            machine_id: targetBoard.machine_id,
+            amount: addedCash,
+            purpose: 'OTHER',
+            withdrawn_at: nowIso,
+            note: payload.note ? `巡場直領 (${payload.note})` : '巡場當下直接領出',
+          },
+          ...prev,
+        ]);
+      }
     }
 
-    // 4. 若有傳入類比錶頭最新讀數，自動同步更新該機台之 last_coin_counter (免去重複打錶)
-    if (typeof payload.newCoinCounter === 'number' && payload.newCoinCounter >= 0) {
+    // 4. 同步更新機台之 last_coin_counter 與錢箱餘額（數位與類比模式皆同步）
+    if (
+      addedCash > 0 ||
+      (typeof payload.newCoinCounter === 'number' && payload.newCoinCounter >= 0)
+    ) {
       setMachines((prev) =>
-        prev.map((m) =>
-          m.machine_id === targetBoard.machine_id
-            ? {
-                ...m,
-                last_coin_counter: payload.newCoinCounter!,
-                last_read_at: nowIso,
-              }
-            : m
-        )
+        prev.map((m) => {
+          if (m.machine_id !== targetBoard.machine_id) return m;
+          const nextCoinBox = payload.isWithdrawn
+            ? Math.max(0, Number(m.coin_box_balance) || 0)
+            : Math.max(0, Number(m.coin_box_balance) || 0) + addedCash;
+          return {
+            ...m,
+            last_coin_counter: resolvedNewCoinCounter,
+            coin_box_balance: nextCoinBox,
+            last_read_at: nowIso,
+          };
+        })
       );
     }
 
@@ -965,11 +1041,10 @@ export default function App() {
       )
     );
 
-    // 6. 若本次有收幣，自動建立一筆「結算下版 (BOARD_CLOSE_CLEAR)」紀錄
-    // (確保收幣歷史有這筆紀錄，且 board_id 正確關聯，不會變成 standaloneCoin 造成二次重複計算！)
-    if (finalCash > 0) {
+    // 6. 若本次有未登記過的新增收幣，自動建立一筆「結算下版 (BOARD_CLOSE_CLEAR)」紀錄並累計進機台錢箱
+    if (addedCash > 0) {
       const coinUnit = targetMachine?.coin_unit_value || 10;
-      const coinsDelta = Math.round(finalCash / coinUnit);
+      const coinsDelta = Math.round(addedCash / coinUnit);
       const newReading: MeterReading = {
         reading_id: `read_${Date.now()}`,
         machine_id: targetBoard.machine_id,
@@ -977,8 +1052,8 @@ export default function App() {
         entry_mode: targetMachine?.machine_model || 'DIGITAL',
         clear_action: 'BOARD_CLOSE_CLEAR',
         read_at: nowIso,
-        panel_amount: finalCash,
-        cash_collected: finalCash,
+        panel_amount: addedCash,
+        cash_collected: addedCash,
         last_coin_counter: targetMachine?.last_coin_counter || 0,
         coin_counter: (targetMachine?.last_coin_counter || 0) + coinsDelta,
         last_prize_counter: targetMachine?.last_prize_counter || 0,
@@ -988,17 +1063,18 @@ export default function App() {
         prizes_delta: 0,
         notes:
           customNotes.trim() ||
-          `[${targetBoard.board_letter ? `${targetBoard.board_letter}板` : ''}結算下版] 實收 $${finalCash.toLocaleString()}`,
+          `[${targetBoard.board_letter ? `${targetBoard.board_letter}板` : ''}結算下版] 實收 $${addedCash.toLocaleString()}`,
       };
       setReadings((prev) => [newReading, ...prev]);
 
-      // 更新機台最新抄錶狀態
+      // 更新機台最新抄錶狀態與錢箱餘額
       setMachines((prev) =>
         prev.map((m) => {
           if (m.machine_id !== targetBoard.machine_id) return m;
           return {
             ...m,
             last_coin_counter: newReading.coin_counter,
+            coin_box_balance: Math.max(0, Number(m.coin_box_balance) || 0) + addedCash,
             last_read_at: nowIso,
           };
         })
@@ -1171,10 +1247,31 @@ export default function App() {
     const remainingReadings = readings.filter((r) => r.reading_id !== readingId);
     setReadings(remainingReadings);
 
-    // 如果刪除的紀錄是該機台的最新抄錶，自動回退上次計數器
+    // 若該筆紀錄有關聯刮板，同步扣回該刮板累積毛收幣並重算損益
+    if (targetReading.board_id && targetReading.cash_collected > 0) {
+      setScratchBoards((prev) =>
+        prev.map((b) => {
+          if (b.board_id !== targetReading.board_id) return b;
+          const nextGross = Math.max(0, b.gross_coin_revenue - targetReading.cash_collected);
+          const fin = calculateScratchBoardFinancials(b.board_cost, nextGross, b.prizes);
+          return {
+            ...b,
+            gross_coin_revenue: fin.grossCoinRevenue,
+            total_cashback_deducted: fin.totalCashbackDeducted,
+            net_coin_revenue: fin.netCoinRevenue,
+            total_prize_cost: fin.claimedPrizeCost,
+            net_profit: fin.netProfit,
+          };
+        })
+      );
+    }
+
+    // 如果刪除的紀錄是該機台的最新抄錶，自動回退上次計數器；並同步扣回錢箱餘額
     const machineRemaining = remainingReadings.filter(
       (r) => r.machine_id === targetReading.machine_id
     );
+    const coinBoxDeduct = !targetReading.is_withdrawn ? targetReading.cash_collected : 0;
+
     if (machineRemaining.length > 0) {
       const prevLatest = machineRemaining[0];
       setMachines((prev) =>
@@ -1185,6 +1282,7 @@ export default function App() {
                 last_coin_counter: prevLatest.coin_counter,
                 last_prize_counter: prevLatest.prize_counter,
                 last_read_at: prevLatest.read_at,
+                coin_box_balance: Math.max(0, (Number(m.coin_box_balance) || 0) - coinBoxDeduct),
               }
             : m
         )
@@ -1198,13 +1296,111 @@ export default function App() {
                 ...m,
                 last_coin_counter: m.initial_coin_counter ?? 0,
                 last_prize_counter: m.initial_prize_counter ?? 0,
+                coin_box_balance: Math.max(0, (Number(m.coin_box_balance) || 0) - coinBoxDeduct),
               }
             : m
         )
       );
     }
 
-    showToast(`已刪除收幣紀錄 (已自動校準機台讀數)`);
+    showToast(`已刪除收幣紀錄 (已自動校準機台讀數與錢箱)`);
+  };
+
+  // 1.5b 機台錢箱取出 (換鈔 / 存銀行 / 領出) 與校準
+  const handleWithdrawCoinBox = (payload: {
+    machineId: string | 'ALL';
+    amount?: number;
+    purpose: CoinWithdrawalPurpose;
+    note?: string;
+  }) => {
+    const nowIso = new Date().toISOString();
+    if (payload.machineId === 'ALL') {
+      const totalAvailable = machines.reduce(
+        (sum, m) => sum + Math.max(0, Number(m.coin_box_balance) || 0),
+        0
+      );
+      if (totalAvailable <= 0) {
+        showToast('目前各機台錢箱皆為 $0，無須領出');
+        return;
+      }
+      pushUndo(`全場清錢箱領出 ($${totalAvailable.toLocaleString()})`);
+      const newWithdrawals: CoinBoxWithdrawal[] = machines
+        .filter((m) => (Number(m.coin_box_balance) || 0) > 0)
+        .map((m, idx) => ({
+          withdrawal_id: `wd_${Date.now()}_${idx}`,
+          machine_id: m.machine_id,
+          amount: Math.max(0, Number(m.coin_box_balance) || 0),
+          purpose: payload.purpose,
+          withdrawn_at: nowIso,
+          note: payload.note?.trim() || '全場一鍵清錢箱',
+        }));
+
+      setCoinBoxWithdrawals((prev) => [...newWithdrawals, ...prev]);
+      setMachines((prev) =>
+        prev.map((m) => ({
+          ...m,
+          coin_box_balance: 0,
+        }))
+      );
+      showToast(`已全場清空錢箱，共領出 $${totalAvailable.toLocaleString()}`);
+      return;
+    }
+
+    const targetMachine = machines.find((m) => m.machine_id === payload.machineId);
+    if (!targetMachine) return;
+    const currentBalance = Math.max(0, Number(targetMachine.coin_box_balance) || 0);
+    const withdrawAmount =
+      payload.amount !== undefined
+        ? Math.min(currentBalance, Math.max(0, Number(payload.amount) || 0))
+        : currentBalance;
+
+    if (withdrawAmount <= 0) {
+      showToast(`[${targetMachine.code}] 錢箱餘額為 $0`);
+      return;
+    }
+
+    pushUndo(`[${targetMachine.code}] 錢箱領出 $${withdrawAmount.toLocaleString()}`);
+    const newRecord: CoinBoxWithdrawal = {
+      withdrawal_id: `wd_${Date.now()}`,
+      machine_id: targetMachine.machine_id,
+      amount: withdrawAmount,
+      purpose: payload.purpose,
+      withdrawn_at: nowIso,
+      note: payload.note?.trim() || undefined,
+    };
+
+    setCoinBoxWithdrawals((prev) => [newRecord, ...prev]);
+    setMachines((prev) =>
+      prev.map((m) =>
+        m.machine_id === targetMachine.machine_id
+          ? {
+              ...m,
+              coin_box_balance: Math.max(0, currentBalance - withdrawAmount),
+            }
+          : m
+      )
+    );
+    showToast(
+      `[${targetMachine.code}] 已從錢箱領出 $${withdrawAmount.toLocaleString()}，箱內剩 $${(currentBalance - withdrawAmount).toLocaleString()}`
+    );
+  };
+
+  const handleCalibrateCoinBox = (machineId: string, newBalance: number) => {
+    const target = machines.find((m) => m.machine_id === machineId);
+    if (!target) return;
+    const clamped = Math.max(0, Number(newBalance) || 0);
+    pushUndo(`[${target.code}] 校準錢箱餘額為 $${clamped.toLocaleString()}`);
+    setMachines((prev) =>
+      prev.map((m) =>
+        m.machine_id === machineId
+          ? {
+              ...m,
+              coin_box_balance: clamped,
+            }
+          : m
+      )
+    );
+    showToast(`[${target.code}] 錢箱餘額已校準為 $${clamped.toLocaleString()}`);
   };
 
   // 1.6. 微調商品庫存數量
@@ -1230,6 +1426,7 @@ export default function App() {
     setScratchBoards([]);
     setInventoryItems([]);
     setExpenses([]);
+    setCoinBoxWithdrawals([]);
     setCategories(INITIAL_CATEGORIES);
 
     Object.values(STORAGE_KEYS).forEach((k) => {
@@ -1305,6 +1502,8 @@ export default function App() {
         if (Array.isArray(jsonData.inventoryItems))
           setInventoryItems(jsonData.inventoryItems);
         if (Array.isArray(jsonData.expenses)) setExpenses(jsonData.expenses);
+        if (Array.isArray(jsonData.coinBoxWithdrawals))
+          setCoinBoxWithdrawals(jsonData.coinBoxWithdrawals);
         if (Array.isArray(jsonData.categories))
           setCategories(jsonData.categories);
         showToast('備份資料已成功完整覆蓋還原！');
@@ -1350,6 +1549,15 @@ export default function App() {
             const existingIds = new Set(prev.map((e) => e.expense_id));
             const newOnes = jsonData.expenses.filter(
               (e: Expense) => !existingIds.has(e.expense_id)
+            );
+            return [...prev, ...newOnes];
+          });
+        }
+        if (Array.isArray(jsonData.coinBoxWithdrawals)) {
+          setCoinBoxWithdrawals((prev) => {
+            const existingIds = new Set(prev.map((w) => w.withdrawal_id));
+            const newOnes = jsonData.coinBoxWithdrawals.filter(
+              (w: CoinBoxWithdrawal) => !existingIds.has(w.withdrawal_id)
             );
             return [...prev, ...newOnes];
           });
@@ -1531,6 +1739,7 @@ export default function App() {
       scratchBoards,
       readings,
       expenses,
+      coinBoxWithdrawals,
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], {
       type: 'application/json',
@@ -1550,6 +1759,7 @@ export default function App() {
     setReadings(INITIAL_READINGS);
     setScratchBoards(INITIAL_SCRATCH_BOARDS);
     setExpenses(INITIAL_EXPENSES);
+    setCoinBoxWithdrawals([]);
     showToast('已重置範例資料');
   };
 
@@ -1750,6 +1960,8 @@ export default function App() {
             onSwitchMachineModel={handleSwitchMachineModel}
             onRestockMachine={handleRestockMachine}
             onDeleteReading={handleDeleteReading}
+            onWithdrawCoinBox={handleWithdrawCoinBox}
+            onCalibrateCoinBox={handleCalibrateCoinBox}
             onJumpToScratchBoard={(boardId) => {
               if (boardId) setTargetScratchBoardId(boardId);
               setActiveTab('scratch');
@@ -1812,6 +2024,8 @@ export default function App() {
             scratchBoards={scratchBoards}
             inventoryItems={inventoryItems}
             expenses={expenses}
+            coinBoxWithdrawals={coinBoxWithdrawals}
+            onWithdrawCoinBox={handleWithdrawCoinBox}
             activeMachineId={activeMachineId}
             onSelectMachine={setActiveMachineId}
             onExportCSV={handleExportCSV}

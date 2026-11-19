@@ -67,6 +67,7 @@ export interface Machine {
   guaranteed_amount?: number;    // 保夾金額 (選填)
   target_payout_rate?: number;   // 預期均出金額 (例如 $400/件)
   stocked_items?: StockedItem[]; // 台內在台商品 (補貨管理)
+  coin_box_balance?: number;     // 目前仍留在機台錢箱內的現金金額
   last_read_at: string;
   is_active: boolean;
 }
@@ -156,6 +157,7 @@ export interface MeterReading {
   reset_mode: CounterResetMode;
   coins_delta: number;
   prizes_delta: number;
+  is_withdrawn?: boolean;        // 若為 true 代表抄錶當下已直接領出，未留存於錢箱
   notes: string;
 }
 
@@ -236,4 +238,21 @@ export interface MonthlyFinancialTrend {
   payout_count: number;             // 出貨件數
   avg_coin_per_prize?: number;      // 平均均投 (元/件)
   active_machines_count: number;    // 當月在營運機台數
+}
+
+// 9. 機台錢箱取出紀錄 (換鈔 / 存銀行 / 領出)
+export type CoinWithdrawalPurpose =
+  | 'EXCHANGE_NOTES' // 換成鈔票
+  | 'BANK_DEPOSIT'   // 存進銀行
+  | 'PAY_RENT'       // 繳納台租
+  | 'PERSONAL_USE'   // 私人領出 / 週轉
+  | 'OTHER';         // 其他用途
+
+export interface CoinBoxWithdrawal {
+  withdrawal_id: string;
+  machine_id: string;            // 對應機台 ID（若為 'ALL' 代表全場彙整領出）
+  amount: number;
+  purpose: CoinWithdrawalPurpose;
+  withdrawn_at: string;
+  note?: string;
 }

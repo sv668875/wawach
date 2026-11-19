@@ -26,8 +26,11 @@ import {
   Box,
   ArrowDownLeft,
   Target,
+  Wallet,
 } from 'lucide-react';
 import {
+  CoinBoxWithdrawal,
+  CoinWithdrawalPurpose,
   Expense,
   FleetFilter,
   InventoryItem,
@@ -37,6 +40,7 @@ import {
   ScratchBoard,
 } from '../types';
 import {
+  calculateCoinBoxSummary,
   calculateScratchBoardFinancials,
   calculateSimpleOverhead,
   computeMonthlyFinancialTrends,
@@ -49,6 +53,13 @@ interface FinancialAnalyticsViewProps {
   scratchBoards: ScratchBoard[];
   inventoryItems: InventoryItem[];
   expenses: Expense[];
+  coinBoxWithdrawals?: CoinBoxWithdrawal[];
+  onWithdrawCoinBox?: (payload: {
+    machineId: string | 'ALL';
+    amount?: number;
+    purpose: CoinWithdrawalPurpose;
+    note?: string;
+  }) => void;
   activeMachineId?: string;
   onSelectMachine?: (machineId: string) => void;
   onExportCSV: () => void;
@@ -81,6 +92,8 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
   scratchBoards,
   inventoryItems,
   expenses,
+  coinBoxWithdrawals = [],
+  onWithdrawCoinBox,
   onExportCSV,
   onExportJSON,
   onImportJSON,
@@ -108,6 +121,10 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
   const [selectedTrendMonthKey, setSelectedTrendMonthKey] = useState<string>('');
   const [expandedMonthCards, setExpandedMonthCards] = useState<Record<string, boolean>>({});
   const [isSixMonthTrendExpanded, setIsSixMonthTrendExpanded] = useState<boolean>(false);
+  const [isCoinBoxExpanded, setIsCoinBoxExpanded] = useState<boolean>(false);
+  const [isAllWithdrawModalOpen, setIsAllWithdrawModalOpen] = useState<boolean>(false);
+  const [allWithdrawPurpose, setAllWithdrawPurpose] = useState<CoinWithdrawalPurpose>('EXCHANGE_NOTES');
+  const [allWithdrawNote, setAllWithdrawNote] = useState<string>('');
 
   const mappedReadings = useMemo(() => {
     return readings.map((r) => ({
@@ -178,6 +195,14 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
 
     return null;
   }, [periodType, weekOffset, selectedYear, selectedMonth]);
+  // 錢箱現有餘額與取出總額彙總
+  const coinBoxSummary = useMemo(() => {
+    const rangeMs = dateRange
+      ? { start: dateRange.start.getTime(), end: dateRange.end.getTime() }
+      : null;
+    return calculateCoinBoxSummary(machines, coinBoxWithdrawals, rangeMs);
+  }, [machines, coinBoxWithdrawals, dateRange]);
+
   // 依時間區間篩選資料 (需求 7)
   const filteredReadings = useMemo(() => {
     if (!dateRange) return readings;
@@ -1162,6 +1187,159 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
             </div>
           </div>
 
+          {/* 1b. 錢箱現金動向（還在機台錢箱內 vs 已取出換鈔/存銀行） */}
+          <div className="bg-[#111827] border border-[#1E293B] rounded-xl p-4 space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Wallet className="w-4 h-4 text-emerald-400" />
+                <div>
+                  <div className="text-xs font-bold text-white">機台錢箱與現金動向</div>
+                  <div className="text-[11px] text-slate-400">
+                    帳面損益依營收成本計算；此區追蹤現金實物留在錢箱或已取出
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center gap-1.5 shrink-0">
+                {onWithdrawCoinBox && coinBoxSummary.totalInCoinBoxes > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAllWithdrawPurpose('EXCHANGE_NOTES');
+                      setAllWithdrawNote('');
+                      setIsAllWithdrawModalOpen(true);
+                    }}
+                    className="h-8 px-2.5 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-300 text-[11px] font-bold transition-colors whitespace-nowrap"
+                  >
+                    全場清錢箱
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setIsCoinBoxExpanded((prev) => !prev)}
+                  className="h-8 px-2.5 rounded-lg bg-[#0B0F17] border border-slate-800 hover:border-slate-700 text-slate-300 text-[11px] font-bold flex items-center gap-1 transition-colors"
+                >
+                  <span>{isCoinBoxExpanded ? '收合' : '明細'}</span>
+                  <ChevronDown
+                    className={`w-3.5 h-3.5 transition-transform duration-200 ${
+                      isCoinBoxExpanded ? 'rotate-180' : ''
+                    }`}
+                  />
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <div className="bg-[#0B0F17] rounded-lg p-3 border border-slate-800">
+                <div className="text-xs text-slate-400 font-medium">還在機台錢箱內</div>
+                <div className="text-lg font-mono font-bold text-emerald-400 mt-0.5">
+                  ${coinBoxSummary.totalInCoinBoxes.toLocaleString()}
+                </div>
+                <div className="text-[11px] text-slate-500 mt-0.5 font-mono">
+                  共 {machines.filter((m) => (m.coin_box_balance || 0) > 0).length} 台有餘額
+                </div>
+              </div>
+
+              <div className="bg-[#0B0F17] rounded-lg p-3 border border-slate-800">
+                <div className="text-xs text-slate-400 font-medium">
+                  已從錢箱取出{dateRange ? ' (本區間)' : ''}
+                </div>
+                <div className="text-lg font-mono font-bold text-amber-400 mt-0.5">
+                  ${coinBoxSummary.totalWithdrawn.toLocaleString()}
+                </div>
+                <div className="text-[11px] text-slate-500 mt-0.5 font-mono">
+                  累計取出 ${coinBoxSummary.allTimeWithdrawn.toLocaleString()}
+                </div>
+              </div>
+            </div>
+
+            {isCoinBoxExpanded && (
+              <div className="pt-2 border-t border-slate-800 space-y-3">
+                {/* 各台錢箱現有餘額 */}
+                <div>
+                  <div className="text-[11px] font-bold text-slate-400 mb-1.5">
+                    各機台錢箱現有餘額
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                    {machines.map((m) => (
+                      <div
+                        key={m.machine_id}
+                        className="bg-[#0B0F17] border border-slate-800/80 rounded-lg px-2.5 py-2 flex items-center justify-between gap-2 text-xs"
+                      >
+                        <span className="font-mono text-slate-300 truncate">
+                          {m.code} {m.name}
+                        </span>
+                        <span
+                          className={`font-mono font-bold shrink-0 ${
+                            (m.coin_box_balance || 0) > 0 ? 'text-emerald-400' : 'text-slate-500'
+                          }`}
+                        >
+                          ${(m.coin_box_balance || 0).toLocaleString()}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 近期取出紀錄 */}
+                <div>
+                  <div className="text-[11px] font-bold text-slate-400 mb-1.5">
+                    近期取出紀錄 ({coinBoxSummary.filteredWithdrawals.length} 筆)
+                  </div>
+                  {coinBoxSummary.filteredWithdrawals.length === 0 ? (
+                    <div className="text-xs text-slate-500 py-2 text-center bg-[#0B0F17] rounded-lg border border-slate-800/80">
+                      尚無錢箱取出紀錄
+                    </div>
+                  ) : (
+                    <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                      {coinBoxSummary.filteredWithdrawals.slice(0, 12).map((w) => {
+                        const m = machines.find((mc) => mc.machine_id === w.machine_id);
+                        const purposeLabel =
+                          w.purpose === 'EXCHANGE_NOTES'
+                            ? '換成鈔票'
+                            : w.purpose === 'BANK_DEPOSIT'
+                            ? '存進銀行'
+                            : w.purpose === 'PAY_RENT'
+                            ? '繳納台租'
+                            : w.purpose === 'PERSONAL_USE'
+                            ? '私人領出'
+                            : '直接領出';
+                        return (
+                          <div
+                            key={w.withdrawal_id}
+                            className="bg-[#0B0F17] border border-slate-800/80 rounded-lg px-2.5 py-2 flex items-center justify-between gap-2 text-xs"
+                          >
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-1.5">
+                                <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 font-mono text-[10px]">
+                                  {m ? m.code : '全場'}
+                                </span>
+                                <span className="font-bold text-slate-200">{purposeLabel}</span>
+                                {w.note && (
+                                  <span className="text-slate-400 truncate">· {w.note}</span>
+                                )}
+                              </div>
+                              <div className="text-[10px] font-mono text-slate-500 mt-0.5">
+                                {new Date(w.withdrawn_at).toLocaleString('zh-TW', {
+                                  month: '2-digit',
+                                  day: '2-digit',
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                })}
+                              </div>
+                            </div>
+                            <span className="font-mono font-bold text-amber-400 shrink-0">
+                              ${w.amount.toLocaleString()}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* 2. 各機台損益圖表與卡片 */}
           <div className="bg-[#111827] border border-[#1E293B] rounded-xl p-4 space-y-3">
             <div className="flex items-center justify-between">
@@ -1886,6 +2064,93 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
                 className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition-colors shadow-sm"
               >
                 確認清空歸零
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* 全場一鍵清錢箱彈窗 */}
+      {isAllWithdrawModalOpen && onWithdrawCoinBox && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#111827] border border-slate-700 rounded-2xl p-5 max-w-sm w-full space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-white font-bold text-sm">
+                <Wallet className="w-4 h-4 text-emerald-400" />
+                <span>全場一鍵清錢箱取出</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsAllWithdrawModalOpen(false)}
+                className="text-slate-400 hover:text-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="bg-[#0B0F17] border border-slate-800 rounded-xl p-3 flex items-center justify-between text-xs">
+              <span className="text-slate-400">將領出全場機台錢箱合計</span>
+              <span className="font-mono font-bold text-emerald-400 text-base">
+                ${coinBoxSummary.totalInCoinBoxes.toLocaleString()}
+              </span>
+            </div>
+
+            <div>
+              <label className="block text-xs text-slate-400 mb-1.5">現金去向 / 用途</label>
+              <div className="grid grid-cols-2 gap-1.5">
+                {[
+                  { key: 'EXCHANGE_NOTES', label: '換成鈔票' },
+                  { key: 'BANK_DEPOSIT', label: '存進銀行' },
+                  { key: 'PAY_RENT', label: '繳納台租' },
+                  { key: 'PERSONAL_USE', label: '私人領出 / 週轉' },
+                ].map((opt) => (
+                  <button
+                    key={opt.key}
+                    type="button"
+                    onClick={() => setAllWithdrawPurpose(opt.key as CoinWithdrawalPurpose)}
+                    className={`py-2 px-2.5 rounded-lg text-xs font-bold border transition-colors ${
+                      allWithdrawPurpose === opt.key
+                        ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                        : 'bg-[#0B0F17] text-slate-400 border-slate-800 hover:text-white'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs text-slate-400 mb-1">備註 (選填)</label>
+              <input
+                type="text"
+                value={allWithdrawNote}
+                onChange={(e) => setAllWithdrawNote(e.target.value)}
+                placeholder="例如：週五全場換鈔存銀行"
+                className="w-full bg-[#0B0F17] border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
+              />
+            </div>
+
+            <div className="flex items-center gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setIsAllWithdrawModalOpen(false)}
+                className="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition-colors"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  onWithdrawCoinBox({
+                    machineId: 'ALL',
+                    purpose: allWithdrawPurpose,
+                    note: allWithdrawNote,
+                  });
+                  setIsAllWithdrawModalOpen(false);
+                }}
+                className="flex-1 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold transition-colors shadow-sm"
+              >
+                確認全場領出
               </button>
             </div>
           </div>

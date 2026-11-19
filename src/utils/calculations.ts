@@ -1,4 +1,5 @@
 import {
+  CoinBoxWithdrawal,
   Expense,
   Machine,
   MonthlyFinancialTrend,
@@ -864,4 +865,48 @@ export function computeMonthlyFinancialTrends(
   }
 
   return results;
+}
+
+/**
+ * 統計機台錢箱現有餘額與已取出總額（換鈔 / 存銀行 / 領出）
+ */
+export function calculateCoinBoxSummary(
+  machines: Machine[],
+  withdrawals: CoinBoxWithdrawal[],
+  dateRange?: { start: number; end: number } | null
+) {
+  const totalInCoinBoxes = machines.reduce(
+    (sum, m) => sum + Math.max(0, Number(m.coin_box_balance) || 0),
+    0
+  );
+
+  const filteredWithdrawals = dateRange
+    ? withdrawals.filter((w) => {
+        const t = new Date(w.withdrawn_at).getTime();
+        return !isNaN(t) && t >= dateRange.start && t <= dateRange.end;
+      })
+    : withdrawals;
+
+  const totalWithdrawn = filteredWithdrawals.reduce(
+    (sum, w) => sum + Math.max(0, Number(w.amount) || 0),
+    0
+  );
+
+  const allTimeWithdrawn = withdrawals.reduce(
+    (sum, w) => sum + Math.max(0, Number(w.amount) || 0),
+    0
+  );
+
+  const byPurpose = filteredWithdrawals.reduce<Record<string, number>>((acc, w) => {
+    acc[w.purpose] = (acc[w.purpose] || 0) + (Number(w.amount) || 0);
+    return acc;
+  }, {});
+
+  return {
+    totalInCoinBoxes,
+    totalWithdrawn,
+    allTimeWithdrawn,
+    byPurpose,
+    filteredWithdrawals,
+  };
 }
