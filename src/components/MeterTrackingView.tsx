@@ -944,16 +944,18 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
                   </div>
                 </div>
 
-                {/* 上刮板動作按鈕 */}
-                <button
-                  type="button"
-                  onClick={() => setIsMountModalOpen(true)}
-                  className="h-8 px-2.5 rounded-lg border border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 text-xs font-semibold flex items-center gap-1.5 transition-colors shrink-0"
-                  title="在此機台上刮板/一番賞活動"
-                >
-                  <Plus className="w-3.5 h-3.5 text-amber-400" />
-                  <span>{machineActiveBoards.length > 0 ? '再上一版' : '上新刮板'}</span>
-                </button>
+                {/* 上刮板動作按鈕（僅在無進行中刮板時顯示，避免與下方看板列表重複） */}
+                {machineActiveBoards.length === 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setIsMountModalOpen(true)}
+                    className="h-8 px-2.5 rounded-lg border border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 text-xs font-semibold flex items-center gap-1.5 transition-colors shrink-0"
+                    title="在此機台上刮板/一番賞活動"
+                  >
+                    <Plus className="w-3.5 h-3.5 text-amber-400" />
+                    <span>上新刮板</span>
+                  </button>
+                )}
               </div>
 
               {/* 關鍵營運指標：累計出貨件數、投幣累計、均出投幣比 */}
@@ -1321,45 +1323,6 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
                 </div>
               </div>
             </div>
-          </div>
-        )}
-
-        {/* 刮板機台提示 & 多版歸屬選擇 */}
-        {machineActiveBoards.length > 0 && (
-          <div className="bg-[#0B0F17] border border-slate-800 rounded-xl p-3 space-y-2">
-            <div className="flex items-center justify-between gap-2 text-xs">
-              <span className="text-slate-300 font-medium">
-                此機台有進行中刮板，建議至【刮板頁】同步紀錄洞數與開獎
-              </span>
-              <button
-                type="button"
-                onClick={() => onJumpToScratchBoard(machineActiveBoards[0].board_id)}
-                className="shrink-0 text-amber-400 hover:text-amber-300 font-bold flex items-center gap-1 whitespace-nowrap"
-              >
-                <span>前往巡場</span>
-                <ArrowRight className="w-3 h-3" />
-              </button>
-            </div>
-            {machineActiveBoards.length > 1 && (
-              <div className="flex items-center justify-between gap-2 pt-1.5 border-t border-slate-800/80 text-xs">
-                <span className="text-slate-400">本次收幣歸屬板次：</span>
-                <select
-                  value={
-                    machineActiveBoards.some((b) => b.board_id === targetBoardIdForReading)
-                      ? targetBoardIdForReading
-                      : machineActiveBoards[0].board_id
-                  }
-                  onChange={(e) => setTargetBoardIdForReading(e.target.value)}
-                  className="bg-[#111827] border border-slate-700 rounded-lg px-2 py-1 text-xs text-white font-bold focus:outline-none focus:border-amber-500"
-                >
-                  {machineActiveBoards.map((b) => (
-                    <option key={b.board_id} value={b.board_id}>
-                      {b.board_letter ? `${b.board_letter}板` : b.title} (剩 {b.remaining_holes} 洞)
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
           </div>
         )}
 
