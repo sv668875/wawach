@@ -114,8 +114,7 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
     'ALL' | 'ACTIVE' | 'SETTLED'
   >('ALL');
 
-  // 近 6 個月損益趨勢與雙棲混營視角篩選狀態
-  const [monthlyFleetFilter, setMonthlyFleetFilter] = useState<FleetFilter>('ALL');
+  // 近 6 個月損益趨勢狀態
   const [selectedTrendMonthKey, setSelectedTrendMonthKey] = useState<string>('');
   const [isSixMonthTrendExpanded, setIsSixMonthTrendExpanded] = useState<boolean>(false);
   const [isCoinBoxExpanded, setIsCoinBoxExpanded] = useState<boolean>(false);
@@ -139,10 +138,10 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
       scratchBoards,
       {
         monthsCount: 6,
-        fleetFilter: monthlyFleetFilter,
+        fleetFilter: 'ALL',
       }
     );
-  }, [mappedReadings, machines, expenses, scratchBoards, monthlyFleetFilter]);
+  }, [mappedReadings, machines, expenses, scratchBoards]);
 
   const activeTrendMonth = useMemo(() => {
     if (selectedTrendMonthKey) {
@@ -917,28 +916,6 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
 
         {isSixMonthTrendExpanded && (
           <div className="p-4 pt-3 space-y-3 border-t border-slate-800/80">
-            {/* 全部 / 純機 / 刮板 視角切換 */}
-            <div className="grid grid-cols-3 bg-[#0B0F17] p-1 rounded-xl border border-slate-800 gap-1">
-              {[
-                { key: 'ALL', label: '全場合併' },
-                { key: 'STANDARD', label: '純娃娃機' },
-                { key: 'SCRATCH', label: '刮板機台' },
-              ].map((opt) => (
-                <button
-                  key={opt.key}
-                  type="button"
-                  onClick={() => setMonthlyFleetFilter(opt.key as FleetFilter)}
-                  className={`py-1.5 rounded-lg text-xs font-bold transition-colors ${
-                    monthlyFleetFilter === opt.key
-                      ? 'bg-amber-500 text-slate-950'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-
             {/* 6 欄柱狀走勢圖 */}
             {(() => {
               const maxPos = Math.max(1, ...monthlyTrends.map((m) => Math.max(0, m.net_profit)));
