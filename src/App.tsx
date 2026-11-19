@@ -7,6 +7,7 @@ import {
   BarChart3,
   Cpu,
   RotateCcw,
+  Dices,
 } from 'lucide-react';
 import {
   ClearActionType,
@@ -46,6 +47,7 @@ import { ScratchBoardView } from './components/ScratchBoardView';
 import { InventoryView } from './components/InventoryView';
 import { OverheadExpensesView } from './components/OverheadExpensesView';
 import { FinancialAnalyticsView } from './components/FinancialAnalyticsView';
+import { ScratchHelperModal } from './components/ScratchHelperModal';
 import { ErrorBoundary } from './components/ErrorBoundary';
 
 type TabKey = 'meter' | 'scratch' | 'inventory' | 'overhead' | 'analytics';
@@ -1801,6 +1803,7 @@ export default function App() {
   };
 
   const [topStatMode, setTopStatMode] = useState<'MONTH' | 'ALL'>('MONTH');
+  const [isHelperOpen, setIsHelperOpen] = useState(false);
 
   const topStats = useMemo(() => {
     const overhead = calculateSimpleOverhead(machines, expenses, 'ALL');
@@ -1966,6 +1969,18 @@ export default function App() {
                   ${topStats.totalCoinBox.toLocaleString()}
                 </div>
               </div>
+            </button>
+
+            {/* 隨機選號 & 打台助手按鈕 */}
+            <button
+              type="button"
+              onClick={() => setIsHelperOpen(true)}
+              className="h-8 px-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-400 border border-slate-700 flex items-center gap-1 text-xs font-bold transition-all active:scale-95 shrink-0 shadow-sm"
+              title="隨機選號 & 打台選洞助手"
+              aria-label="隨機選號助手"
+            >
+              <Dices className="w-3.5 h-3.5" />
+              <span className="text-[10px] font-bold hidden sm:inline">選號</span>
             </button>
 
             {/* 3 種風格切換按鈕 (亮 / 中間值 / 暗) */}
@@ -2141,6 +2156,13 @@ export default function App() {
           })}
         </div>
       </nav>
+
+      {/* 隨機選號 & 打台選洞助手 */}
+      <ScratchHelperModal
+        isOpen={isHelperOpen}
+        onClose={() => setIsHelperOpen(false)}
+        activeBoards={scratchBoards.filter((b) => b.status === 'ACTIVE')}
+      />
     </div>
   );
 }

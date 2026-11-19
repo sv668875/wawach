@@ -1344,9 +1344,28 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
 
                   <div className="grid grid-cols-3 gap-2">
                     <div>
-                      <label className="block text-[10px] text-amber-400 font-bold mb-1">
-                        獎號 (必填)*
-                      </label>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-[10px] text-amber-400 font-bold">
+                          獎號 (必填)*
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const existing = new Set(selectedBoard.prizes.map((p) => p.number_label));
+                            const pool: number[] = [];
+                            for (let i = 1; i <= selectedBoard.total_holes; i++) {
+                              if (!existing.has(i)) pool.push(i);
+                            }
+                            if (pool.length > 0) {
+                              const picked = pool[Math.floor(Math.random() * pool.length)];
+                              setPrizeNumberInput(String(picked));
+                            }
+                          }}
+                          className="text-[10px] text-amber-400 hover:text-amber-300 font-bold underline underline-offset-2"
+                        >
+                          隨機
+                        </button>
+                      </div>
                       <input
                         type="number"
                         inputMode="numeric"
