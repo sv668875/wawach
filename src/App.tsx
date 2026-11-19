@@ -283,7 +283,6 @@ export default function App() {
     resetMode: CounterResetMode;
     notes: string;
     targetBoardId?: string | null;
-    isWithdrawn?: boolean;
   }) => {
     pushUndo('記錄收幣');
     const targetMachine = machines.find(
@@ -346,25 +345,10 @@ export default function App() {
       reset_mode: payload.resetMode,
       coins_delta: coinsDelta,
       prizes_delta: prizesDelta,
-      is_withdrawn: !!payload.isWithdrawn,
       notes: payload.notes,
     };
 
     setReadings((prev) => [newReading, ...prev]);
-
-    if (payload.isWithdrawn && cashAdded > 0) {
-      setCoinBoxWithdrawals((prev) => [
-        {
-          withdrawal_id: `wd_${Date.now()}`,
-          machine_id: targetMachine.machine_id,
-          amount: cashAdded,
-          purpose: 'OTHER',
-          withdrawn_at: nowIso,
-          note: payload.notes ? `抄錶直領 (${payload.notes})` : '抄錶當下直接領出',
-        },
-        ...prev,
-      ]);
-    }
 
     if (activeBoardId) {
       setScratchBoards((prev) =>
@@ -424,9 +408,7 @@ export default function App() {
             updatedActiveBoardId = otherActive ? otherActive.board_id : null;
           }
         }
-        const nextCoinBox = payload.isWithdrawn
-          ? Math.max(0, Number(m.coin_box_balance) || 0)
-          : Math.max(0, Number(m.coin_box_balance) || 0) + cashAdded;
+        const nextCoinBox = Math.max(0, Number(m.coin_box_balance) || 0) + cashAdded;
         return {
           ...m,
           last_coin_counter: newReading.coin_counter,
@@ -766,7 +748,6 @@ export default function App() {
       claim_type: 'PHYSICAL' | 'CASHBACK';
     }[];
     newCoinCounter?: number;
-    isWithdrawn?: boolean;
     note: string;
   }) => {
     pushUndo('分批巡場紀錄');
@@ -897,24 +878,9 @@ export default function App() {
         reset_mode: 'NORMAL',
         coins_delta: coinsDelta,
         prizes_delta: 0,
-        is_withdrawn: !!payload.isWithdrawn,
         notes: payload.note || '分批巡場收幣',
       };
       setReadings((prev) => [newReading, ...prev]);
-
-      if (payload.isWithdrawn) {
-        setCoinBoxWithdrawals((prev) => [
-          {
-            withdrawal_id: `wd_patrol_${Date.now()}`,
-            machine_id: targetBoard.machine_id,
-            amount: addedCash,
-            purpose: 'OTHER',
-            withdrawn_at: nowIso,
-            note: payload.note ? `巡場直領 (${payload.note})` : '巡場當下直接領出',
-          },
-          ...prev,
-        ]);
-      }
     }
 
     // 4. 同步更新機台之 last_coin_counter 與錢箱餘額（數位與類比模式皆同步）
@@ -925,9 +891,7 @@ export default function App() {
       setMachines((prev) =>
         prev.map((m) => {
           if (m.machine_id !== targetBoard.machine_id) return m;
-          const nextCoinBox = payload.isWithdrawn
-            ? Math.max(0, Number(m.coin_box_balance) || 0)
-            : Math.max(0, Number(m.coin_box_balance) || 0) + addedCash;
+          const nextCoinBox = Math.max(0, Number(m.coin_box_balance) || 0) + addedCash;
           return {
             ...m,
             last_coin_counter: resolvedNewCoinCounter,
@@ -1352,22 +1316,22 @@ export default function App() {
     const currentBalance = Math.max(0, Number(targetMachine.coin_box_balance) || 0);
     const withdrawAmount =
       payload.amount !== undefined
-        ? Math.min(currentBalance, Math.max(0, Number(payload.amount) || 0))
+        ? Math.max(0, Number(payload.amount) || 0)
         : currentBalance;
 
-    if (withdrawAmount <= 0) {
+    if (withdrawAmount <= 0 && currentBalance <= 0) {
       showToast(`[${targetMachine.code}] 錢箱餘額為 $0`);
       return;
     }
 
-    pushUndo(`[${targetMachine.code}] 錢箱取出 $${withdrawAmount.toLocaleString()}`);
+    pushUndo(`[${targetMachine.code}] 錢箱換幣清 0 ($${withdrawAmount.toLocaleString()})`);
     const newRecord: CoinBoxWithdrawal = {
       withdrawal_id: `wd_${Date.now()}`,
       machine_id: targetMachine.machine_id,
       amount: withdrawAmount,
       purpose: resolvedPurpose,
       withdrawn_at: nowIso,
-      note: payload.note?.trim() || undefined,
+      note: payload.note?.trim() || '錢箱換幣清 0',
     };
 
     setCoinBoxWithdrawals((prev) => [newRecord, ...prev]);
@@ -1376,13 +1340,13 @@ export default function App() {
         m.machine_id === targetMachine.machine_id
           ? {
               ...m,
-              coin_box_balance: Math.max(0, currentBalance - withdrawAmount),
+              coin_box_balance: 0,
             }
           : m
       )
     );
     showToast(
-      `[${targetMachine.code}] 已從錢箱領出 $${withdrawAmount.toLocaleString()}，箱內剩 $${(currentBalance - withdrawAmount).toLocaleString()}`
+      `[${targetMachine.code}] 已確認錢箱換幣 $${withdrawAmount.toLocaleString()}，錢箱已清 0`
     );
   };
 

@@ -66,7 +66,6 @@ interface MeterTrackingViewProps {
     resetMode: CounterResetMode;
     notes: string;
     targetBoardId?: string | null;
-    isWithdrawn?: boolean;
   }) => void;
   onQuickMountBoard: (machineId: string, totalHoles: number, customTitle?: string) => void;
   onAddMachine: (newMachine: Omit<Machine, 'machine_id' | 'last_read_at'>) => void;
@@ -255,7 +254,6 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
   const [isInitialCountersOpen, setIsInitialCountersOpen] = useState(false);
 
   // 機台錢箱與流程收斂狀態
-  const [isWithdrawnOnSave, setIsWithdrawnOnSave] = useState(false);
   const [targetBoardIdForReading, setTargetBoardIdForReading] = useState<string>('');
   const [isWithdrawModalOpen, setIsWithdrawModalOpen] = useState(false);
   const [withdrawAmountInput, setWithdrawAmountInput] = useState<number>(0);
@@ -330,7 +328,6 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
       prizeCounter: isDigital ? selectedMachine.last_prize_counter : prizeCounter,
       resetMode,
       targetBoardId: resolvedBoardId,
-      isWithdrawn: isWithdrawnOnSave,
       notes: notes.trim() || '記錄收幣',
     });
 
@@ -1026,7 +1023,7 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
                       disabled={(selectedMachine.coin_box_balance || 0) <= 0}
                       className="h-8 px-3 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 disabled:opacity-40 disabled:pointer-events-none border border-emerald-500/30 text-emerald-300 text-xs font-bold transition-colors"
                     >
-                      從錢箱取出
+                      錢箱換幣
                     </button>
                   )}
                 </div>
@@ -1366,32 +1363,6 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
           </div>
         )}
 
-        {/* 錢箱去向設定 */}
-        <div className="grid grid-cols-2 bg-[#0B0F17] p-1 rounded-xl border border-slate-800 gap-1">
-          <button
-            type="button"
-            onClick={() => setIsWithdrawnOnSave(false)}
-            className={`py-2 rounded-lg text-xs font-bold transition-colors ${
-              !isWithdrawnOnSave
-                ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
-                : 'text-slate-400 hover:text-slate-200 border border-transparent'
-            }`}
-          >
-            留在機台錢箱 (預設)
-          </button>
-          <button
-            type="button"
-            onClick={() => setIsWithdrawnOnSave(true)}
-            className={`py-2 rounded-lg text-xs font-bold transition-colors ${
-              isWithdrawnOnSave
-                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
-                : 'text-slate-400 hover:text-slate-200 border border-transparent'
-            }`}
-          >
-            收幣並直接領出
-          </button>
-        </div>
-
         {/* 單一核心抄錶收幣大按鈕 */}
         <button
           type="button"
@@ -1399,7 +1370,7 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
           className="w-full flex items-center justify-center gap-2 py-3.5 px-4 rounded-xl bg-amber-500 hover:bg-amber-400 active:bg-amber-600 active:scale-95 text-slate-950 font-bold text-sm transition-all shadow-sm touch-manipulation"
         >
           <RotateCcw className="w-4 h-4" />
-          <span>{isWithdrawnOnSave ? '記錄收幣（同步領出）' : '記錄收幣（存入錢箱）'}</span>
+          <span>記錄收幣</span>
         </button>
       </div>
 
@@ -1790,7 +1761,7 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-white font-bold text-sm">
                 <Wallet className="w-4 h-4 text-emerald-400" />
-                <span>[{selectedMachine.code}] 從錢箱取出現金</span>
+                <span>[{selectedMachine.code}] 錢箱換幣（清 0）</span>
               </div>
               <button
                 type="button"
@@ -1802,7 +1773,7 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
             </div>
 
             <div className="bg-[#0B0F17] border border-slate-800 rounded-xl p-3 flex items-center justify-between text-xs">
-              <span className="text-slate-400">目前錢箱內總額</span>
+              <span className="text-slate-400">目前錢箱累計金額</span>
               <span className="font-mono font-bold text-emerald-400 text-sm">
                 ${(selectedMachine.coin_box_balance || 0).toLocaleString()}
               </span>
@@ -1810,20 +1781,19 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
 
             <div>
               <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
-                <span>本次取出金額 (元)</span>
+                <span>確認取出並換幣金額 (確認後錢箱將清 0)</span>
                 <button
                   type="button"
                   onClick={() => setWithdrawAmountInput(selectedMachine.coin_box_balance || 0)}
                   className="text-emerald-400 hover:text-emerald-300 font-bold"
                 >
-                  全部取出
+                  帶入全額
                 </button>
               </div>
               <input
                 type="number"
                 inputMode="numeric"
                 min={0}
-                max={selectedMachine.coin_box_balance || 0}
                 value={withdrawAmountInput === 0 ? '' : withdrawAmountInput}
                 onFocus={(e) => {
                   if (e.target.value === '0') e.target.value = '';
@@ -1868,7 +1838,7 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
                 }}
                 className="flex-1 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 text-slate-950 text-xs font-bold transition-colors shadow-sm"
               >
-                確認取出
+                確認換幣清 0
               </button>
             </div>
           </div>

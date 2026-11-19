@@ -66,7 +66,6 @@ interface ScratchBoardViewProps {
       claim_type: 'PHYSICAL' | 'CASHBACK';
     }[];
     newCoinCounter?: number;
-    isWithdrawn?: boolean;
     note: string;
   }) => void;
   onUpdateGrossRevenue: (boardId: string, newGrossRevenue: number) => void;
@@ -328,7 +327,6 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
   );
   const [batchSelectedNumbers, setBatchSelectedNumbers] = useState<number[]>([]);
   const [batchAddedCash, setBatchAddedCash] = useState<number>(0);
-  const [batchIsWithdrawn, setBatchIsWithdrawn] = useState<boolean>(false);
 
   // 當切換刮板、切換機台、或該刮板的剩餘刮數因分批巡場/下版/編輯異動時，嚴格自動同步剩餘洞數欄位為該板當前最新剩餘刮數
   useEffect(() => {
@@ -508,7 +506,6 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
       newlyClaimedNumbers: batchSelectedNumbers,
       claimedPrizeDetails,
       newCoinCounter,
-      isWithdrawn: batchIsWithdrawn,
       note:
         batchCoinMode === 'WHEEL' && batchWheelCounter > currentMachineLastCoin
           ? `分批巡場 (抄錶 ${currentMachineLastCoin} ➔ ${batchWheelCounter})`
@@ -526,7 +523,6 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
     setBatchSelectedNumbers([]);
     setBatchClaimChoices({});
     setBatchAddedCash(0);
-    setBatchIsWithdrawn(false);
     setBatchWheelCounter(newCoinCounter ?? currentMachineLastCoin);
   };
 
@@ -1266,32 +1262,6 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                       )}
                     </div>
                   )}
-
-                  {/* 錢箱去向選擇 */}
-                  <div className="grid grid-cols-2 bg-[#0B0F17] p-1 rounded-xl border border-slate-800 gap-1">
-                    <button
-                      type="button"
-                      onClick={() => setBatchIsWithdrawn(false)}
-                      className={`py-2 rounded-lg text-xs font-bold transition-colors ${
-                        !batchIsWithdrawn
-                          ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
-                          : 'text-slate-400 hover:text-slate-200 border border-transparent'
-                      }`}
-                    >
-                      留在機台錢箱 (預設)
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setBatchIsWithdrawn(true)}
-                      className={`py-2 rounded-lg text-xs font-bold transition-colors ${
-                        batchIsWithdrawn
-                          ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
-                          : 'text-slate-400 hover:text-slate-200 border border-transparent'
-                      }`}
-                    >
-                      本次直接領出
-                    </button>
-                  </div>
 
                   <button
                     type="submit"

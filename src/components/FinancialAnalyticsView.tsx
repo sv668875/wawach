@@ -1208,7 +1208,7 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
                     }}
                     className="h-8 px-2.5 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-300 text-[11px] font-bold transition-colors whitespace-nowrap"
                   >
-                    全場清錢箱
+                    全場錢箱換幣
                   </button>
                 )}
                 <button
@@ -2064,7 +2064,7 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-white font-bold text-sm">
                 <Wallet className="w-4 h-4 text-emerald-400" />
-                <span>全場一鍵清錢箱取出</span>
+                <span>全場錢箱換幣（清 0）</span>
               </div>
               <button
                 type="button"
@@ -2112,7 +2112,7 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
                 }}
                 className="flex-1 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold transition-colors shadow-sm"
               >
-                確認全場取出
+                確認全場換幣清 0
               </button>
             </div>
           </div>
