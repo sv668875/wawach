@@ -922,18 +922,21 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
               const maxNeg = Math.max(0, ...monthlyTrends.map((m) => Math.max(0, -m.net_profit)));
               const hasNegative = maxNeg > 0;
               const posRatio = hasNegative ? maxPos / (maxPos + maxNeg) : 1;
-              const chartHeightPx = 136;
-              const zeroLineTopPx = Math.round(chartHeightPx * posRatio);
+              const trackTotalPx = 96;
+              const posHeightPx = hasNegative ? Math.max(12, Math.round(posRatio * trackTotalPx)) : trackTotalPx;
+              const negHeightPx = hasNegative ? Math.max(12, trackTotalPx - posHeightPx) : 0;
+              // py-1 (4px) + h-4 (16px) + my-0.5 (2px) = 22px 頂部偏移，對齊正負柱狀交界處
+              const zeroLineTopPx = 22 + posHeightPx;
 
               return (
                 <div className="bg-[#0B0F17] p-3 rounded-xl border border-slate-800 space-y-2">
-                  <div className="relative h-[136px] w-full flex items-stretch justify-between gap-1">
+                  <div className="relative w-full flex items-stretch justify-between gap-1">
                     {hasNegative && (
                       <div
-                        className="absolute inset-x-0 border-t border-slate-700/60 border-dashed z-0 pointer-events-none"
+                        className="absolute inset-x-0 border-t border-slate-700/70 border-dashed z-0 pointer-events-none"
                         style={{ top: `${zeroLineTopPx}px` }}
                       >
-                        <span className="absolute left-1 -top-2.5 text-[9px] font-mono text-slate-400 bg-[#0B0F17] px-1">
+                        <span className="absolute left-0 -top-2.5 text-[9px] font-mono text-slate-400 bg-[#0B0F17] px-1">
                           $0
                         </span>
                       </div>
@@ -964,8 +967,8 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
                             </span>
                           </div>
 
-                          <div className="w-full flex-1 flex flex-col justify-center relative my-0.5">
-                            <div className="w-full flex flex-col justify-end items-center" style={{ height: `${Math.max(10, Math.round(posRatio * 96))}px` }}>
+                          <div className="w-full flex flex-col justify-center relative my-0.5">
+                            <div className="w-full flex flex-col justify-end items-center" style={{ height: `${posHeightPx}px` }}>
                               {isProfit && (
                                 <div
                                   className={`w-4 sm:w-6 rounded-t-md transition-all ${
@@ -976,7 +979,7 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
                               )}
                             </div>
                             {hasNegative && (
-                              <div className="w-full flex flex-col justify-start items-center" style={{ height: `${Math.max(10, Math.round((1 - posRatio) * 96))}px` }}>
+                              <div className="w-full flex flex-col justify-start items-center" style={{ height: `${negHeightPx}px` }}>
                                 {!isProfit && (
                                   <div
                                     className={`w-4 sm:w-6 rounded-b-md transition-all ${
