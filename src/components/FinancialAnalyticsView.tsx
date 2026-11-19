@@ -122,8 +122,6 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
   const [expandedMonthCards, setExpandedMonthCards] = useState<Record<string, boolean>>({});
   const [isSixMonthTrendExpanded, setIsSixMonthTrendExpanded] = useState<boolean>(false);
   const [isCoinBoxExpanded, setIsCoinBoxExpanded] = useState<boolean>(false);
-  const [isAllWithdrawModalOpen, setIsAllWithdrawModalOpen] = useState<boolean>(false);
-  const [allWithdrawNote, setAllWithdrawNote] = useState<string>('');
 
   const mappedReadings = useMemo(() => {
     return readings.map((r) => ({
@@ -1199,18 +1197,6 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
                 </div>
               </div>
               <div className="flex items-center gap-1.5 shrink-0">
-                {onWithdrawCoinBox && coinBoxSummary.totalInCoinBoxes > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setAllWithdrawNote('');
-                      setIsAllWithdrawModalOpen(true);
-                    }}
-                    className="h-8 px-2.5 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-300 text-[11px] font-bold transition-colors whitespace-nowrap"
-                  >
-                    全場錢箱換幣
-                  </button>
-                )}
                 <button
                   type="button"
                   onClick={() => setIsCoinBoxExpanded((prev) => !prev)}
@@ -2052,67 +2038,6 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
                 className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition-colors shadow-sm"
               >
                 確認清空歸零
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-      {/* 全場一鍵清錢箱彈窗 */}
-      {isAllWithdrawModalOpen && onWithdrawCoinBox && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#111827] border border-slate-700 rounded-2xl p-5 max-w-sm w-full space-y-4 shadow-2xl">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-white font-bold text-sm">
-                <Wallet className="w-4 h-4 text-emerald-400" />
-                <span>全場錢箱換幣（清 0）</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsAllWithdrawModalOpen(false)}
-                className="text-slate-400 hover:text-white"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="bg-[#0B0F17] border border-slate-800 rounded-xl p-3 flex items-center justify-between text-xs">
-              <span className="text-slate-400">將領出全場機台錢箱合計</span>
-              <span className="font-mono font-bold text-emerald-400 text-base">
-                ${coinBoxSummary.totalInCoinBoxes.toLocaleString()}
-              </span>
-            </div>
-
-            <div>
-              <label className="block text-xs text-slate-400 mb-1">備註 (選填)</label>
-              <input
-                type="text"
-                value={allWithdrawNote}
-                onChange={(e) => setAllWithdrawNote(e.target.value)}
-                placeholder="選填備註"
-                className="w-full bg-[#0B0F17] border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
-              />
-            </div>
-
-            <div className="flex items-center gap-2 pt-1">
-              <button
-                type="button"
-                onClick={() => setIsAllWithdrawModalOpen(false)}
-                className="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition-colors"
-              >
-                取消
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  onWithdrawCoinBox({
-                    machineId: 'ALL',
-                    note: allWithdrawNote,
-                  });
-                  setIsAllWithdrawModalOpen(false);
-                }}
-                className="flex-1 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold transition-colors shadow-sm"
-              >
-                確認全場換幣清 0
               </button>
             </div>
           </div>
