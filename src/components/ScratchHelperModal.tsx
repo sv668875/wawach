@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Dices, Grid, RotateCcw, X, Check, Sparkles } from 'lucide-react';
+import { Dices, RotateCcw, X, Check, Sparkles, ArrowLeftRight } from 'lucide-react';
 import { ScratchBoard } from '../types';
 
 interface ScratchHelperModalProps {
@@ -8,12 +8,29 @@ interface ScratchHelperModalProps {
   activeBoards?: ScratchBoard[];
 }
 
-const PRESET_HOLES = [40, 60, 80, 100, 120, 160, 200];
-const STORAGE_KEY = 'clawops_scratch_helper_v1';
+const PRIZE_PRESET_HOLES = [40, 60, 80, 100, 120, 160, 200];
 
-interface SavedHelperState {
-  playTotalHoles: number;
-  scratchedNumbers: number[];
+const BOARD_GRID_PRESETS: { label: string; rows: number; cols: number }[] = [
+  { label: '40刮', rows: 5, cols: 8 },
+  { label: '60刮', rows: 6, cols: 10 },
+  { label: '80刮', rows: 8, cols: 10 },
+  { label: '100刮', rows: 10, cols: 10 },
+  { label: '120刮', rows: 10, cols: 12 },
+  { label: '160刮', rows: 10, cols: 16 },
+  { label: '200刮', rows: 10, cols: 20 },
+];
+
+const STORAGE_KEY = 'clawops_scratch_helper_2d_v1';
+
+interface Saved2DHelperState {
+  rows: number;
+  cols: number;
+  scratchedCoords: string[]; // "row-col" (1-indexed, e.g. "3-6")
+}
+
+function parseCoord(coord: string): { r: number; c: number } {
+  const [rStr, cStr] = coord.split('-');
+  return { r: Number(rStr) || 1, c: Number(cStr) || 1 };
 }
 
 export const ScratchHelperModal: React.FC<ScratchHelperModalProps> = ({
@@ -21,34 +38,41 @@ export const ScratchHelperModal: React.FC<ScratchHelperModalProps> = ({
   onClose,
   activeBoards = [],
 }) => {
-  const [activeMode, setActiveMode] = useState<'PRIZE_PICK' | 'PLAY_PICK'>('PLAY_PICK');
+  const [activeMode, setActiveMode] = useState<'PLAY_PICK' | 'PRIZE_PICK'>('PLAY_PICK');
 
-  // --- Mode 1: 隨機選中獎號碼 (開板設定用) ---
-  const [prizeTotalHoles, setPrizeTotalHoles] = useState<number>(80);
-  const [prizePickCount, setPrizePickCount] = useState<number>(1);
-  const [selectedRefBoardId, setSelectedRefBoardId] = useState<string>('');
-  const [pickedPrizeNumbers, setPickedPrizeNumbers] = useState<number[]>([]);
-
-  // --- Mode 2: 打台選刮哪一洞 (玩家打台輔助，完全獨立於記帳) ---
-  const [playTotalHoles, setPlayTotalHoles] = useState<number>(() => {
+  // --- Mode 1: 2D 二維定位選刮哪一洞 (玩家打台輔助，完全獨立於記帳) ---
+  const [rows, setRows] = useState<number>(() => {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) {
-        const parsed = JSON.parse(raw) as SavedHelperState;
-        if (parsed.playTotalHoles > 0) return parsed.playTotalHoles;
+        const parsed = JSON.parse(raw) as Saved2DHelperState;
+        if (parsed.rows > 0) return parsed.rows;
       }
     } catch {
       // ignore
     }
-    return 80;
+    return 8;
   });
 
-  const [scratchedNumbers, setScratchedNumbers] = useState<number[]>(() => {
+  const [cols, setCols] = useState<number>(() => {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) {
-        const parsed = JSON.parse(raw) as SavedHelperState;
-        if (Array.isArray(parsed.scratchedNumbers)) return parsed.scratchedNumbers;
+        const parsed = JSON.parse(raw) as Saved2DHelperState;
+        if (parsed.cols > 0) return parsed.cols;
+      }
+    } catch {
+      // ignore
+    }
+    return 10;
+  });
+
+  const [scratchedCoords, setScratchedCoords] = useState<string[]>(() => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as Saved2DHelperState;
+        if (Array.isArray(parsed.scratchedCoords)) return parsed.scratchedCoords;
       }
     } catch {
       // ignore
@@ -56,23 +80,28 @@ export const ScratchHelperModal: React.FC<ScratchHelperModalProps> = ({
     return [];
   });
 
-  const [quickInputText, setQuickInputText] = useState<string>('');
   const [playPickCount, setPlayPickCount] = useState<number>(1);
-  const [suggestedPlayNumbers, setSuggestedPlayNumbers] = useState<number[]>([]);
+  const [suggestedCoords, setSuggestedCoords] = useState<string[]>([]);
 
   useEffect(() => {
     try {
-      const state: SavedHelperState = {
-        playTotalHoles,
-        scratchedNumbers,
+      const state: Saved2DHelperState = {
+        rows,
+        cols,
+        scratchedCoords,
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     } catch {
       // ignore
     }
-  }, [playTotalHoles, scratchedNumbers]);
+  }, [rows, cols, scratchedCoords]);
 
-  // Mode 1: 計算排除名單（若有選擇進行中刮板，可排除已設定的獎號）
+  // --- Mode 2: 隨機選中獎號碼 (台主開板設獎用) ---
+  const [prizeTotalHoles, setPrizeTotalHoles] = useState<number>(80);
+  const [prizePickCount, setPrizePickCount] = useState<number>(1);
+  const [selectedRefBoardId, setSelectedRefBoardId] = useState<string>('');
+  const [pickedPrizeNumbers, setPickedPrizeNumbers] = useState<number[]>([]);
+
   const refBoard = useMemo(
     () => activeBoards.find((b) => b.board_id === selectedRefBoardId) || null,
     [activeBoards, selectedRefBoardId]
@@ -98,70 +127,98 @@ export const ScratchHelperModal: React.FC<ScratchHelperModalProps> = ({
     setPickedPrizeNumbers(picked.sort((a, b) => a - b));
   };
 
-  // Mode 2: 計算剩餘未刮號碼
-  const scratchedSet = useMemo(() => new Set(scratchedNumbers), [scratchedNumbers]);
-  const safePlayTotal = Math.max(1, Math.min(500, Number(playTotalHoles) || 80));
+  // Mode 2D Calculations
+  const safeRows = Math.max(1, Math.min(30, Number(rows) || 8));
+  const safeCols = Math.max(1, Math.min(30, Number(cols) || 10));
+  const totalGridHoles = safeRows * safeCols;
 
-  const remainingPlayPool = useMemo(() => {
-    const pool: number[] = [];
-    for (let i = 1; i <= safePlayTotal; i++) {
-      if (!scratchedSet.has(i)) pool.push(i);
+  const validScratchedSet = useMemo(() => {
+    const set = new Set<string>();
+    scratchedCoords.forEach((coord) => {
+      const { r, c } = parseCoord(coord);
+      if (r >= 1 && r <= safeRows && c >= 1 && c <= safeCols) {
+        set.add(`${r}-${c}`);
+      }
+    });
+    return set;
+  }, [scratchedCoords, safeRows, safeCols]);
+
+  const remainingCoordPool = useMemo(() => {
+    const pool: string[] = [];
+    for (let r = 1; r <= safeRows; r++) {
+      for (let c = 1; c <= safeCols; c++) {
+        const key = `${r}-${c}`;
+        if (!validScratchedSet.has(key)) {
+          pool.push(key);
+        }
+      }
     }
     return pool;
-  }, [safePlayTotal, scratchedSet]);
+  }, [safeRows, safeCols, validScratchedSet]);
 
-  const toggleGridNumber = (num: number) => {
-    setScratchedNumbers((prev) =>
-      prev.includes(num) ? prev.filter((n) => n !== num) : [...prev, num]
+  const toggleGridCoord = (coord: string) => {
+    setScratchedCoords((prev) =>
+      prev.includes(coord) ? prev.filter((item) => item !== coord) : [...prev, coord]
     );
-    setSuggestedPlayNumbers((prev) => prev.filter((n) => n !== num));
+    setSuggestedCoords((prev) => prev.filter((item) => item !== coord));
   };
 
-  const handleApplyQuickScratched = () => {
-    const nums = quickInputText
-      .split(/[\s,，、]+/)
-      .map((s) => Number(s.trim()))
-      .filter((n) => Number.isInteger(n) && n >= 1 && n <= safePlayTotal);
-    if (nums.length === 0) return;
-    setScratchedNumbers((prev) => Array.from(new Set([...prev, ...nums])));
-    setSuggestedPlayNumbers((prev) => prev.filter((n) => !nums.includes(n)));
-    setQuickInputText('');
+  const handleSwapRowsCols = () => {
+    setRows(safeCols);
+    setCols(safeRows);
+    setScratchedCoords((prev) =>
+      prev.map((coord) => {
+        const { r, c } = parseCoord(coord);
+        return `${c}-${r}`;
+      })
+    );
+    setSuggestedCoords((prev) =>
+      prev.map((coord) => {
+        const { r, c } = parseCoord(coord);
+        return `${c}-${r}`;
+      })
+    );
   };
 
-  const handlePickPlayHole = () => {
-    if (remainingPlayPool.length === 0) return;
+  const handleApplyPresetGrid = (nextRows: number, nextCols: number) => {
+    setRows(nextRows);
+    setCols(nextCols);
+    setScratchedCoords([]);
+    setSuggestedCoords([]);
+  };
+
+  const handlePickRandomPosition = () => {
+    if (remainingCoordPool.length === 0) return;
     const count = Math.min(
-      remainingPlayPool.length,
+      remainingCoordPool.length,
       Math.max(1, Number(playPickCount) || 1)
     );
-    const copy = [...remainingPlayPool];
-    const picked: number[] = [];
+    const copy = [...remainingCoordPool];
+    const picked: string[] = [];
     for (let i = 0; i < count; i++) {
       const idx = Math.floor(Math.random() * copy.length);
       picked.push(copy[idx]);
       copy.splice(idx, 1);
     }
-    setSuggestedPlayNumbers(picked.sort((a, b) => a - b));
+    setSuggestedCoords(picked);
   };
 
   const handleMarkSuggestedAsScratched = () => {
-    if (suggestedPlayNumbers.length === 0) return;
-    setScratchedNumbers((prev) =>
-      Array.from(new Set([...prev, ...suggestedPlayNumbers]))
-    );
-    setSuggestedPlayNumbers([]);
+    if (suggestedCoords.length === 0) return;
+    setScratchedCoords((prev) => Array.from(new Set([...prev, ...suggestedCoords])));
+    setSuggestedCoords([]);
   };
 
   const handleResetPlayBoard = () => {
-    setScratchedNumbers([]);
-    setSuggestedPlayNumbers([]);
+    setScratchedCoords([]);
+    setSuggestedCoords([]);
   };
 
   if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
-      <div className="bg-[#111827] border border-slate-700 w-full max-w-md rounded-t-3xl sm:rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
+      <div className="bg-[#111827] border border-slate-700 w-full max-w-lg rounded-t-3xl sm:rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3.5 border-b border-slate-800 bg-[#0B0F17]/70">
           <div className="flex items-center gap-2 text-white font-bold text-sm">
@@ -191,7 +248,7 @@ export const ScratchHelperModal: React.FC<ScratchHelperModalProps> = ({
                   : 'text-slate-400 hover:text-white'
               }`}
             >
-              打台選刮哪一洞
+              打台選刮哪一洞 (2D)
             </button>
             <button
               type="button"
@@ -208,66 +265,102 @@ export const ScratchHelperModal: React.FC<ScratchHelperModalProps> = ({
         </div>
 
         {/* Body */}
-        <div className="p-4 overflow-y-auto space-y-3.5">
+        <div className="p-4 overflow-y-auto space-y-3">
           {activeMode === 'PLAY_PICK' ? (
             <>
-              {/* 總刮數設定 */}
-              <div className="bg-[#0B0F17] border border-slate-800 rounded-xl p-3 space-y-2">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="font-bold text-slate-200">這台刮板總共有幾洞？</span>
-                  <div className="flex items-center gap-1.5">
+              {/* 1. 板面長寬規格 (橫排 × 豎排) */}
+              <div className="bg-[#0B0F17] border border-slate-800 rounded-xl p-3 space-y-2.5">
+                <div className="flex items-center justify-between gap-2 text-xs">
+                  <span className="font-bold text-slate-200">板面排列規格</span>
+                  <span className="font-mono text-amber-400 font-bold">
+                    共 {totalGridHoles} 洞
+                  </span>
+                </div>
+
+                <div className="flex flex-wrap gap-1">
+                  {BOARD_GRID_PRESETS.map((preset) => {
+                    const isMatch = safeRows === preset.rows && safeCols === preset.cols;
+                    return (
+                      <button
+                        key={preset.label}
+                        type="button"
+                        onClick={() => handleApplyPresetGrid(preset.rows, preset.cols)}
+                        className={`px-2 py-1 rounded-md text-[11px] font-mono font-bold transition-colors ${
+                          isMatch
+                            ? 'bg-amber-500 text-slate-950'
+                            : 'bg-[#111827] text-slate-400 border border-slate-800 hover:text-white'
+                        }`}
+                      >
+                        {preset.label} ({preset.rows}×{preset.cols})
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* 自訂橫排數 × 每排幾格 + 橫豎互換 */}
+                <div className="flex items-center gap-2 pt-1 border-t border-slate-800/80 text-xs">
+                  <div className="flex-1 flex items-center gap-1.5">
+                    <span className="text-slate-400 shrink-0">橫排(豎)</span>
                     <input
                       type="number"
                       inputMode="numeric"
                       min={1}
-                      max={500}
-                      value={playTotalHoles === 0 ? '' : playTotalHoles}
+                      max={30}
+                      value={rows === 0 ? '' : rows}
                       onFocus={(e) => {
                         if (e.target.value === '0') e.target.value = '';
                         e.target.select();
                       }}
                       onChange={(e) => {
-                        const val = Math.max(1, Math.min(500, Number(e.target.value) || 0));
-                        setPlayTotalHoles(val);
-                        setScratchedNumbers((prev) => prev.filter((n) => n <= val));
-                        setSuggestedPlayNumbers([]);
+                        const val = Math.max(1, Math.min(30, Number(e.target.value) || 0));
+                        setRows(val);
+                        setSuggestedCoords([]);
                       }}
-                      className="w-16 bg-[#111827] border border-slate-700 rounded-lg px-2 py-1 text-xs font-mono font-bold text-amber-400 text-center focus:outline-none focus:border-amber-500"
+                      className="w-full bg-[#111827] border border-slate-700 rounded-lg px-2 py-1 text-xs font-mono font-bold text-white text-center focus:outline-none focus:border-amber-500"
                     />
-                    <span className="text-slate-400 font-mono">洞</span>
                   </div>
-                </div>
 
-                <div className="flex flex-wrap gap-1">
-                  {PRESET_HOLES.map((h) => (
-                    <button
-                      key={h}
-                      type="button"
-                      onClick={() => {
-                        setPlayTotalHoles(h);
-                        setScratchedNumbers((prev) => prev.filter((n) => n <= h));
-                        setSuggestedPlayNumbers([]);
+                  <button
+                    type="button"
+                    onClick={handleSwapRowsCols}
+                    className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-400 shrink-0"
+                    title="橫豎互換"
+                    aria-label="橫豎互換"
+                  >
+                    <ArrowLeftRight className="w-3.5 h-3.5" />
+                  </button>
+
+                  <div className="flex-1 flex items-center gap-1.5">
+                    <span className="text-slate-400 shrink-0">每排格數</span>
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      min={1}
+                      max={30}
+                      value={cols === 0 ? '' : cols}
+                      onFocus={(e) => {
+                        if (e.target.value === '0') e.target.value = '';
+                        e.target.select();
                       }}
-                      className={`px-2 py-1 rounded-md text-[11px] font-mono font-bold transition-colors ${
-                        playTotalHoles === h
-                          ? 'bg-amber-500 text-slate-950'
-                          : 'bg-[#111827] text-slate-400 border border-slate-800 hover:text-white'
-                      }`}
-                    >
-                      {h}刮
-                    </button>
-                  ))}
+                      onChange={(e) => {
+                        const val = Math.max(1, Math.min(30, Number(e.target.value) || 0));
+                        setCols(val);
+                        setSuggestedCoords([]);
+                      }}
+                      className="w-full bg-[#111827] border border-slate-700 rounded-lg px-2 py-1 text-xs font-mono font-bold text-white text-center focus:outline-none focus:border-amber-500"
+                    />
+                  </div>
                 </div>
               </div>
 
-              {/* 剩餘統計 & 重置 */}
+              {/* 2. 剩餘洞數統計 & 重置 */}
               <div className="flex items-center justify-between bg-[#0B0F17] border border-slate-800 rounded-xl px-3 py-2 text-xs font-mono">
                 <div className="flex items-center gap-3">
                   <span className="text-slate-400">
-                    已刮 <strong className="text-slate-200">{scratchedNumbers.filter((n) => n <= safePlayTotal).length}</strong>
+                    已刮 <strong className="text-slate-200">{validScratchedSet.size}</strong>
                   </span>
                   <span className="text-slate-400">
-                    剩餘 <strong className="text-emerald-400">{remainingPlayPool.length}</strong> / {safePlayTotal} 洞
+                    剩餘 <strong className="text-emerald-400">{remainingCoordPool.length}</strong> / {totalGridHoles} 洞
                   </span>
                 </div>
                 <button
@@ -280,31 +373,7 @@ export const ScratchHelperModal: React.FC<ScratchHelperModalProps> = ({
                 </button>
               </div>
 
-              {/* 快速標記已刮號碼 */}
-              <div className="flex items-center gap-1.5">
-                <input
-                  type="text"
-                  value={quickInputText}
-                  onChange={(e) => setQuickInputText(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      handleApplyQuickScratched();
-                    }
-                  }}
-                  placeholder="快速標記已刮號碼 (例: 5, 12, 33)"
-                  className="flex-1 bg-[#0B0F17] border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500"
-                />
-                <button
-                  type="button"
-                  onClick={handleApplyQuickScratched}
-                  className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold shrink-0"
-                >
-                  標記已刮
-                </button>
-              </div>
-
-              {/* 隨機抽下一洞按鈕列 & 抽出結果 */}
+              {/* 3. 隨機選位置按鈕 & 2D 定位提示 */}
               <div className="bg-[#0B0F17] border border-slate-800 rounded-xl p-3 space-y-2.5">
                 <div className="flex items-center gap-2">
                   <div className="flex items-center gap-1 bg-[#111827] p-1 rounded-lg border border-slate-800 shrink-0">
@@ -325,79 +394,127 @@ export const ScratchHelperModal: React.FC<ScratchHelperModalProps> = ({
                   </div>
                   <button
                     type="button"
-                    disabled={remainingPlayPool.length === 0}
-                    onClick={handlePickPlayHole}
+                    disabled={remainingCoordPool.length === 0}
+                    onClick={handlePickRandomPosition}
                     className="flex-1 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-slate-950 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors shadow-sm"
                   >
                     <Dices className="w-4 h-4" />
                     <span>
-                      {remainingPlayPool.length === 0 ? '已全部刮完' : '幫我隨機選下一洞'}
+                      {remainingCoordPool.length === 0 ? '已全部刮完' : '幫我隨機選位置'}
                     </span>
                   </button>
                 </div>
 
-                {suggestedPlayNumbers.length > 0 && (
-                  <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="text-[11px] text-slate-400">建議刮：</span>
-                      {suggestedPlayNumbers.map((num) => (
-                        <span
-                          key={num}
-                          className="px-2.5 py-1 rounded-lg bg-amber-500/20 border border-amber-500/50 text-amber-300 font-mono font-bold text-sm"
-                        >
-                          #{num}
-                        </span>
-                      ))}
+                {suggestedCoords.length > 0 && (
+                  <div className="pt-2 border-t border-slate-800/80 space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[11px] text-slate-400 font-bold">
+                        建議刮位置（由上往下 · 由左往右）：
+                      </span>
+                      <button
+                        type="button"
+                        onClick={handleMarkSuggestedAsScratched}
+                        className="px-2.5 py-1 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-300 text-[11px] font-bold flex items-center gap-1 shrink-0"
+                      >
+                        <Check className="w-3 h-3" />
+                        <span>已刮沒中</span>
+                      </button>
                     </div>
-                    <button
-                      type="button"
-                      onClick={handleMarkSuggestedAsScratched}
-                      className="px-2.5 py-1.5 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-300 text-[11px] font-bold flex items-center gap-1 shrink-0"
-                    >
-                      <Check className="w-3 h-3" />
-                      <span>已刮沒中</span>
-                    </button>
+                    <div className="flex flex-wrap gap-1.5">
+                      {suggestedCoords.map((coord) => {
+                        const { r, c } = parseCoord(coord);
+                        return (
+                          <div
+                            key={coord}
+                            className="px-2.5 py-1.5 rounded-lg bg-amber-500/20 border border-amber-500/50 text-amber-300 font-mono font-bold text-xs"
+                          >
+                            第 {r} 橫排 · 第 {c} 格
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 )}
               </div>
 
-              {/* 號碼格子（點擊標記已刮/未刮） */}
+              {/* 4. 2D 實體對照網格 (附橫向與豎向座標標尺) */}
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between text-[11px] text-slate-400">
-                  <span className="flex items-center gap-1">
-                    <Grid className="w-3 h-3" />
-                    點擊號碼可切換「已刮過」
-                  </span>
-                  <span className="font-mono">
-                    橘框=推薦 · 暗灰=已刮
-                  </span>
+                  <span>對照機台點掉已刮開位置</span>
+                  <span className="font-mono">橘色=推薦 · ✕=已刮</span>
                 </div>
-                <div className="grid grid-cols-8 gap-1 max-h-52 overflow-y-auto p-1 bg-[#0B0F17] border border-slate-800 rounded-xl">
-                  {Array.from({ length: safePlayTotal }, (_, i) => i + 1).map((num) => {
-                    const isScratched = scratchedSet.has(num);
-                    const isSuggested = suggestedPlayNumbers.includes(num);
-                    return (
-                      <button
-                        key={num}
-                        type="button"
-                        onClick={() => toggleGridNumber(num)}
-                        className={`h-8 rounded-md text-xs font-mono font-bold transition-colors ${
-                          isSuggested
-                            ? 'bg-amber-500 text-slate-950 ring-2 ring-amber-300'
-                            : isScratched
-                            ? 'bg-slate-900/60 text-slate-600 line-through border border-slate-800/50'
-                            : 'bg-[#111827] text-slate-200 border border-slate-800 hover:border-slate-600'
-                        }`}
-                      >
-                        {num}
-                      </button>
-                    );
-                  })}
+
+                <div className="bg-[#0B0F17] border border-slate-800 rounded-xl p-2 overflow-x-auto max-h-64 overflow-y-auto">
+                  <div className="inline-block min-w-full">
+                    {/* 頂部橫向標尺 (第幾格 1..cols) */}
+                    <div
+                      className="grid gap-1 mb-1"
+                      style={{
+                        gridTemplateColumns: `22px repeat(${safeCols}, minmax(24px, 1fr))`,
+                      }}
+                    >
+                      <div />
+                      {Array.from({ length: safeCols }, (_, cIdx) => (
+                        <div
+                          key={`col-${cIdx + 1}`}
+                          className="text-center text-[10px] font-mono text-slate-500 font-bold"
+                        >
+                          {cIdx + 1}
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* 各橫排 (1..rows) */}
+                    <div className="space-y-1">
+                      {Array.from({ length: safeRows }, (_, rIdx) => {
+                        const r = rIdx + 1;
+                        return (
+                          <div
+                            key={`row-${r}`}
+                            className="grid gap-1 items-center"
+                            style={{
+                              gridTemplateColumns: `22px repeat(${safeCols}, minmax(24px, 1fr))`,
+                            }}
+                          >
+                            {/* 左側豎向標尺 (第幾橫排) */}
+                            <div className="text-[10px] font-mono text-slate-500 font-bold text-right pr-1">
+                              {r}
+                            </div>
+
+                            {Array.from({ length: safeCols }, (_, cIdx) => {
+                              const c = cIdx + 1;
+                              const key = `${r}-${c}`;
+                              const isScratched = validScratchedSet.has(key);
+                              const isSuggested = suggestedCoords.includes(key);
+
+                              return (
+                                <button
+                                  key={key}
+                                  type="button"
+                                  onClick={() => toggleGridCoord(key)}
+                                  title={`第 ${r} 橫排 · 第 ${c} 格`}
+                                  className={`h-7 rounded-md text-[10px] font-mono font-bold flex items-center justify-center transition-colors ${
+                                    isSuggested
+                                      ? 'bg-amber-500 text-slate-950 ring-2 ring-amber-300'
+                                      : isScratched
+                                      ? 'bg-slate-900/70 text-slate-600 border border-slate-800/60'
+                                      : 'bg-[#111827] text-slate-400 border border-slate-700/80 hover:border-slate-500'
+                                  }`}
+                                >
+                                  {isSuggested ? '★' : isScratched ? '✕' : '·'}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
                 </div>
               </div>
             </>
           ) : (
-            /* Mode 1: 隨機選中獎號碼 (台主開板設定獎號用) */
+            /* Mode 2: 隨機選中獎號碼 (台主開板設定獎號用) */
             <>
               {activeBoards.length > 0 && (
                 <div className="bg-[#0B0F17] border border-slate-800 rounded-xl p-3 space-y-1.5">
@@ -449,7 +566,7 @@ export const ScratchHelperModal: React.FC<ScratchHelperModalProps> = ({
                 </div>
 
                 <div className="flex flex-wrap gap-1">
-                  {PRESET_HOLES.map((h) => (
+                  {PRIZE_PRESET_HOLES.map((h) => (
                     <button
                       key={h}
                       type="button"
