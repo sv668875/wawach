@@ -206,6 +206,140 @@ describe('computeNumberLuckMatrix (號碼直接損益與勝率計算)', () => {
     // 絕不可出現在虧損注意號榜
     expect(stats.lossTrapList.some((s: any) => s.number_label === 88)).toBe(false);
   });
+
+  it('多獎項同時出時，依幣量增量均分分攤，加總嚴格等於板面實際損益 (收1300開兩個1200各虧550，合計虧1100)', () => {
+    const { computeNumberLuckMatrix, computeBoardPrizeExitProfits } = require('./calculations');
+    const board: any = {
+      board_id: 'b_concurrent',
+      machine_id: 'm1',
+      total_holes: 80,
+      remaining_holes: 30,
+      board_cost: 0,
+      gross_coin_revenue: 1300,
+      total_cashback_deducted: 2400,
+      net_coin_revenue: -1100,
+      total_prize_cost: 0,
+      net_profit: -1100,
+      status: 'SETTLED',
+      prizes: [
+        {
+          item_id: 'p1',
+          number_label: 1,
+          prize_name: '獎項一',
+          is_cashback: true,
+          cashback_amount: 1200,
+          prize_cost: 0,
+          is_claimed: true,
+          claim_type: 'CASHBACK',
+          claimed_at_revenue: 1300,
+          claimed_at_scratched_holes: 50,
+        },
+        {
+          item_id: 'p2',
+          number_label: 2,
+          prize_name: '獎項二',
+          is_cashback: true,
+          cashback_amount: 1200,
+          prize_cost: 0,
+          is_claimed: true,
+          claim_type: 'CASHBACK',
+          claimed_at_revenue: 1300,
+          claimed_at_scratched_holes: 50,
+        },
+      ],
+      created_at: new Date().toISOString(),
+    };
+
+    const prizeProfits = computeBoardPrizeExitProfits(board);
+    expect(prizeProfits[1].allocated_revenue).toBe(650);
+    expect(prizeProfits[1].exit_profit).toBe(-550);
+    expect(prizeProfits[2].allocated_revenue).toBe(650);
+    expect(prizeProfits[2].exit_profit).toBe(-550);
+    expect(prizeProfits[1].exit_profit + prizeProfits[2].exit_profit).toBe(-1100);
+
+    const stats = computeNumberLuckMatrix([board]);
+    const num1 = stats.allStats.find((s: any) => s.number_label === 1);
+    const num2 = stats.allStats.find((s: any) => s.number_label === 2);
+    expect(num1.direct_exit_profit).toBe(-550);
+    expect(num2.direct_exit_profit).toBe(-550);
+    expect((num1.direct_exit_profit || 0) + (num2.direct_exit_profit || 0)).toBe(-1100);
+  });
+
+  it('多獎項分批巡場開出時，依巡場時序增量分攤，獎1開在500虧700，獎2開在1300增量800虧400，合計虧1100', () => {
+    const { computeNumberLuckMatrix, computeBoardPrizeExitProfits } = require('./calculations');
+    const board: any = {
+      board_id: 'b_sequential',
+      machine_id: 'm1',
+      total_holes: 80,
+      remaining_holes: 30,
+      board_cost: 0,
+      gross_coin_revenue: 1300,
+      total_cashback_deducted: 2400,
+      net_coin_revenue: -1100,
+      total_prize_cost: 0,
+      net_profit: -1100,
+      status: 'SETTLED',
+      check_logs: [
+        {
+          check_id: 'chk_1',
+          logged_at: '2026-11-01T10:00:00.000Z',
+          remaining_holes: 70,
+          newly_claimed_numbers: [1],
+          recorded_cash_added: 500,
+          cumulative_revenue_snapshot: 500,
+        },
+        {
+          check_id: 'chk_2',
+          logged_at: '2026-11-01T14:00:00.000Z',
+          remaining_holes: 30,
+          newly_claimed_numbers: [2],
+          recorded_cash_added: 800,
+          cumulative_revenue_snapshot: 1300,
+        },
+      ],
+      prizes: [
+        {
+          item_id: 'p1',
+          number_label: 1,
+          prize_name: '獎項一',
+          is_cashback: true,
+          cashback_amount: 1200,
+          prize_cost: 0,
+          is_claimed: true,
+          claim_type: 'CASHBACK',
+          claimed_at_revenue: 500,
+          claimed_at_scratched_holes: 10,
+        },
+        {
+          item_id: 'p2',
+          number_label: 2,
+          prize_name: '獎項二',
+          is_cashback: true,
+          cashback_amount: 1200,
+          prize_cost: 0,
+          is_claimed: true,
+          claim_type: 'CASHBACK',
+          claimed_at_revenue: 1300,
+          claimed_at_scratched_holes: 50,
+        },
+      ],
+      created_at: new Date().toISOString(),
+    };
+
+    const prizeProfits = computeBoardPrizeExitProfits(board);
+    expect(prizeProfits[1].allocated_revenue).toBe(500);
+    expect(prizeProfits[1].exit_profit).toBe(-700); // 500 - 1200 = -700
+    expect(prizeProfits[2].allocated_revenue).toBe(800);
+    expect(prizeProfits[2].exit_profit).toBe(-400); // 800 - 1200 = -400
+    expect(prizeProfits[1].exit_profit + prizeProfits[2].exit_profit).toBe(-1100);
+
+    const stats = computeNumberLuckMatrix([board]);
+    const num1 = stats.allStats.find((s: any) => s.number_label === 1);
+    const num2 = stats.allStats.find((s: any) => s.number_label === 2);
+    expect(num1.direct_exit_profit).toBe(-700);
+    expect(num2.direct_exit_profit).toBe(-400);
+    expect((num1.direct_exit_profit || 0) + (num2.direct_exit_profit || 0)).toBe(-1100);
+  });
 });
 
 describe('calculateScratchBoardFinancials (拿獎 vs 回錢 損益對等與毛收幣不足時正確呈現負損益)', () => {

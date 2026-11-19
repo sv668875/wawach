@@ -6,3 +6,9 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# Sashiko local logs & credentials
+sashiko_logs/
+.env.sashiko
+run_review.sh
+Settings.toml

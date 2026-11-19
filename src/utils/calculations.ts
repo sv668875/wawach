@@ -193,6 +193,117 @@ export function getNextMachineCode(machines: Machine[]): string {
  * 樂趣功能：統計每個號碼被台主選了幾次當獎項號碼，以及每版下版後總結是「賺錢」還是「虧損」
  * 包含需求 7：個別號碼出貨時機、直接損益 (開出時幣量 - 獎項成本/回錢) 與提前下課虧損統計
  */
+/**
+ * 需求 7：精準計算刮板各開出獎項之邊際增量營收與即時損益分攤
+ * 解決多獎項同時出、或分批出時「重複計入全額累計幣量」導致的統計扭曲
+ * 確保單板所有開獎號碼的賺賠加總，嚴格等於該板的真實淨利 (營收 - 成本)
+ */
+export interface BoardPrizeExitProfit {
+  number_label: number;
+  item_id: string;
+  prize_name?: string;
+  is_cashback: boolean;
+  cost_or_cashback: number;
+  allocated_revenue: number;    // 該獎項依時序/增量分攤到的投幣營收
+  exit_profit: number;          // 邊際即時賺賠 = allocated_revenue - cost_or_cashback
+  claimed_at_scratched_holes?: number;
+}
+
+export function computeBoardPrizeExitProfits(board: ScratchBoard): Record<number, BoardPrizeExitProfit> {
+  const claimed = (board.prizes || []).filter((p) => p.is_claimed);
+  const result: Record<number, BoardPrizeExitProfit> = {};
+  if (claimed.length === 0) return result;
+
+  const allocatedMap: Record<number, number> = {};
+
+  // 1. 若有巡場記錄 (check_logs)，依巡場時序進行增量幣量分攤
+  if (board.check_logs && board.check_logs.length > 0) {
+    const sortedLogs = [...board.check_logs].sort(
+      (a, b) => new Date(a.logged_at).getTime() - new Date(b.logged_at).getTime()
+    );
+    let prevRev = 0;
+
+    for (const log of sortedLogs) {
+      let deltaCash = 0;
+      if (Number(log.recorded_cash_added) > 0) {
+        deltaCash = Number(log.recorded_cash_added);
+      } else if (log.cumulative_revenue_snapshot !== undefined) {
+        deltaCash = Math.max(0, log.cumulative_revenue_snapshot - prevRev);
+      }
+
+      const logSnapshot = log.cumulative_revenue_snapshot ?? (prevRev + deltaCash);
+      prevRev = logSnapshot;
+
+      const logPrizes = (log.newly_claimed_numbers || [])
+        .map((num) => claimed.find((p) => p.number_label === num))
+        .filter((p): p is ScratchBoardPrize => Boolean(p));
+
+      if (logPrizes.length > 0) {
+        const perPrizeRev = deltaCash / logPrizes.length;
+        for (const p of logPrizes) {
+          allocatedMap[p.number_label] = (allocatedMap[p.number_label] || 0) + perPrizeRev;
+        }
+      }
+    }
+  }
+
+  // 2. 針對尚未被 check_logs 分攤到的開出獎項 (例如手動勾選或未記錄於 check_logs 者)
+  const unallocated = claimed.filter((p) => allocatedMap[p.number_label] === undefined);
+  if (unallocated.length > 0) {
+    // 依 claimed_at_revenue (或總收幣) 分組
+    const groups: Record<number, ScratchBoardPrize[]> = {};
+    for (const p of unallocated) {
+      const rev = p.claimed_at_revenue !== undefined ? p.claimed_at_revenue : board.gross_coin_revenue;
+      if (!groups[rev]) groups[rev] = [];
+      groups[rev].push(p);
+    }
+
+    const sortedRevs = Object.keys(groups)
+      .map(Number)
+      .sort((a, b) => a - b);
+    let baseline = 0;
+
+    for (const rev of sortedRevs) {
+      const prizesInGroup = groups[rev];
+      const delta = Math.max(0, rev - baseline);
+      const perPrize = delta / prizesInGroup.length;
+      for (const p of prizesInGroup) {
+        allocatedMap[p.number_label] = perPrize;
+      }
+      baseline = rev;
+    }
+  }
+
+  // 3. 封裝計算結果
+  for (const p of claimed) {
+    const costOrCashback =
+      p.claim_type === 'CASHBACK'
+        ? Number(p.cashback_amount) || 0
+        : Number(p.prize_cost) || 0;
+    const allocatedRev = allocatedMap[p.number_label] !== undefined
+      ? allocatedMap[p.number_label]
+      : (p.claimed_at_revenue !== undefined ? p.claimed_at_revenue : (board.gross_coin_revenue / claimed.length));
+    const exitProfit = Math.round(allocatedRev - costOrCashback);
+
+    result[p.number_label] = {
+      number_label: p.number_label,
+      item_id: p.item_id,
+      prize_name: p.prize_name,
+      is_cashback: p.is_cashback,
+      cost_or_cashback: costOrCashback,
+      allocated_revenue: Math.round(allocatedRev),
+      exit_profit: exitProfit,
+      claimed_at_scratched_holes: p.claimed_at_scratched_holes,
+    };
+  }
+
+  return result;
+}
+
+/**
+ * 需求 7：統計常用獎號勝率與號碼運氣矩陣
+ * 整合邊際增量分攤演算法，保證號碼損益精準對齊實際板面損益
+ */
 export function computeNumberLuckMatrix(boards: ScratchBoard[]): {
   favoriteAndWinList: NumberLuckStat[];
   profitLeaders: NumberLuckStat[];
@@ -217,6 +328,9 @@ export function computeNumberLuckMatrix(boards: ScratchBoard[]): {
     );
     const boardProfit = fin.netProfit;
     const isWinBoard = boardProfit >= 0;
+
+    // 依時序與增量計算該板所有開出獎項的精準即時損益分攤
+    const prizeProfits = computeBoardPrizeExitProfits(board);
 
     for (const prize of board.prizes) {
       const num = prize.number_label;
@@ -253,16 +367,13 @@ export function computeNumberLuckMatrix(boards: ScratchBoard[]): {
           map[num].total_cashback_given += Number(prize.cashback_amount) || 0;
         }
 
-        // 需求 7：號碼出貨當下損益分析 (開出時幣量 - 獎品成本或回錢金額)
-        const costOrCashback =
-          prize.claim_type === 'CASHBACK'
-            ? Number(prize.cashback_amount) || 0
-            : Number(prize.prize_cost) || 0;
-        const revenueAtExit =
-          prize.claimed_at_revenue !== undefined
-            ? prize.claimed_at_revenue
-            : board.gross_coin_revenue;
-        const exitProfit = revenueAtExit - costOrCashback;
+        // 需求 7：號碼出貨當下邊際損益 (分攤到的增量幣量 - 獎品成本或回錢金額)
+        const exitAnalysis = prizeProfits[num];
+        const exitProfit = exitAnalysis
+          ? exitAnalysis.exit_profit
+          : ((prize.claimed_at_revenue !== undefined ? prize.claimed_at_revenue : board.gross_coin_revenue) -
+             (prize.claim_type === 'CASHBACK' ? (Number(prize.cashback_amount) || 0) : (Number(prize.prize_cost) || 0)));
+
         map[num].directExitProfitSum += exitProfit;
 
         // 當開出時即時損益為負，代表該獎號提早出貨造成台主虧損 (提早下課)

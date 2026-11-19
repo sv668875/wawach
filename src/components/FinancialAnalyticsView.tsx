@@ -107,6 +107,7 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
   const [monthlyFleetFilter, setMonthlyFleetFilter] = useState<FleetFilter>('ALL');
   const [selectedTrendMonthKey, setSelectedTrendMonthKey] = useState<string>('');
   const [expandedMonthCards, setExpandedMonthCards] = useState<Record<string, boolean>>({});
+  const [isSixMonthTrendExpanded, setIsSixMonthTrendExpanded] = useState<boolean>(false);
 
   const mappedReadings = useMemo(() => {
     return readings.map((r) => ({
@@ -716,17 +717,36 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
       {/* 維度 1：全場損益總覽 (OVERVIEW) */}
       {analyticsDimension === 'OVERVIEW' && (
         <>
-          {/* 需求 2：近 6 個月損益走勢 (手機圖表化 · 免橫向滾動) */}
-          <div className="bg-[#111827] border border-[#1E293B] rounded-xl p-4 space-y-4">
-            <div className="flex items-center justify-between gap-2.5">
-              <div className="flex items-center gap-2">
-                <BarChart3 className="w-4 h-4 text-amber-400" />
+          {/* 需求 9：近 6 個月損益走勢 (平常預設收合，點擊後才展開) */}
+          <div className="bg-[#111827] border border-[#1E293B] rounded-xl overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setIsSixMonthTrendExpanded((prev) => !prev)}
+              className="w-full p-4 flex items-center justify-between text-left hover:bg-slate-800/30 transition-colors"
+            >
+              <div className="flex items-center gap-2.5">
+                <BarChart3 className="w-4 h-4 text-amber-400 shrink-0" />
                 <div>
                   <h3 className="text-sm font-bold text-white">近 6 個月營運損益走勢</h3>
-                  <p className="text-[11px] text-slate-400">免橫向滾動圖表 · 點擊柱狀切換焦點月份</p>
+                  <p className="text-[11px] text-slate-400">
+                    {isSixMonthTrendExpanded
+                      ? '免橫向滾動圖表 · 點擊柱狀切換焦點月份'
+                      : '點擊展開近 6 個月月度損益柱狀圖與營收流向結構'}
+                  </p>
                 </div>
               </div>
-            </div>
+              <div className="flex items-center gap-1.5 text-xs text-slate-400 font-mono shrink-0">
+                <span>{isSixMonthTrendExpanded ? '收合' : '展開'}</span>
+                <ChevronDown
+                  className={`w-4 h-4 transition-transform duration-200 ${
+                    isSixMonthTrendExpanded ? 'rotate-180' : ''
+                  }`}
+                />
+              </div>
+            </button>
+
+            {isSixMonthTrendExpanded && (
+              <div className="p-4 pt-0 space-y-4 border-t border-slate-800/60">
 
             {/* 6 欄縱向長條柱狀走勢圖 */}
             {(() => {
@@ -944,12 +964,15 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
                 </div>
               );
             })()}
-
-            {/* 手風琴月度體質卡片清單 (取代生硬 8 欄大表格，手機大拇指好點閱) */}
-            <div className="space-y-2">
-              <div className="text-xs font-bold text-slate-300">
-                月度體質明細卡 (點擊展開明細)
               </div>
+            )}
+          </div>
+
+          {/* 手風琴月度體質卡片清單 (取代生硬 8 欄大表格，手機大拇指好點閱) */}
+          <div className="bg-[#111827] border border-[#1E293B] rounded-xl p-4 space-y-3">
+            <div className="text-xs font-bold text-slate-300">
+              月度體質明細卡 (點擊展開明細)
+            </div>
               <div className="space-y-1.5">
                 {[...monthlyTrends].reverse().map((m) => {
                   const isExpanded = !!expandedMonthCards[m.period_label];
@@ -1006,7 +1029,7 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
                       </button>
 
                       {isExpanded && (
-                        <div className="px-3 pb-3 pt-1 border-t border-slate-800/80 grid grid-cols-2 sm:grid-cols-3 gap-2 text-[11px] font-mono">
+                        <div className="px-3 pb-3 pt-1 border-t border-slate-800/80 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2 text-[11px] font-mono">
                           <div className="p-2 rounded-lg bg-[#111827] border border-slate-800">
                             <span className="flex items-center gap-1 text-slate-400 text-[10px] mb-0.5">
                               <Package className="w-3 h-3 text-sky-400 shrink-0" />
@@ -1042,13 +1065,6 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
                             </span>
                             <span className="text-rose-400 font-bold">-${m.cashback_deducted.toLocaleString()}</span>
                           </div>
-                          <div className="p-2 rounded-lg bg-[#111827] border border-slate-800">
-                            <span className="flex items-center gap-1 text-slate-400 text-[10px] mb-0.5">
-                              <Target className="w-3 h-3 text-emerald-400 shrink-0" />
-                              累計出貨
-                            </span>
-                            <span className="text-emerald-400 font-bold">{m.payout_count} 件 {m.avg_coin_per_prize ? `(均投 $${m.avg_coin_per_prize})` : ''}</span>
-                          </div>
                         </div>
                       )}
                     </div>
@@ -1056,7 +1072,6 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
                 })}
               </div>
             </div>
-          </div>
 
           {/* 1. 核心總損益與營收結構量表 (Gauge & Stacked Chart) */}
           <div className="bg-[#111827] border border-[#1E293B] rounded-xl p-4 space-y-4">

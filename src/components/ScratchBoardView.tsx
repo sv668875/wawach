@@ -22,7 +22,12 @@ import {
   ScratchBoard,
   SettleBoardPayload,
 } from '../types';
-import { calculateScratchBoardFinancials, computeNumberLuckMatrix, formatProfit } from '../utils/calculations';
+import {
+  calculateScratchBoardFinancials,
+  computeBoardPrizeExitProfits,
+  computeNumberLuckMatrix,
+  formatProfit,
+} from '../utils/calculations';
 import { SettleBoardModal } from './SettleBoardModal';
 import { AnalogCounterWheel } from './AnalogCounterWheel';
 
@@ -528,6 +533,83 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
     ? Math.round((scratchedHoles / Math.max(1, selectedBoard.total_holes)) * 100)
     : 0;
 
+  // 需求 5：精準計算選定看板的所有分批巡場紀錄歷程明細
+  const formattedCheckLogs = useMemo(() => {
+    if (!selectedBoard || !selectedBoard.check_logs || selectedBoard.check_logs.length === 0) {
+      return [];
+    }
+
+    // 依時間先後排序 (由舊到新累進計算)
+    const chronoLogs = [...selectedBoard.check_logs].sort(
+      (a, b) => new Date(a.logged_at).getTime() - new Date(b.logged_at).getTime()
+    );
+
+    let prevRemaining = selectedBoard.total_holes;
+    let cumulCash = 0;
+    let cumulCashback = 0;
+    let cumulPrizeCost = 0;
+    const result = [];
+
+    for (const log of chronoLogs) {
+      const scratchedInBatch = Math.max(0, prevRemaining - log.remaining_holes);
+      prevRemaining = log.remaining_holes;
+      const totalScratchedSoFar = selectedBoard.total_holes - log.remaining_holes;
+
+      const cashAdded = Number(log.recorded_cash_added) || 0;
+      cumulCash = log.cumulative_revenue_snapshot ?? (cumulCash + cashAdded);
+
+      const claimedPrizes = (log.newly_claimed_numbers || []).map((num) => {
+        const p = selectedBoard.prizes.find((pz) => pz.number_label === num);
+        const detail = log.claimed_prize_details?.find((d) => d.number_label === num);
+        const claimType = detail?.claim_type ?? (p?.claim_type ?? (p?.is_cashback ? 'CASHBACK' : 'PHYSICAL'));
+        const costOrCashback = claimType === 'CASHBACK' ? (p?.cashback_amount || 0) : (p?.prize_cost || 0);
+        return {
+          number_label: num,
+          prize_name: p?.prize_name || (claimType === 'CASHBACK' ? '回錢獎項' : '商品大獎'),
+          claim_type: claimType,
+          cost_or_cashback: costOrCashback,
+        };
+      });
+
+      const batchCashback = claimedPrizes
+        .filter((p) => p.claim_type === 'CASHBACK')
+        .reduce((sum, p) => sum + p.cost_or_cashback, 0);
+      const batchPrizeCost = claimedPrizes
+        .filter((p) => p.claim_type === 'PHYSICAL')
+        .reduce((sum, p) => sum + p.cost_or_cashback, 0);
+
+      cumulCashback += batchCashback;
+      cumulPrizeCost += batchPrizeCost;
+
+      const batchProfit = cashAdded - batchCashback - batchPrizeCost;
+      const cumulativeProfit = cumulCash - cumulCashback - cumulPrizeCost - (selectedBoard.board_cost || 0);
+
+      const avgPerHoleBatch = scratchedInBatch > 0 ? Math.round(cashAdded / scratchedInBatch) : (cashAdded > 0 ? cashAdded : 0);
+      const avgPerHoleCumul = totalScratchedSoFar > 0 ? Math.round(cumulCash / totalScratchedSoFar) : 0;
+
+      result.push({
+        check_id: log.check_id,
+        logged_at: log.logged_at,
+        remaining_holes: log.remaining_holes,
+        scratched_in_batch: scratchedInBatch,
+        total_scratched_so_far: totalScratchedSoFar,
+        recorded_cash_added: cashAdded,
+        cumulative_revenue: cumulCash,
+        avg_revenue_per_hole_batch: avgPerHoleBatch,
+        avg_revenue_per_hole_cumul: avgPerHoleCumul,
+        claimed_prizes: claimedPrizes,
+        batch_cashback: batchCashback,
+        batch_prize_cost: batchPrizeCost,
+        batch_profit: batchProfit,
+        cumulative_profit: cumulativeProfit,
+        note: log.note,
+      });
+    }
+
+    // 最新紀錄排在最上方供檢視
+    return result.reverse();
+  }, [selectedBoard?.board_id, selectedBoard?.check_logs, selectedBoard?.prizes, selectedBoard?.total_holes, selectedBoard?.board_cost]);
+
   return (
     <div className="space-y-4">
       {/* 頂部主分頁切換：進行中 vs 歷史統計 */}
@@ -761,31 +843,31 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                   />
                 </div>
 
-                {/* 4 格關鍵損益數字 */}
+                {/* 4 格關鍵損益數字 (面板總收幣、回錢支出、拿獎成本、本板淨損益 - 需求 6) */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
                   <div className="bg-[#0B0F17] rounded-lg p-2.5 border border-slate-800/80">
-                    <div className="text-xs text-slate-400 font-medium">面板收幣</div>
+                    <div className="text-xs text-slate-400 font-medium">面板總收幣</div>
                     <div className="text-base font-mono font-bold text-white">
                       ${boardFinancials.grossCoinRevenue.toLocaleString()}
                     </div>
                   </div>
 
                   <div className="bg-[#0B0F17] rounded-lg p-2.5 border border-slate-800/80">
-                    <div className="text-xs text-slate-400 font-medium">回錢扣幣</div>
+                    <div className="text-xs text-slate-400 font-medium">回錢支出</div>
                     <div className="text-base font-mono font-bold text-amber-400">
                       -${boardFinancials.totalCashbackDeducted.toLocaleString()}
                     </div>
                   </div>
 
                   <div className="bg-[#0B0F17] rounded-lg p-2.5 border border-slate-800/80">
-                    <div className="text-xs text-slate-400 font-medium">實質幣量</div>
-                    <div className="text-base font-mono font-bold text-white">
-                      ${boardFinancials.netCoinRevenue.toLocaleString()}
+                    <div className="text-xs text-slate-400 font-medium">拿獎成本</div>
+                    <div className="text-base font-mono font-bold text-sky-400">
+                      -${boardFinancials.claimedPrizeCost.toLocaleString()}
                     </div>
                   </div>
 
                   <div className="bg-[#0B0F17] rounded-lg p-2.5 border border-slate-800/80">
-                    <div className="text-xs text-slate-400 font-medium">本版賺賠</div>
+                    <div className="text-xs text-slate-400 font-medium">本板淨損益</div>
                     <div
                       className={`text-base font-mono font-bold ${
                         boardFinancials.netProfit >= 0
@@ -797,6 +879,41 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                     </div>
                   </div>
                 </div>
+
+                {/* 需求 8：當前未下板之即時均出與回本統計卡 */}
+                {(() => {
+                  const claimedCount = selectedBoard.prizes.filter((p) => p.is_claimed).length;
+                  const totalPrizesCount = selectedBoard.prizes.length;
+                  const avgPerHole = scratchedHoles > 0
+                    ? Math.round(selectedBoard.gross_coin_revenue / scratchedHoles)
+                    : 0;
+                  const avgPerClaimedPrize = claimedCount > 0
+                    ? Math.round(selectedBoard.gross_coin_revenue / claimedCount)
+                    : 0;
+
+                  return (
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-[#0B0F17] p-2.5 rounded-xl border border-slate-800 text-xs font-mono">
+                      <div className="flex flex-col">
+                        <span className="text-[10px] text-slate-400">已刮開洞數</span>
+                        <span className="text-white font-bold">{scratchedHoles} / {selectedBoard.total_holes} 洞 ({scratchedPct}%)</span>
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-[10px] text-slate-400">每洞平均投幣</span>
+                        <span className="text-amber-400 font-bold">{scratchedHoles > 0 ? `$${avgPerHole}/洞` : '-'}</span>
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-[10px] text-slate-400">大獎開出進度</span>
+                        <span className="text-emerald-400 font-bold">{claimedCount} / {totalPrizesCount} 獎</span>
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-[10px] text-slate-400">即時大獎均出比</span>
+                        <span className="text-sky-400 font-bold">
+                          {claimedCount > 0 ? `$${avgPerClaimedPrize}/獎` : '尚未出大獎'}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* 分批紀錄：剩幾洞 & 哪幾號出了 */}
@@ -1153,6 +1270,130 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                     儲存分批紀錄
                   </button>
                 </form>
+              </div>
+
+              {/* 需求 5：本板分批巡場明細歷史清單 (記錄幾洞、多少錢、均出多少、出哪些獎品、當次輸贏與累計輸贏) */}
+              <div className="bg-[#111827] border border-[#1E293B] rounded-xl p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="text-xs font-bold text-white flex items-center gap-1.5">
+                    <History className="w-4 h-4 text-amber-400" />
+                    <span>分批巡場紀錄歷程 ({formattedCheckLogs.length} 筆)</span>
+                  </div>
+                  <span className="text-[11px] text-slate-400 font-mono">
+                    最新紀錄於上方
+                  </span>
+                </div>
+
+                {formattedCheckLogs.length === 0 ? (
+                  <div className="bg-[#0B0F17] border border-slate-800 rounded-xl p-4 text-center text-xs text-slate-500">
+                    目前尚未有分批巡場紀錄。填寫上方表單並點擊「儲存分批紀錄」即可建立本板巡場歷程。
+                  </div>
+                ) : (
+                  <div className="space-y-2.5">
+                    {formattedCheckLogs.map((log, idx) => (
+                      <div
+                        key={log.check_id}
+                        className="bg-[#0B0F17] border border-slate-800/90 rounded-xl p-3 space-y-2.5"
+                      >
+                        {/* 頂部：時間戳記、第幾次巡場、開出洞數與剩餘 */}
+                        <div className="flex items-center justify-between text-xs flex-wrap gap-2">
+                          <div className="flex items-center gap-2">
+                            <span className="px-1.5 py-0.5 rounded bg-slate-800 font-mono text-[10px] text-slate-300 font-bold">
+                              #{formattedCheckLogs.length - idx}
+                            </span>
+                            <span className="font-mono text-slate-400 text-[11px]">
+                              {new Date(log.logged_at).toLocaleString('zh-TW', {
+                                month: '2-digit',
+                                day: '2-digit',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              })}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 font-mono text-xs">
+                            <span className="text-amber-400 font-bold">
+                              開出 Δ {log.scratched_in_batch} 洞
+                            </span>
+                            <span className="text-slate-500">·</span>
+                            <span className="text-slate-400">
+                              剩 {log.remaining_holes} / {selectedBoard.total_holes} 洞
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* 中間：收幣、均出、當次輸贏、累計輸贏 (4 欄對稱網格) */}
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 text-xs font-mono">
+                          <div className="bg-[#111827] p-2 rounded-lg border border-slate-800/80">
+                            <span className="block text-[10px] text-slate-400 mb-0.5">當次收幣</span>
+                            <span className="text-white font-bold">
+                              {log.recorded_cash_added > 0 ? `+$${log.recorded_cash_added.toLocaleString()}` : '$0'}
+                            </span>
+                            <span className="block text-[9px] text-slate-500 mt-0.5">
+                              累計 ${log.cumulative_revenue.toLocaleString()}
+                            </span>
+                          </div>
+
+                          <div className="bg-[#111827] p-2 rounded-lg border border-slate-800/80">
+                            <span className="block text-[10px] text-slate-400 mb-0.5">均投 / 均出</span>
+                            <span className="text-sky-400 font-bold">
+                              ${log.avg_revenue_per_hole_batch}/洞
+                            </span>
+                            <span className="block text-[9px] text-slate-500 mt-0.5">
+                              全板均投 ${log.avg_revenue_per_hole_cumul}/洞
+                            </span>
+                          </div>
+
+                          <div className="bg-[#111827] p-2 rounded-lg border border-slate-800/80">
+                            <span className="block text-[10px] text-slate-400 mb-0.5">當次輸贏</span>
+                            <span className={`font-bold ${log.batch_profit >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                              {formatProfit(log.batch_profit)}
+                            </span>
+                            <span className="block text-[9px] text-slate-500 mt-0.5">
+                              {log.batch_cashback > 0 ? `回錢 $${log.batch_cashback}` : (log.batch_prize_cost > 0 ? `貨本 $${log.batch_prize_cost}` : '無獎品支出')}
+                            </span>
+                          </div>
+
+                          <div className="bg-[#111827] p-2 rounded-lg border border-slate-800/80">
+                            <span className="block text-[10px] text-slate-400 mb-0.5">累計輸贏</span>
+                            <span className={`font-bold ${log.cumulative_profit >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                              {formatProfit(log.cumulative_profit)}
+                            </span>
+                            <span className="block text-[9px] text-slate-500 mt-0.5">
+                              至此巡場淨利
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* 開出獎品標籤清單 */}
+                        <div className="flex items-center gap-1.5 flex-wrap pt-0.5 text-[11px] font-mono">
+                          <span className="text-slate-400 text-[10px]">開出獎品：</span>
+                          {log.claimed_prizes.length === 0 ? (
+                            <span className="text-slate-500 text-[10px]">（本批巡場無大獎開出）</span>
+                          ) : (
+                            log.claimed_prizes.map((p) => (
+                              <span
+                                key={p.number_label}
+                                className={`px-2 py-0.5 rounded text-[10px] font-bold border flex items-center gap-1 ${
+                                  p.claim_type === 'CASHBACK'
+                                    ? 'bg-amber-500/10 border-amber-500/30 text-amber-300'
+                                    : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+                                }`}
+                              >
+                                <span>#{p.number_label}</span>
+                                <span>{p.prize_name}</span>
+                                <span>
+                                  {p.claim_type === 'CASHBACK'
+                                    ? `(回錢 $${p.cost_or_cashback})`
+                                    : `(拿獎 成本 $${p.cost_or_cashback})`}
+                                </span>
+                              </span>
+                            ))
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* 獎項管理區塊 (貼入獎號 / 獎項清單) */}
@@ -1565,6 +1806,7 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                     board.prizes
                   );
                   const claimedPrizes = board.prizes.filter((p) => p.is_claimed);
+                  const prizeProfits = computeBoardPrizeExitProfits(board);
 
                   // 需求 3 & 7：計算下版真實剩餘洞數、實際被刮洞數與每洞均投
                   const remHoles =
@@ -1664,9 +1906,10 @@ export const ScratchBoardView: React.FC<ScratchBoardViewProps> = ({
                           <div className="text-[10px] text-slate-400">開出獎項 ({claimedPrizes.length} 個)：</div>
                           <div className="flex flex-wrap gap-1.5">
                             {claimedPrizes.map((p) => {
+                              const prof = prizeProfits[p.number_label];
                               const costOrCb = p.claim_type === 'CASHBACK' ? (p.cashback_amount || 0) : (p.prize_cost || 0);
-                              const exitRev = p.claimed_at_revenue !== undefined ? p.claimed_at_revenue : fin.grossCoinRevenue;
-                              const exitProfit = exitRev - costOrCb;
+                              const exitRev = prof ? prof.allocated_revenue : (p.claimed_at_revenue !== undefined ? p.claimed_at_revenue : fin.grossCoinRevenue);
+                              const exitProfit = prof ? prof.exit_profit : (exitRev - costOrCb);
                               return (
                                 <span
                                   key={p.item_id}
