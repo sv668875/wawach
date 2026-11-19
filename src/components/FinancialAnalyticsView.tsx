@@ -70,7 +70,7 @@ interface FinancialAnalyticsViewProps {
 }
 
 type PeriodType = 'ALL' | 'WEEK' | 'MONTH' | 'YEAR';
-type AnalyticsDimension = 'OVERVIEW' | 'VENUE' | 'MACHINE' | 'BOARD';
+type DetailTab = 'MACHINE' | 'VENUE' | 'BOARD';
 
 function getWeekRange(refDate: Date) {
   const d = new Date(refDate);
@@ -107,21 +107,19 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
   const [selectedYear, setSelectedYear] = useState<number>(now.getFullYear());
   const [selectedMonth, setSelectedMonth] = useState<number>(now.getMonth() + 1);
 
-  // 需求 10：多面向損益維度 (全場總覽、依場地、依機台、依刮板)
-  const [analyticsDimension, setAnalyticsDimension] =
-    useState<AnalyticsDimension>('OVERVIEW');
+  // 損益明細頁籤 (依機台 / 依場地 / 依刮板)
+  const [detailTab, setDetailTab] = useState<DetailTab>('MACHINE');
   const [selectedVenueFilter, setSelectedVenueFilter] = useState<string>('ALL');
-  const [selectedMachineFilter, setSelectedMachineFilter] = useState<string>('ALL');
   const [boardStatusFilter, setBoardStatusFilter] = useState<
     'ALL' | 'ACTIVE' | 'SETTLED'
   >('ALL');
 
-  // 需求 2：近 6 個月損益趨勢與雙棲混營視角篩選狀態
+  // 近 6 個月損益趨勢與雙棲混營視角篩選狀態
   const [monthlyFleetFilter, setMonthlyFleetFilter] = useState<FleetFilter>('ALL');
   const [selectedTrendMonthKey, setSelectedTrendMonthKey] = useState<string>('');
-  const [expandedMonthCards, setExpandedMonthCards] = useState<Record<string, boolean>>({});
   const [isSixMonthTrendExpanded, setIsSixMonthTrendExpanded] = useState<boolean>(false);
   const [isCoinBoxExpanded, setIsCoinBoxExpanded] = useState<boolean>(false);
+  const [isMaintenanceExpanded, setIsMaintenanceExpanded] = useState<boolean>(false);
 
   const mappedReadings = useMemo(() => {
     return readings.map((r) => ({
@@ -153,13 +151,6 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
     }
     return monthlyTrends[monthlyTrends.length - 1] || null;
   }, [monthlyTrends, selectedTrendMonthKey]);
-
-  const toggleMonthCardExpanded = (periodLabel: string) => {
-    setExpandedMonthCards((prev) => ({
-      ...prev,
-      [periodLabel]: !prev[periodLabel],
-    }));
-  };
 
   // 需求 8：匯入 JSON 預覽與確認狀態
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -485,14 +476,11 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
     });
   }, [uniqueVenues, machines, filteredBoards, filteredReadings, filteredExpenses, dateRange, currentPeriodMonthStr]);
 
-  // 需求 10：刮板維度篩選清單
+  // 刮板維度篩選清單
   const displayedBoards = useMemo(() => {
     return filteredBoards.filter((b) => {
       const m = machines.find((mc) => mc.machine_id === b.machine_id);
       if (selectedVenueFilter !== 'ALL' && (m?.location || '').trim() !== selectedVenueFilter) {
-        return false;
-      }
-      if (selectedMachineFilter !== 'ALL' && b.machine_id !== selectedMachineFilter) {
         return false;
       }
       if (boardStatusFilter !== 'ALL' && b.status !== boardStatusFilter) {
@@ -500,117 +488,90 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
       }
       return true;
     });
-  }, [filteredBoards, machines, selectedVenueFilter, selectedMachineFilter, boardStatusFilter]);
+  }, [filteredBoards, machines, selectedVenueFilter, boardStatusFilter]);
+
+  // 依場地篩選後的機台損益排行（淨利由高到低）
+  const scopedMachineBreakdown = useMemo(() => {
+    const list =
+      selectedVenueFilter === 'ALL'
+        ? analytics.machineBreakdown
+        : analytics.machineBreakdown.filter(
+            (r) => (r.machine.location || '').trim() === selectedVenueFilter
+          );
+    return [...list].sort((a, b) => b.netProfit - a.netProfit);
+  }, [analytics.machineBreakdown, selectedVenueFilter]);
+
+  // 依場地篩選後的總結指標
+  const scopedTotals = useMemo(() => {
+    if (selectedVenueFilter === 'ALL') {
+      return {
+        grossRevenue: analytics.totalGrossRevenue,
+        cashbackDeducted: analytics.totalCashbackDeducted,
+        prizeCost: analytics.totalPrizeCost,
+        overhead: analytics.grandTotalOverhead,
+        netProfit: analytics.trueNetProfit,
+        profitMargin:
+          analytics.totalGrossRevenue > 0
+            ? Math.round((analytics.trueNetProfit / analytics.totalGrossRevenue) * 1000) / 10
+            : 0,
+        cashbackPct,
+        prizeCostPct,
+        rentPct,
+        profitPct,
+      };
+    }
+
+    const grossRevenue = scopedMachineBreakdown.reduce((s, r) => s + r.grossRevenue, 0);
+    const cashbackDeducted = scopedMachineBreakdown.reduce((s, r) => s + r.cashbackDeducted, 0);
+    const prizeCost = scopedMachineBreakdown.reduce((s, r) => s + r.totalDirectPrizeCost, 0);
+    const venueMachines = scopedMachineBreakdown.map((r) => r.machine);
+    const venueMachineIds = new Set(venueMachines.map((m) => m.machine_id));
+    const venueExpenses = filteredExpenses.filter(
+      (e) => e.machine_id && venueMachineIds.has(e.machine_id)
+    );
+    const overhead = calculateSimpleOverhead(venueMachines, venueExpenses, 'ALL', {
+      dateRange,
+      currentPeriodMonth: currentPeriodMonthStr,
+    }).grandTotalOverhead;
+    const netProfit = grossRevenue - cashbackDeducted - prizeCost - overhead;
+    const base = Math.max(1, grossRevenue);
+    const cbP = Math.min(100, Math.round((cashbackDeducted / base) * 100));
+    const prP = Math.min(100, Math.round((prizeCost / base) * 100));
+    const rP = Math.min(100, Math.round((overhead / base) * 100));
+    const pfP = Math.max(0, 100 - cbP - prP - rP);
+
+    return {
+      grossRevenue,
+      cashbackDeducted,
+      prizeCost,
+      overhead,
+      netProfit,
+      profitMargin:
+        grossRevenue > 0 ? Math.round((netProfit / grossRevenue) * 1000) / 10 : 0,
+      cashbackPct: cbP,
+      prizeCostPct: prP,
+      rentPct: rP,
+      profitPct: pfP,
+    };
+  }, [
+    selectedVenueFilter,
+    analytics,
+    cashbackPct,
+    prizeCostPct,
+    rentPct,
+    profitPct,
+    scopedMachineBreakdown,
+    filteredExpenses,
+    dateRange,
+    currentPeriodMonthStr,
+  ]);
 
   return (
     <div className="space-y-4">
-      {/* 多面向損益維度切換列 (總覽 / 場地 / 機台 / 刮板 - 手機端 2x2 佈局防擠壓) */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 bg-[#111827] p-1.5 rounded-xl border border-[#1E293B] gap-1.5">
-        <button
-          type="button"
-          onClick={() => setAnalyticsDimension('OVERVIEW')}
-          className={`flex items-center justify-center gap-1.5 min-h-[42px] py-2 px-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap active:scale-95 touch-manipulation ${
-            analyticsDimension === 'OVERVIEW'
-              ? 'bg-amber-500 text-slate-950 shadow-sm'
-              : 'text-slate-400 hover:text-white'
-          }`}
-        >
-          <TrendingUp className="w-3.5 h-3.5 shrink-0" />
-          <span>總覽</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => setAnalyticsDimension('VENUE')}
-          className={`flex items-center justify-center gap-1.5 min-h-[42px] py-2 px-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap active:scale-95 touch-manipulation ${
-            analyticsDimension === 'VENUE'
-              ? 'bg-amber-500 text-slate-950 shadow-sm'
-              : 'text-slate-400 hover:text-white'
-          }`}
-        >
-          <Building className="w-3.5 h-3.5 shrink-0" />
-          <span>場地</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => setAnalyticsDimension('MACHINE')}
-          className={`flex items-center justify-center gap-1.5 min-h-[42px] py-2 px-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap active:scale-95 touch-manipulation ${
-            analyticsDimension === 'MACHINE'
-              ? 'bg-amber-500 text-slate-950 shadow-sm'
-              : 'text-slate-400 hover:text-white'
-          }`}
-        >
-          <BarChart3 className="w-3.5 h-3.5 shrink-0" />
-          <span>機台</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => setAnalyticsDimension('BOARD')}
-          className={`flex items-center justify-center gap-1.5 min-h-[42px] py-2 px-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap active:scale-95 touch-manipulation ${
-            analyticsDimension === 'BOARD'
-              ? 'bg-amber-500 text-slate-950 shadow-sm'
-              : 'text-slate-400 hover:text-white'
-          }`}
-        >
-          <Grid className="w-3.5 h-3.5 shrink-0" />
-          <span>刮板</span>
-        </button>
-      </div>
-
-      {/* 條件篩選列 */}
-      <div className="bg-[#111827] border border-[#1E293B] rounded-xl p-2.5 flex flex-wrap items-center gap-2">
-        <div className="flex items-center gap-1 text-xs text-slate-400 font-bold shrink-0">
-          <Filter className="w-3.5 h-3.5 text-amber-400" />
-          <span>篩選</span>
-        </div>
-        <select
-          value={selectedVenueFilter}
-          onChange={(e) => setSelectedVenueFilter(e.target.value)}
-          className="flex-1 min-w-[100px] bg-[#0B0F17] border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-white"
-        >
-          <option value="ALL">全部場地</option>
-          {uniqueVenues.map((v) => (
-            <option key={v} value={v}>
-              📍 {v}
-            </option>
-          ))}
-        </select>
-
-        <select
-          value={selectedMachineFilter}
-          onChange={(e) => setSelectedMachineFilter(e.target.value)}
-          className="flex-1 min-w-[100px] bg-[#0B0F17] border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-white"
-        >
-          <option value="ALL">全部機台</option>
-          {machines.map((m) => (
-            <option key={m.machine_id} value={m.machine_id}>
-              [{m.code}] {m.name}
-            </option>
-          ))}
-        </select>
-
-        {analyticsDimension === 'BOARD' && (
-          <select
-            value={boardStatusFilter}
-            onChange={(e) => setBoardStatusFilter(e.target.value as any)}
-            className="flex-1 min-w-[85px] bg-[#0B0F17] border border-slate-700 rounded-lg px-2 py-1 text-xs text-white"
-          >
-            <option value="ALL">全部狀態</option>
-            <option value="ACTIVE">進行中</option>
-            <option value="SETTLED">已結算</option>
-          </select>
-        )}
-      </div>
-
-      {/* 0. 時間區間篩選控制列 (需求 7) */}
+      {/* 1. 精簡頂部篩選控制列：時間範圍 + 場地 */}
       <div className="bg-[#111827] border border-[#1E293B] rounded-xl p-3 space-y-2.5">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-1.5 text-xs font-bold text-white">
-            <Calendar className="w-4 h-4 text-amber-400" />
-            <span>時間範圍</span>
-          </div>
-
-          {/* 週 / 月 / 年 / 全部切換 (防擠壓網格) */}
-          <div className="grid grid-cols-4 sm:flex items-center bg-[#0B0F17] p-1 rounded-xl border border-slate-800">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="grid grid-cols-4 bg-[#0B0F17] p-1 rounded-xl border border-slate-800 flex-1 min-w-[200px]">
             {(['ALL', 'WEEK', 'MONTH', 'YEAR'] as PeriodType[]).map((type) => (
               <button
                 key={type}
@@ -618,60 +579,72 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
                 onClick={() => {
                   setPeriodType(type);
                   if (type === 'WEEK') setWeekOffset(0);
-                  if (type === 'MONTH') {
-                    setSelectedYear(now.getFullYear());
-                    setSelectedMonth(now.getMonth() + 1);
-                  }
-                  if (type === 'YEAR') setSelectedYear(now.getFullYear());
                 }}
-                className={`h-7 px-2.5 rounded-lg text-xs font-semibold transition-colors text-center whitespace-nowrap ${
+                className={`py-1.5 rounded-lg text-xs font-bold transition-colors whitespace-nowrap ${
                   periodType === type
                     ? 'bg-amber-500 text-slate-950 shadow-sm'
                     : 'text-slate-400 hover:text-white'
                 }`}
               >
-                {type === 'ALL' && '全部'}
-                {type === 'WEEK' && '週'}
-                {type === 'MONTH' && '月'}
-                {type === 'YEAR' && '年'}
+                {type === 'ALL'
+                  ? '全部'
+                  : type === 'WEEK'
+                  ? '本週'
+                  : type === 'MONTH'
+                  ? '月份'
+                  : '年度'}
               </button>
             ))}
           </div>
+
+          {uniqueVenues.length > 1 && (
+            <select
+              value={selectedVenueFilter}
+              onChange={(e) => setSelectedVenueFilter(e.target.value)}
+              className="bg-[#0B0F17] border border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-white focus:outline-none focus:border-amber-500"
+            >
+              <option value="ALL">全部場地 ({uniqueVenues.length})</option>
+              {uniqueVenues.map((v) => (
+                <option key={v} value={v}>
+                  {v}
+                </option>
+              ))}
+            </select>
+          )}
         </div>
 
         {/* 週選擇控制 */}
         {periodType === 'WEEK' && dateRange && (
-          <div className="flex items-center justify-between bg-[#0B0F17] px-3 py-2 rounded-lg border border-slate-800 text-xs">
+          <div className="flex items-center justify-between bg-[#0B0F17] p-2 rounded-lg border border-slate-800">
             <button
               type="button"
               onClick={() => setWeekOffset((prev) => prev - 1)}
-              className="flex items-center gap-1 text-slate-400 hover:text-white"
+              className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
             >
               <ChevronLeft className="w-4 h-4" />
-              上一週
             </button>
-            <div className="font-mono font-bold text-amber-400 text-center">
-              {weekOffset === 0 && (
-                <span className="text-[10px] bg-amber-500/15 text-amber-400 px-1.5 py-0.5 rounded mr-1.5">
-                  本週
-                </span>
+            <div className="text-xs font-mono font-bold text-white flex items-center gap-2">
+              <span>
+                {dateRange.start.toLocaleDateString('zh-TW', { month: 'numeric', day: 'numeric' })}
+                {' - '}
+                {dateRange.end.toLocaleDateString('zh-TW', { month: 'numeric', day: 'numeric' })}
+              </span>
+              {weekOffset !== 0 && (
+                <button
+                  type="button"
+                  onClick={() => setWeekOffset(0)}
+                  className="text-[11px] px-2 py-0.5 rounded bg-amber-500/20 text-amber-300"
+                >
+                  回本週
+                </button>
               )}
-              {dateRange.start.toLocaleDateString(undefined, {
-                month: '2-digit',
-                day: '2-digit',
-              })}{' '}
-              ~{' '}
-              {dateRange.end.toLocaleDateString(undefined, {
-                month: '2-digit',
-                day: '2-digit',
-              })}
             </div>
             <button
               type="button"
               onClick={() => setWeekOffset((prev) => prev + 1)}
-              className="flex items-center gap-1 text-slate-400 hover:text-white"
+              disabled={weekOffset >= 0}
+              className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 disabled:opacity-30"
             >
-              下一週
               <ChevronRight className="w-4 h-4" />
             </button>
           </div>
@@ -679,110 +652,305 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
 
         {/* 月選擇控制 */}
         {periodType === 'MONTH' && (
-          <div className="flex items-center justify-between gap-2 bg-[#0B0F17] px-3 py-2 rounded-lg border border-slate-800 text-xs">
-            <div className="flex items-center gap-2">
-              <select
-                value={selectedYear}
-                onChange={(e) => setSelectedYear(Number(e.target.value))}
-                className="bg-[#111827] border border-slate-700 rounded-md px-2 py-1 text-xs text-white"
-              >
-                {[2024, 2025, 2026, 2027].map((y) => (
-                  <option key={y} value={y}>
-                    {y} 年
-                  </option>
-                ))}
-              </select>
-              <select
-                value={selectedMonth}
-                onChange={(e) => setSelectedMonth(Number(e.target.value))}
-                className="bg-[#111827] border border-slate-700 rounded-md px-2 py-1 text-xs text-white"
-              >
-                {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
-                  <option key={m} value={m}>
-                    {m} 月
-                  </option>
-                ))}
-              </select>
-            </div>
-            <button
-              type="button"
-              onClick={() => {
-                setSelectedYear(now.getFullYear());
-                setSelectedMonth(now.getMonth() + 1);
-              }}
-              className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-400 text-[11px] font-bold"
-            >
-              切至本月
-            </button>
-          </div>
-        )}
-
-        {/* 年選擇控制 */}
-        {periodType === 'YEAR' && (
-          <div className="flex items-center justify-between bg-[#0B0F17] px-3 py-2 rounded-lg border border-slate-800 text-xs">
-            <span className="text-slate-400">選擇結算年度：</span>
+          <div className="grid grid-cols-2 gap-2">
             <select
               value={selectedYear}
               onChange={(e) => setSelectedYear(Number(e.target.value))}
-              className="bg-[#111827] border border-slate-700 rounded-md px-3 py-1 text-xs text-white font-mono font-bold"
+              className="bg-[#0B0F17] border border-slate-700 rounded-lg px-3 py-2 text-xs font-mono font-bold text-white focus:outline-none focus:border-amber-500"
             >
-              {[2024, 2025, 2026, 2027, 2028].map((y) => (
+              {[now.getFullYear() - 1, now.getFullYear(), now.getFullYear() + 1].map((y) => (
                 <option key={y} value={y}>
-                  {y} 年度
+                  {y} 年
+                </option>
+              ))}
+            </select>
+            <select
+              value={selectedMonth}
+              onChange={(e) => setSelectedMonth(Number(e.target.value))}
+              className="bg-[#0B0F17] border border-slate-700 rounded-lg px-3 py-2 text-xs font-mono font-bold text-white focus:outline-none focus:border-amber-500"
+            >
+              {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
+                <option key={m} value={m}>
+                  {m} 月
                 </option>
               ))}
             </select>
           </div>
         )}
+
+        {/* 年選擇控制 */}
+        {periodType === 'YEAR' && (
+          <select
+            value={selectedYear}
+            onChange={(e) => setSelectedYear(Number(e.target.value))}
+            className="w-full bg-[#0B0F17] border border-slate-700 rounded-lg px-3 py-2 text-xs font-mono font-bold text-white focus:outline-none focus:border-amber-500"
+          >
+            {[now.getFullYear() - 1, now.getFullYear(), now.getFullYear() + 1].map((y) => (
+              <option key={y} value={y}>
+                {y} 年度
+              </option>
+            ))}
+          </select>
+        )}
       </div>
 
-      {/* 維度 1：全場損益總覽 (OVERVIEW) */}
-      {analyticsDimension === 'OVERVIEW' && (
-        <>
-          {/* 需求 9：近 6 個月損益走勢 (平常預設收合，點擊後才展開) */}
-          <div className="bg-[#111827] border border-[#1E293B] rounded-xl overflow-hidden">
-            <button
-              type="button"
-              onClick={() => setIsSixMonthTrendExpanded((prev) => !prev)}
-              className="w-full p-4 flex items-center justify-between text-left hover:bg-slate-800/30 transition-colors"
+      {/* 2. 置頂核心損益總結卡 */}
+      <div className="bg-[#111827] border border-[#1E293B] rounded-xl p-4 space-y-4">
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <div className="text-xs font-bold text-slate-400">
+              {selectedVenueFilter === 'ALL' ? '全場實質淨利' : `[${selectedVenueFilter}] 實質淨利`}
+            </div>
+            <div
+              className={`text-3xl font-mono font-bold tracking-tight mt-0.5 ${
+                scopedTotals.netProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'
+              }`}
             >
-              <div className="flex items-center gap-2.5">
-                <BarChart3 className="w-4 h-4 text-amber-400 shrink-0" />
-                <div>
-                  <h3 className="text-sm font-bold text-white">近 6 個月營運損益走勢</h3>
-                  <p className="text-[11px] text-slate-400">
-                    {isSixMonthTrendExpanded
-                      ? '免橫向滾動圖表 · 點擊柱狀切換焦點月份'
-                      : '點擊展開近 6 個月月度損益柱狀圖與營收流向結構'}
-                  </p>
+              {formatProfit(scopedTotals.netProfit)}
+            </div>
+          </div>
+
+          <div className="text-right">
+            <div className="text-[11px] text-slate-400">淨利率</div>
+            <div className="inline-flex items-center px-2 py-0.5 mt-1 rounded-md bg-[#0B0F17] border border-slate-800 text-xs font-mono font-bold text-amber-400">
+              {scopedTotals.profitMargin}%
+            </div>
+          </div>
+        </div>
+
+        {/* 4 色結構佔比條 */}
+        <div className="space-y-1.5">
+          <div className="w-full h-2.5 bg-[#0B0F17] rounded-full overflow-hidden flex border border-slate-800">
+            <div
+              className="h-full bg-emerald-500 transition-all"
+              style={{ width: `${scopedTotals.profitPct}%` }}
+              title={`淨利 ${scopedTotals.profitPct}%`}
+            />
+            <div
+              className="h-full bg-amber-500 transition-all"
+              style={{ width: `${scopedTotals.rentPct}%` }}
+              title={`台租 ${scopedTotals.rentPct}%`}
+            />
+            <div
+              className="h-full bg-sky-500 transition-all"
+              style={{ width: `${scopedTotals.prizeCostPct}%` }}
+              title={`獎品 ${scopedTotals.prizeCostPct}%`}
+            />
+            <div
+              className="h-full bg-rose-500 transition-all"
+              style={{ width: `${scopedTotals.cashbackPct}%` }}
+              title={`回錢 ${scopedTotals.cashbackPct}%`}
+            />
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] font-mono">
+            <span className="text-emerald-400">● 淨利 {scopedTotals.profitPct}%</span>
+            <span className="text-amber-400">● 台租 {scopedTotals.rentPct}%</span>
+            <span className="text-sky-400">● 獎品 {scopedTotals.prizeCostPct}%</span>
+            <span className="text-rose-400">● 回錢 {scopedTotals.cashbackPct}%</span>
+          </div>
+        </div>
+
+        {/* 4 格重點收支指標 */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          <div className="bg-[#0B0F17] rounded-lg p-2.5 border border-slate-800">
+            <div className="text-[11px] text-slate-400 font-medium">總收幣</div>
+            <div className="text-base font-mono font-bold text-white">
+              ${scopedTotals.grossRevenue.toLocaleString()}
+            </div>
+          </div>
+
+          <div className="bg-[#0B0F17] rounded-lg p-2.5 border border-slate-800">
+            <div className="text-[11px] text-slate-400 font-medium">實付台租與雜支</div>
+            <div className="text-base font-mono font-bold text-amber-400">
+              -${scopedTotals.overhead.toLocaleString()}
+            </div>
+          </div>
+
+          <div className="bg-[#0B0F17] rounded-lg p-2.5 border border-slate-800">
+            <div className="text-[11px] text-slate-400 font-medium">獎品貨本</div>
+            <div className="text-base font-mono font-bold text-sky-400">
+              -${scopedTotals.prizeCost.toLocaleString()}
+            </div>
+          </div>
+
+          <div className="bg-[#0B0F17] rounded-lg p-2.5 border border-slate-800">
+            <div className="text-[11px] text-slate-400 font-medium">回錢支出</div>
+            <div className="text-base font-mono font-bold text-rose-400">
+              -${scopedTotals.cashbackDeducted.toLocaleString()}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 3. 輕量級「機台錢箱現況」 */}
+      <div className="bg-[#111827] border border-[#1E293B] rounded-xl overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setIsCoinBoxExpanded((prev) => !prev)}
+          className="w-full p-3.5 flex items-center justify-between gap-2 text-left hover:bg-slate-800/30 transition-colors"
+        >
+          <div className="flex items-center gap-2.5 min-w-0">
+            <Wallet className="w-4 h-4 text-emerald-400 shrink-0" />
+            <div className="min-w-0">
+              <div className="text-xs font-bold text-white">機台錢箱現況</div>
+              <div className="text-[11px] font-mono text-slate-400 truncate">
+                錢箱內 <span className="text-emerald-400 font-bold">${coinBoxSummary.totalInCoinBoxes.toLocaleString()}</span>
+                <span className="mx-1.5 text-slate-600">·</span>
+                已換幣取出 <span className="text-amber-400 font-bold">${coinBoxSummary.totalWithdrawn.toLocaleString()}</span>
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center gap-1 text-[11px] text-slate-400 font-bold shrink-0">
+            <span>{isCoinBoxExpanded ? '收合' : '明細'}</span>
+            <ChevronDown
+              className={`w-4 h-4 transition-transform duration-200 ${
+                isCoinBoxExpanded ? 'rotate-180' : ''
+              }`}
+            />
+          </div>
+        </button>
+
+        {isCoinBoxExpanded && (
+          <div className="px-4 pb-4 pt-2 border-t border-slate-800 space-y-3">
+            <div>
+              <div className="text-[11px] font-bold text-slate-400 mb-1.5">
+                各機台錢箱現有餘額
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                {machines.map((m) => (
+                  <div
+                    key={m.machine_id}
+                    className="bg-[#0B0F17] border border-slate-800/80 rounded-lg px-2.5 py-2 flex items-center justify-between gap-2 text-xs"
+                  >
+                    <span className="font-mono text-slate-300 truncate">
+                      {m.code} {m.name}
+                    </span>
+                    <span
+                      className={`font-mono font-bold shrink-0 ${
+                        (m.coin_box_balance || 0) > 0 ? 'text-emerald-400' : 'text-slate-500'
+                      }`}
+                    >
+                      ${(m.coin_box_balance || 0).toLocaleString()}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <div className="text-[11px] font-bold text-slate-400 mb-1.5">
+                近期錢箱換幣取出紀錄 ({coinBoxSummary.filteredWithdrawals.length} 筆)
+              </div>
+              {coinBoxSummary.filteredWithdrawals.length === 0 ? (
+                <div className="text-xs text-slate-500 py-2 text-center bg-[#0B0F17] rounded-lg border border-slate-800/80">
+                  尚無取出紀錄
                 </div>
-              </div>
-              <div className="flex items-center gap-1.5 text-xs text-slate-400 font-mono shrink-0">
-                <span>{isSixMonthTrendExpanded ? '收合' : '展開'}</span>
-                <ChevronDown
-                  className={`w-4 h-4 transition-transform duration-200 ${
-                    isSixMonthTrendExpanded ? 'rotate-180' : ''
+              ) : (
+                <div className="space-y-1.5 max-h-44 overflow-y-auto pr-1">
+                  {coinBoxSummary.filteredWithdrawals.slice(0, 10).map((w) => {
+                    const m = machines.find((mc) => mc.machine_id === w.machine_id);
+                    return (
+                      <div
+                        key={w.withdrawal_id}
+                        className="bg-[#0B0F17] border border-slate-800/80 rounded-lg px-2.5 py-2 flex items-center justify-between gap-2 text-xs"
+                      >
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 font-mono text-[10px]">
+                              {m ? m.code : '全場'}
+                            </span>
+                            <span className="font-bold text-slate-200">已取出</span>
+                            {w.note && (
+                              <span className="text-slate-400 truncate">· {w.note}</span>
+                            )}
+                          </div>
+                          <div className="text-[10px] font-mono text-slate-500 mt-0.5">
+                            {new Date(w.withdrawn_at).toLocaleString('zh-TW', {
+                              month: '2-digit',
+                              day: '2-digit',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
+                          </div>
+                        </div>
+                        <span className="font-mono font-bold text-amber-400 shrink-0">
+                          ${w.amount.toLocaleString()}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* 4. 近 6 個月營運損益走勢 (圖表 + 點選月份明細二合一，預設收合) */}
+      <div className="bg-[#111827] border border-[#1E293B] rounded-xl overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setIsSixMonthTrendExpanded((prev) => !prev)}
+          className="w-full p-3.5 flex items-center justify-between text-left hover:bg-slate-800/30 transition-colors"
+        >
+          <div className="flex items-center gap-2.5">
+            <BarChart3 className="w-4 h-4 text-amber-400 shrink-0" />
+            <div>
+              <h3 className="text-xs font-bold text-white">近 6 個月營運損益走勢</h3>
+              <p className="text-[11px] text-slate-400">
+                {isSixMonthTrendExpanded
+                  ? '點擊柱狀可查看該月收支明細'
+                  : '展開查看 6 個月淨利趨勢與月度拆解'}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-1 text-[11px] text-slate-400 font-bold shrink-0">
+            <span>{isSixMonthTrendExpanded ? '收合' : '展開'}</span>
+            <ChevronDown
+              className={`w-4 h-4 transition-transform duration-200 ${
+                isSixMonthTrendExpanded ? 'rotate-180' : ''
+              }`}
+            />
+          </div>
+        </button>
+
+        {isSixMonthTrendExpanded && (
+          <div className="p-4 pt-3 space-y-3 border-t border-slate-800/80">
+            {/* 全部 / 純機 / 刮板 視角切換 */}
+            <div className="grid grid-cols-3 bg-[#0B0F17] p-1 rounded-xl border border-slate-800 gap-1">
+              {[
+                { key: 'ALL', label: '全場合併' },
+                { key: 'STANDARD', label: '純娃娃機' },
+                { key: 'SCRATCH', label: '刮板機台' },
+              ].map((opt) => (
+                <button
+                  key={opt.key}
+                  type="button"
+                  onClick={() => setMonthlyFleetFilter(opt.key as FleetFilter)}
+                  className={`py-1.5 rounded-lg text-xs font-bold transition-colors ${
+                    monthlyFleetFilter === opt.key
+                      ? 'bg-amber-500 text-slate-950'
+                      : 'text-slate-400 hover:text-white'
                   }`}
-                />
-              </div>
-            </button>
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
 
-            {isSixMonthTrendExpanded && (
-              <div className="p-4 pt-0 space-y-4 border-t border-slate-800/60">
-
-            {/* 6 欄縱向長條柱狀走勢圖 */}
+            {/* 6 欄柱狀走勢圖 */}
             {(() => {
               const maxPos = Math.max(1, ...monthlyTrends.map((m) => Math.max(0, m.net_profit)));
               const maxNeg = Math.max(0, ...monthlyTrends.map((m) => Math.max(0, -m.net_profit)));
               const hasNegative = maxNeg > 0;
               const posRatio = hasNegative ? maxPos / (maxPos + maxNeg) : 1;
-              const chartHeightPx = 140;
+              const chartHeightPx = 136;
               const zeroLineTopPx = Math.round(chartHeightPx * posRatio);
 
               return (
                 <div className="bg-[#0B0F17] p-3 rounded-xl border border-slate-800 space-y-2">
-                  <div className="relative h-[140px] w-full flex items-stretch justify-between gap-1">
-                    {/* 0 軸水平基準虛線 */}
+                  <div className="relative h-[136px] w-full flex items-stretch justify-between gap-1">
                     {hasNegative && (
                       <div
                         className="absolute inset-x-0 border-t border-slate-700/60 border-dashed z-0 pointer-events-none"
@@ -795,15 +963,11 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
                     )}
 
                     {monthlyTrends.map((trend) => {
-                      const isSelected = (activeTrendMonth?.period_label === trend.period_label);
+                      const isSelected = activeTrendMonth?.period_label === trend.period_label;
                       const isProfit = trend.net_profit >= 0;
-                      // 計算柱子高度
-                      let barHeightPct = 0;
-                      if (isProfit) {
-                        barHeightPct = Math.min(100, Math.max(6, Math.round((trend.net_profit / maxPos) * 100)));
-                      } else {
-                        barHeightPct = Math.min(100, Math.max(6, Math.round((-trend.net_profit / (maxNeg || 1)) * 100)));
-                      }
+                      const barHeightPct = isProfit
+                        ? Math.min(100, Math.max(6, Math.round((trend.net_profit / maxPos) * 100)))
+                        : Math.min(100, Math.max(6, Math.round((-trend.net_profit / (maxNeg || 1)) * 100)));
 
                       const profitLabel = isProfit
                         ? `+$${Math.abs(trend.net_profit) >= 1000 ? (trend.net_profit / 1000).toFixed(1) + 'k' : trend.net_profit}`
@@ -813,536 +977,142 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
                         <div
                           key={trend.period_label}
                           onClick={() => setSelectedTrendMonthKey(trend.period_label)}
-                          className={`relative flex-1 flex flex-col justify-end items-center cursor-pointer select-none rounded-lg p-1 transition-all group ${
-                            isSelected
-                              ? 'bg-amber-500/10 ring-1 ring-amber-400/60'
-                              : 'hover:bg-slate-800/40'
+                          className={`flex-1 flex flex-col items-center justify-between cursor-pointer group rounded-lg py-1 px-0.5 transition-all z-10 ${
+                            isSelected ? 'bg-slate-800/80 ring-1 ring-amber-500/40' : 'hover:bg-slate-800/40'
                           }`}
                         >
-                          {/* 柱頂金額標籤 */}
-                          <div
-                            className={`text-[10px] font-mono font-bold leading-none mb-1 text-center whitespace-nowrap ${
-                              isProfit ? 'text-emerald-400' : 'text-rose-400'
-                            }`}
-                          >
-                            {profitLabel}
+                          <div className="text-[9px] sm:text-[10px] font-mono font-bold whitespace-nowrap h-4 flex items-center">
+                            <span className={isProfit ? 'text-emerald-400' : 'text-rose-400'}>
+                              {trend.gross_coin_revenue === 0 && trend.net_profit === 0 ? '$0' : profitLabel}
+                            </span>
                           </div>
 
-                          {/* 柱狀體軌道 */}
-                          <div className="relative w-full flex-1 flex items-stretch">
-                            {hasNegative ? (
-                              <div className="w-full h-full flex flex-col">
-                                {/* 正向區域 */}
-                                <div className="flex-1 flex flex-col justify-end items-center">
-                                  {isProfit && (
-                                    <div
-                                      className={`w-full max-w-[28px] bg-emerald-500 rounded-t transition-all ${
-                                        isSelected ? 'brightness-125 shadow-sm shadow-emerald-500/30' : 'opacity-85'
-                                      }`}
-                                      style={{ height: `${barHeightPct}%` }}
-                                    />
-                                  )}
-                                </div>
-                                {/* 負向區域 */}
-                                <div className="flex-1 flex flex-col justify-start items-center">
-                                  {!isProfit && (
-                                    <div
-                                      className={`w-full max-w-[28px] bg-rose-500 rounded-b transition-all ${
-                                        isSelected ? 'brightness-125 shadow-sm shadow-rose-500/30' : 'opacity-85'
-                                      }`}
-                                      style={{ height: `${barHeightPct}%` }}
-                                    />
-                                  )}
-                                </div>
-                              </div>
-                            ) : (
-                              /* 全正數狀態簡化高度 */
-                              <div className="w-full h-full flex flex-col justify-end items-center">
+                          <div className="w-full flex-1 flex flex-col justify-center relative my-0.5">
+                            <div className="w-full flex flex-col justify-end items-center" style={{ height: `${Math.max(10, Math.round(posRatio * 96))}px` }}>
+                              {isProfit && (
                                 <div
-                                  className={`w-full max-w-[28px] bg-emerald-500 rounded-t transition-all ${
-                                    isSelected ? 'brightness-125 shadow-sm shadow-emerald-500/30' : 'opacity-85'
+                                  className={`w-4 sm:w-6 rounded-t-md transition-all ${
+                                    isSelected ? 'bg-emerald-400' : 'bg-emerald-500/75 group-hover:bg-emerald-400'
                                   }`}
                                   style={{ height: `${barHeightPct}%` }}
                                 />
+                              )}
+                            </div>
+                            {hasNegative && (
+                              <div className="w-full flex flex-col justify-start items-center" style={{ height: `${Math.max(10, Math.round((1 - posRatio) * 96))}px` }}>
+                                {!isProfit && (
+                                  <div
+                                    className={`w-4 sm:w-6 rounded-b-md transition-all ${
+                                      isSelected ? 'bg-rose-400' : 'bg-rose-500/75 group-hover:bg-rose-400'
+                                    }`}
+                                    style={{ height: `${barHeightPct}%` }}
+                                  />
+                                )}
                               </div>
                             )}
                           </div>
 
-                          {/* 月份標籤 */}
-                          <div
-                            className={`text-[10px] font-mono mt-1 text-center whitespace-nowrap ${
-                              isSelected
-                                ? 'text-amber-400 font-bold'
-                                : 'text-slate-400 group-hover:text-slate-200'
-                            }`}
-                          >
-                            {trend.month_name.replace(' (本月)', '')}
+                          <div className={`text-[10px] font-mono font-bold ${isSelected ? 'text-amber-400' : 'text-slate-400'}`}>
+                            {trend.month_name}
                           </div>
                         </div>
                       );
                     })}
                   </div>
-
-                  <div className="flex items-center justify-between text-[11px] text-slate-400 font-mono pt-1 border-t border-slate-800/80">
-                    <span className="flex items-center gap-1 text-emerald-400">
-                      ● 翠綠為獲利月份
-                    </span>
-                    <span className="flex items-center gap-1 text-rose-400">
-                      ● 石榴紅為虧損月份
-                    </span>
-                    <span className="text-amber-400 font-bold">
-                      當前焦點：{activeTrendMonth?.month_name}
-                    </span>
-                  </div>
                 </div>
               );
             })()}
 
-            {/* 選定月份營收流向 4 色光條 (Selected Month Stream Bar) */}
-            {activeTrendMonth && (() => {
-              const gross = Math.max(1, activeTrendMonth.gross_coin_revenue);
-              const rentP = Math.min(100, Math.round((activeTrendMonth.rent_and_overhead / gross) * 100));
-              const prizeP = Math.min(100, Math.round((activeTrendMonth.product_cost / gross) * 100));
-              const cashbackP = Math.min(100, Math.round((activeTrendMonth.cashback_deducted / gross) * 100));
-              const profitP = Math.max(0, 100 - rentP - prizeP - cashbackP);
-
-              return (
-                <div className="bg-[#0B0F17] p-3 rounded-xl border border-slate-800 space-y-2.5">
-                  <div className="flex items-center justify-between">
-                    <div className="text-xs font-bold text-white flex items-center gap-1.5">
-                      <span>[{activeTrendMonth.month_name}] 營收流向結構</span>
-                      <span className="text-[10px] font-mono text-slate-400">
-                        (總收幣 ${activeTrendMonth.gross_coin_revenue.toLocaleString()})
-                      </span>
-                    </div>
-                    <div
-                      className={`text-xs font-mono font-bold ${
-                        activeTrendMonth.net_profit >= 0 ? 'text-emerald-400' : 'text-rose-400'
-                      }`}
-                    >
-                      淨利 {formatProfit(activeTrendMonth.net_profit)} ({activeTrendMonth.net_margin_pct}%)
-                    </div>
-                  </div>
-
-                  {/* 4 色比例分段光條 */}
-                  <div className="w-full h-3 bg-slate-900 rounded-full overflow-hidden flex border border-slate-800">
-                    {profitP > 0 && (
-                      <div
-                        className="h-full bg-emerald-500 transition-all"
-                        style={{ width: `${profitP}%` }}
-                        title={`淨利 ${profitP}%`}
-                      />
-                    )}
-                    {rentP > 0 && (
-                      <div
-                        className="h-full bg-amber-500 transition-all"
-                        style={{ width: `${rentP}%` }}
-                        title={`台租 ${rentP}%`}
-                      />
-                    )}
-                    {prizeP > 0 && (
-                      <div
-                        className="h-full bg-sky-500 transition-all"
-                        style={{ width: `${prizeP}%` }}
-                        title={`商品成本 ${prizeP}%`}
-                      />
-                    )}
-                    {cashbackP > 0 && (
-                      <div
-                        className="h-full bg-rose-500 transition-all"
-                        style={{ width: `${cashbackP}%` }}
-                        title={`回錢 ${cashbackP}%`}
-                      />
-                    )}
-                  </div>
-
-                  {/* 4 項指標數據 */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
-                    <div className="bg-[#111827] p-2 rounded-lg border border-slate-800">
-                      <div className="text-slate-400 text-[11px]">實質淨利</div>
-                      <div className={`font-mono font-bold ${activeTrendMonth.net_profit >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                        {formatProfit(activeTrendMonth.net_profit)}
-                      </div>
-                    </div>
-                    <div className="bg-[#111827] p-2 rounded-lg border border-slate-800">
-                      <div className="text-slate-400 text-[11px]">實付台租</div>
-                      <div className="font-mono font-bold text-amber-400">
-                        -${activeTrendMonth.rent_and_overhead.toLocaleString()}
-                      </div>
-                    </div>
-                    <div className="bg-[#111827] p-2 rounded-lg border border-slate-800">
-                      <div className="text-slate-400 text-[11px]">商品成本</div>
-                      <div className="font-mono font-bold text-sky-400">
-                        -${activeTrendMonth.product_cost.toLocaleString()}
-                      </div>
-                    </div>
-                    <div className="bg-[#111827] p-2 rounded-lg border border-slate-800">
-                      <div className="text-slate-400 text-[11px]">回錢給付</div>
-                      <div className="font-mono font-bold text-rose-400">
-                        -${activeTrendMonth.cashback_deducted.toLocaleString()}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })()}
-              </div>
-            )}
-          </div>
-
-          {/* 手風琴月度體質卡片清單 (取代生硬 8 欄大表格，手機大拇指好點閱) */}
-          <div className="bg-[#111827] border border-[#1E293B] rounded-xl p-4 space-y-3">
-            <div className="text-xs font-bold text-slate-300">
-              月度體質明細卡 (點擊展開明細)
-            </div>
-              <div className="space-y-1.5">
-                {[...monthlyTrends].reverse().map((m) => {
-                  const isExpanded = !!expandedMonthCards[m.period_label];
-                  const isSelected = activeTrendMonth?.period_label === m.period_label;
-                  return (
-                    <div
-                      key={m.period_label}
-                      className={`rounded-xl border transition-all overflow-hidden ${
-                        isSelected
-                          ? 'bg-[#0B0F17] border-amber-500/40 shadow-sm'
-                          : 'bg-[#0B0F17] border-slate-800/80 hover:border-slate-700'
-                      }`}
-                    >
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSelectedTrendMonthKey(m.period_label);
-                          toggleMonthCardExpanded(m.period_label);
-                        }}
-                        className="w-full flex items-center justify-between p-3 text-left transition-colors"
-                      >
-                        <div className="flex items-center gap-2">
-                          <span
-                            className={`font-mono font-bold text-xs px-2 py-0.5 rounded ${
-                              isSelected
-                                ? 'bg-amber-500 text-slate-950'
-                                : 'bg-slate-800 text-slate-300'
-                            }`}
-                          >
-                            {m.month_name}
-                          </span>
-                          <span className="text-xs text-slate-300 font-mono">
-                            收 ${m.gross_coin_revenue.toLocaleString()}
-                          </span>
-                        </div>
-
-                        <div className="flex items-center gap-2 shrink-0">
-                          <span
-                            className={`text-xs font-mono font-bold ${
-                              m.net_profit >= 0 ? 'text-emerald-400' : 'text-rose-400'
-                            }`}
-                          >
-                            {formatProfit(m.net_profit)}
-                          </span>
-                          <span className="text-[10px] text-slate-400 font-mono">
-                            ({m.net_margin_pct}%)
-                          </span>
-                          {isExpanded ? (
-                            <ChevronUp className="w-4 h-4 text-slate-400" />
-                          ) : (
-                            <ChevronDown className="w-4 h-4 text-slate-400" />
-                          )}
-                        </div>
-                      </button>
-
-                      {isExpanded && (
-                        <div className="px-3 pb-3 pt-1 border-t border-slate-800/80 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2 text-[11px] font-mono">
-                          <div className="p-2 rounded-lg bg-[#111827] border border-slate-800">
-                            <span className="flex items-center gap-1 text-slate-400 text-[10px] mb-0.5">
-                              <Package className="w-3 h-3 text-sky-400 shrink-0" />
-                              純機收幣
-                            </span>
-                            <span className="text-white font-bold">${m.standard_machine_revenue.toLocaleString()}</span>
-                          </div>
-                          <div className="p-2 rounded-lg bg-[#111827] border border-slate-800">
-                            <span className="flex items-center gap-1 text-slate-400 text-[10px] mb-0.5">
-                              <Ticket className="w-3 h-3 text-amber-400 shrink-0" />
-                              刮板收幣
-                            </span>
-                            <span className="text-amber-400 font-bold">${m.scratch_machine_revenue.toLocaleString()}</span>
-                          </div>
-                          <div className="p-2 rounded-lg bg-[#111827] border border-slate-800">
-                            <span className="flex items-center gap-1 text-slate-400 text-[10px] mb-0.5">
-                              <Building2 className="w-3 h-3 text-amber-400 shrink-0" />
-                              實付台租
-                            </span>
-                            <span className="text-amber-400 font-bold">-${m.rent_and_overhead.toLocaleString()}</span>
-                          </div>
-                          <div className="p-2 rounded-lg bg-[#111827] border border-slate-800">
-                            <span className="flex items-center gap-1 text-slate-400 text-[10px] mb-0.5">
-                              <Box className="w-3 h-3 text-sky-400 shrink-0" />
-                              獎品成本
-                            </span>
-                            <span className="text-sky-400 font-bold">-${m.product_cost.toLocaleString()}</span>
-                          </div>
-                          <div className="p-2 rounded-lg bg-[#111827] border border-slate-800">
-                            <span className="flex items-center gap-1 text-slate-400 text-[10px] mb-0.5">
-                              <ArrowDownLeft className="w-3 h-3 text-rose-400 shrink-0" />
-                              回錢給付
-                            </span>
-                            <span className="text-rose-400 font-bold">-${m.cashback_deducted.toLocaleString()}</span>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-          {/* 1. 核心總損益與營收結構量表 (Gauge & Stacked Chart) */}
-          <div className="bg-[#111827] border border-[#1E293B] rounded-xl p-4 space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <PieChart className="w-4 h-4 text-amber-400" />
-                <span className="text-xs font-bold text-white">全場損益</span>
-              </div>
-              <div
-                className={`text-lg font-mono font-bold ${
-                  analytics.trueNetProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'
-                }`}
-              >
-                淨利 {formatProfit(analytics.trueNetProfit)}
-              </div>
-            </div>
-
-            {/* 4 色結構量表 */}
-            <div className="space-y-1.5">
-              <div className="w-full h-3.5 bg-[#0B0F17] rounded-full overflow-hidden flex border border-slate-800">
-                <div
-                  className="h-full bg-emerald-500 transition-all"
-                  style={{ width: `${profitPct}%` }}
-                  title="淨利"
-                />
-                <div
-                  className="h-full bg-amber-500 transition-all"
-                  style={{ width: `${rentPct}%` }}
-                  title="台租費用"
-                />
-                <div
-                  className="h-full bg-sky-500 transition-all"
-                  style={{ width: `${prizeCostPct}%` }}
-                  title="獎品成本"
-                />
-                <div
-                  className="h-full bg-rose-500 transition-all"
-                  style={{ width: `${cashbackPct}%` }}
-                  title="回錢扣減"
-                />
-              </div>
-
-              <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] font-mono">
-                <span className="flex items-center gap-1 text-emerald-400">
-                  ● 淨利 {profitPct}%
-                </span>
-                <span className="flex items-center gap-1 text-amber-400">
-                  ● 台租 {rentPct}%
-                </span>
-                <span className="flex items-center gap-1 text-sky-400">
-                  ● 獎品 {prizeCostPct}%
-                </span>
-                <span className="flex items-center gap-1 text-rose-400">
-                  ● 回錢 {cashbackPct}%
-                </span>
-              </div>
-            </div>
-
-            {/* 4 格重點指標 */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              <div className="bg-[#0B0F17] rounded-lg p-2.5 border border-slate-800">
-                <div className="text-xs text-slate-400 font-medium whitespace-nowrap">總收幣</div>
-                <div className="text-base font-mono font-bold text-white">
-                  ${analytics.totalGrossRevenue.toLocaleString()}
-                </div>
-              </div>
-
-              <div className="bg-[#0B0F17] rounded-lg p-2.5 border border-slate-800">
-                <div className="text-xs text-slate-400 font-medium whitespace-nowrap">回錢扣減</div>
-                <div className="text-base font-mono font-bold text-rose-400">
-                  -${analytics.totalCashbackDeducted.toLocaleString()}
-                </div>
-              </div>
-
-              <div className="bg-[#0B0F17] rounded-lg p-2.5 border border-slate-800">
-                <div className="text-xs text-slate-400 font-medium whitespace-nowrap">獎品成本</div>
-                <div className="text-base font-mono font-bold text-sky-400">
-                  -${analytics.totalPrizeCost.toLocaleString()}
-                </div>
-              </div>
-
-              <div className="bg-[#0B0F17] rounded-lg p-2.5 border border-slate-800">
-                <div className="text-xs text-slate-400 font-medium whitespace-nowrap">台租開銷</div>
-                <div className="text-base font-mono font-bold text-amber-400">
-                  -${(analytics.grandTotalOverhead ?? 0).toLocaleString()}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* 1b. 錢箱現金動向（還在機台錢箱內 vs 已取出） */}
-          <div className="bg-[#111827] border border-[#1E293B] rounded-xl p-4 space-y-3">
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <Wallet className="w-4 h-4 text-emerald-400" />
-                <div>
-                  <div className="text-xs font-bold text-white">機台錢箱現況</div>
-                  <div className="text-[11px] text-slate-400">
-                    帳面損益依營收成本計算；此區追蹤錢箱內尚有多少錢未取出
-                  </div>
-                </div>
-              </div>
-              <div className="flex items-center gap-1.5 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setIsCoinBoxExpanded((prev) => !prev)}
-                  className="h-8 px-2.5 rounded-lg bg-[#0B0F17] border border-slate-800 hover:border-slate-700 text-slate-300 text-[11px] font-bold flex items-center gap-1 transition-colors"
-                >
-                  <span>{isCoinBoxExpanded ? '收合' : '明細'}</span>
-                  <ChevronDown
-                    className={`w-3.5 h-3.5 transition-transform duration-200 ${
-                      isCoinBoxExpanded ? 'rotate-180' : ''
+            {/* 點選焦點月份之完整收支明細 */}
+            {activeTrendMonth && (
+              <div className="bg-[#0B0F17] p-3 rounded-xl border border-slate-800 space-y-2.5">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-bold text-white">
+                    {activeTrendMonth.year}年 {activeTrendMonth.month_name} 損益明細
+                  </span>
+                  <span
+                    className={`font-mono font-bold ${
+                      activeTrendMonth.net_profit >= 0 ? 'text-emerald-400' : 'text-rose-400'
                     }`}
-                  />
-                </button>
-              </div>
-            </div>
+                  >
+                    淨利 {formatProfit(activeTrendMonth.net_profit)} ({activeTrendMonth.net_margin_pct}%)
+                  </span>
+                </div>
 
-            <div className="grid grid-cols-2 gap-2">
-              <div className="bg-[#0B0F17] rounded-lg p-3 border border-slate-800">
-                <div className="text-xs text-slate-400 font-medium">還在機台錢箱內</div>
-                <div className="text-lg font-mono font-bold text-emerald-400 mt-0.5">
-                  ${coinBoxSummary.totalInCoinBoxes.toLocaleString()}
-                </div>
-                <div className="text-[11px] text-slate-500 mt-0.5 font-mono">
-                  共 {machines.filter((m) => (m.coin_box_balance || 0) > 0).length} 台有餘額
-                </div>
-              </div>
-
-              <div className="bg-[#0B0F17] rounded-lg p-3 border border-slate-800">
-                <div className="text-xs text-slate-400 font-medium">
-                  已從錢箱取出{dateRange ? ' (本區間)' : ''}
-                </div>
-                <div className="text-lg font-mono font-bold text-amber-400 mt-0.5">
-                  ${coinBoxSummary.totalWithdrawn.toLocaleString()}
-                </div>
-                <div className="text-[11px] text-slate-500 mt-0.5 font-mono">
-                  累計取出 ${coinBoxSummary.allTimeWithdrawn.toLocaleString()}
-                </div>
-              </div>
-            </div>
-
-            {isCoinBoxExpanded && (
-              <div className="pt-2 border-t border-slate-800 space-y-3">
-                {/* 各台錢箱現有餘額 */}
-                <div>
-                  <div className="text-[11px] font-bold text-slate-400 mb-1.5">
-                    各機台錢箱現有餘額
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs font-mono">
+                  <div className="bg-[#111827] p-2 rounded-lg border border-slate-800">
+                    <span className="block text-[10px] text-slate-400">純機收幣</span>
+                    <span className="text-white font-bold">
+                      ${activeTrendMonth.standard_machine_revenue.toLocaleString()}
+                    </span>
                   </div>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
-                    {machines.map((m) => (
-                      <div
-                        key={m.machine_id}
-                        className="bg-[#0B0F17] border border-slate-800/80 rounded-lg px-2.5 py-2 flex items-center justify-between gap-2 text-xs"
-                      >
-                        <span className="font-mono text-slate-300 truncate">
-                          {m.code} {m.name}
-                        </span>
-                        <span
-                          className={`font-mono font-bold shrink-0 ${
-                            (m.coin_box_balance || 0) > 0 ? 'text-emerald-400' : 'text-slate-500'
-                          }`}
-                        >
-                          ${(m.coin_box_balance || 0).toLocaleString()}
-                        </span>
-                      </div>
-                    ))}
+                  <div className="bg-[#111827] p-2 rounded-lg border border-slate-800">
+                    <span className="block text-[10px] text-slate-400">刮板收幣</span>
+                    <span className="text-amber-400 font-bold">
+                      ${activeTrendMonth.scratch_machine_revenue.toLocaleString()}
+                    </span>
                   </div>
-                </div>
-
-                {/* 近期取出紀錄 */}
-                <div>
-                  <div className="text-[11px] font-bold text-slate-400 mb-1.5">
-                    近期取出紀錄 ({coinBoxSummary.filteredWithdrawals.length} 筆)
+                  <div className="bg-[#111827] p-2 rounded-lg border border-slate-800">
+                    <span className="block text-[10px] text-slate-400">實付台租</span>
+                    <span className="text-amber-300 font-bold">
+                      -${activeTrendMonth.rent_and_overhead.toLocaleString()}
+                    </span>
                   </div>
-                  {coinBoxSummary.filteredWithdrawals.length === 0 ? (
-                    <div className="text-xs text-slate-500 py-2 text-center bg-[#0B0F17] rounded-lg border border-slate-800/80">
-                      尚無錢箱取出紀錄
-                    </div>
-                  ) : (
-                    <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
-                      {coinBoxSummary.filteredWithdrawals.slice(0, 12).map((w) => {
-                        const m = machines.find((mc) => mc.machine_id === w.machine_id);
-                        return (
-                          <div
-                            key={w.withdrawal_id}
-                            className="bg-[#0B0F17] border border-slate-800/80 rounded-lg px-2.5 py-2 flex items-center justify-between gap-2 text-xs"
-                          >
-                            <div className="min-w-0">
-                              <div className="flex items-center gap-1.5">
-                                <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 font-mono text-[10px]">
-                                  {m ? m.code : '全場'}
-                                </span>
-                                <span className="font-bold text-slate-200">已取出</span>
-                                {w.note && (
-                                  <span className="text-slate-400 truncate">· {w.note}</span>
-                                )}
-                              </div>
-                              <div className="text-[10px] font-mono text-slate-500 mt-0.5">
-                                {new Date(w.withdrawn_at).toLocaleString('zh-TW', {
-                                  month: '2-digit',
-                                  day: '2-digit',
-                                  hour: '2-digit',
-                                  minute: '2-digit',
-                                })}
-                              </div>
-                            </div>
-                            <span className="font-mono font-bold text-amber-400 shrink-0">
-                              ${w.amount.toLocaleString()}
-                            </span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
+                  <div className="bg-[#111827] p-2 rounded-lg border border-slate-800">
+                    <span className="block text-[10px] text-slate-400">獎品成本</span>
+                    <span className="text-sky-400 font-bold">
+                      -${activeTrendMonth.product_cost.toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="bg-[#111827] p-2 rounded-lg border border-slate-800">
+                    <span className="block text-[10px] text-slate-400">回錢給付</span>
+                    <span className="text-rose-400 font-bold">
+                      -${activeTrendMonth.cashback_deducted.toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="bg-[#111827] p-2 rounded-lg border border-slate-800">
+                    <span className="block text-[10px] text-slate-400">總收幣合計</span>
+                    <span className="text-emerald-400 font-bold">
+                      ${activeTrendMonth.gross_coin_revenue.toLocaleString()}
+                    </span>
+                  </div>
                 </div>
               </div>
             )}
           </div>
+        )}
+      </div>
 
-          {/* 2. 各機台損益圖表與卡片 */}
-          <div className="bg-[#111827] border border-[#1E293B] rounded-xl p-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1.5 text-xs font-bold text-white">
-                <BarChart3 className="w-4 h-4 text-amber-400" />
-                機台排行
-              </div>
-              <div className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={onExportCSV}
-                  className="px-2.5 py-1 rounded-lg bg-slate-800 text-[11px] font-bold text-slate-200 flex items-center gap-1 whitespace-nowrap"
-                >
-                  <Download className="w-3 h-3 text-amber-400" />
-                  CSV
-                </button>
-                <button
-                  type="button"
-                  onClick={onExportJSON}
-                  className="px-2.5 py-1 rounded-lg bg-slate-800 text-[11px] font-bold text-slate-200 flex items-center gap-1 whitespace-nowrap"
-                >
-                  <Download className="w-3 h-3 text-emerald-400" />
-                  備份
-                </button>
-              </div>
-            </div>
+      {/* 5. 損益排行與明細 (三合一 Segmented Tabs：依機台 | 依場地 | 依刮板) */}
+      <div className="bg-[#111827] border border-[#1E293B] rounded-xl p-4 space-y-3">
+        <div className="grid grid-cols-3 bg-[#0B0F17] p-1 rounded-xl border border-slate-800 gap-1">
+          {[
+            { key: 'MACHINE', label: `依機台 (${scopedMachineBreakdown.length})` },
+            { key: 'VENUE', label: `依場地 (${venueBreakdown.length})` },
+            { key: 'BOARD', label: `依刮板 (${displayedBoards.length})` },
+          ].map((tab) => (
+            <button
+              key={tab.key}
+              type="button"
+              onClick={() => setDetailTab(tab.key as DetailTab)}
+              className={`py-2 rounded-lg text-xs font-bold transition-colors whitespace-nowrap ${
+                detailTab === tab.key
+                  ? 'bg-amber-500 text-slate-950 shadow-sm'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
 
-            <div className="space-y-3">
-              {analytics.machineBreakdown.map((row) => {
+        {/* 5A. 依機台排行 */}
+        {detailTab === 'MACHINE' && (
+          <div className="space-y-2.5">
+            {scopedMachineBreakdown.length === 0 ? (
+              <div className="text-center py-6 text-xs text-slate-500">尚無機台資料</div>
+            ) : (
+              scopedMachineBreakdown.map((row, idx) => {
                 const revBarPct = Math.min(
                   100,
                   Math.round((row.grossRevenue / analytics.maxMachineRevenue) * 100)
@@ -1357,534 +1127,279 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
                 return (
                   <div
                     key={row.machine.machine_id}
-                    className="p-3.5 rounded-xl bg-[#0B0F17] border border-slate-800 space-y-2.5"
+                    className="p-3 rounded-xl bg-[#0B0F17] border border-slate-800 space-y-2"
                   >
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2 min-w-0">
+                        <span className="text-[10px] font-mono text-slate-500 w-4 shrink-0">
+                          #{idx + 1}
+                        </span>
                         <span className="font-mono font-bold text-xs px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400 shrink-0">
                           {row.machine.code}
                         </span>
                         <span className="text-xs font-bold text-white truncate">
                           {row.machine.name}
                         </span>
+                        {row.machine.location && (
+                          <span className="text-[10px] text-slate-500 truncate hidden sm:inline">
+                            · {row.machine.location}
+                          </span>
+                        )}
                       </div>
-
-                      <div
+                      <span
                         className={`text-sm font-mono font-bold shrink-0 ${
                           row.netProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'
                         }`}
                       >
                         {formatProfit(row.netProfit)}
-                      </div>
+                      </span>
                     </div>
 
                     <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <span className="text-[10px] text-slate-400 w-8 shrink-0">收幣</span>
+                      <div className="flex items-center gap-2 text-[11px] font-mono">
+                        <span className="w-8 text-slate-400 shrink-0">收幣</span>
                         <div className="flex-1 h-2 bg-slate-900 rounded-full overflow-hidden">
-                          <div
-                            className="h-full bg-emerald-400 rounded-full"
-                            style={{ width: `${revBarPct}%` }}
-                          />
+                          <div className="h-full bg-amber-500 rounded-full" style={{ width: `${revBarPct}%` }} />
                         </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-[10px] text-slate-400 w-8 shrink-0">支出</span>
-                        <div className="flex-1 h-2 bg-slate-900 rounded-full overflow-hidden">
-                          <div
-                            className="h-full bg-amber-500 rounded-full"
-                            style={{ width: `${costBarPct}%` }}
-                          />
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-slate-800/80 text-center">
-                      <div>
-                        <div className="text-xs text-slate-400 font-medium whitespace-nowrap">收幣</div>
-                        <div className="text-xs font-mono font-bold text-white">
+                        <span className="w-16 text-right text-amber-300 font-bold shrink-0">
                           ${row.grossRevenue.toLocaleString()}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-xs text-slate-400 font-medium whitespace-nowrap">回錢</div>
-                        <div className="text-xs font-mono font-bold text-rose-400">
-                          -${row.cashbackDeducted.toLocaleString()}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-xs text-slate-400 font-medium whitespace-nowrap">獎品</div>
-                        <div className="text-xs font-mono font-bold text-sky-400">
-                          -${row.totalDirectPrizeCost.toLocaleString()}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-xs text-slate-400 font-medium whitespace-nowrap">實付台租</div>
-                        <div className="text-xs font-mono font-bold text-amber-400">
-                          {row.paidRent > 0 ? `-$${row.paidRent.toLocaleString()}` : '$0'}
-                        </div>
-                        {row.paidRent === 0 && row.configuredMonthlyRent > 0 && (
-                          <div className="text-[11px] text-slate-400 font-mono">待繳 ${row.configuredMonthlyRent.toLocaleString()}</div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* 3. 各版刮刮樂結算小卡 */}
-          <div className="bg-[#111827] border border-[#1E293B] rounded-xl p-4 space-y-3">
-            <div className="flex items-center gap-1.5 text-xs font-bold text-white">
-              <Grid className="w-4 h-4 text-amber-400" />
-              各版刮刮樂損益 ({scratchBoards.length} 版)
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-              {scratchBoards.map((board) => {
-                const m = machines.find((mc) => mc.machine_id === board.machine_id);
-                const fin = calculateScratchBoardFinancials(
-                  board.board_cost,
-                  board.gross_coin_revenue,
-                  board.prizes
-                );
-                const holePct = Math.round(
-                  ((board.total_holes - board.remaining_holes) /
-                    Math.max(1, board.total_holes)) *
-                    100
-                );
-
-                return (
-                  <div
-                    key={board.board_id}
-                    className="p-3 rounded-xl bg-[#0B0F17] border border-slate-800 space-y-2"
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-1.5 min-w-0">
-                        <span className="font-mono text-xs font-bold text-amber-400 shrink-0">
-                          [{m?.code}]
-                        </span>
-                        <span className="text-xs font-bold text-white truncate">
-                          {board.total_holes}刮 (剩{board.remaining_holes}洞)
                         </span>
                       </div>
-                      <span
-                        className={`text-xs font-mono font-bold shrink-0 ${
-                          fin.netProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'
-                        }`}
-                      >
-                        {formatProfit(fin.netProfit)}
-                      </span>
-                    </div>
-
-                    <div className="w-full h-1.5 bg-slate-900 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-amber-500"
-                        style={{ width: `${holePct}%` }}
-                      />
-                    </div>
-
-                    <div className="flex items-center justify-between text-[11px] font-mono text-slate-400">
-                      <span>收幣 ${fin.grossCoinRevenue.toLocaleString()}</span>
-                      <span>回錢 -${fin.totalCashbackDeducted.toLocaleString()}</span>
-                      <span>實收 ${fin.netCoinRevenue.toLocaleString()}</span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </>
-      )}
-
-      {/* 維度 2：依場地店點損益 (VENUE) */}
-      {analyticsDimension === 'VENUE' && (
-        <div className="space-y-3">
-          <div className="text-xs font-bold text-white flex items-center justify-between">
-            <span className="flex items-center gap-1.5">
-              <Building className="w-4 h-4 text-amber-400" />
-              <span>場地損益 ({venueBreakdown.length})</span>
-            </span>
-          </div>
-
-          {venueBreakdown.length === 0 ? (
-            <div className="bg-[#111827] border border-slate-800 rounded-xl p-8 text-center text-xs text-slate-500">
-              尚無場地數據
-            </div>
-          ) : (
-            venueBreakdown
-              .filter((v) => selectedVenueFilter === 'ALL' || v.venueName === selectedVenueFilter)
-              .map((v) => (
-                <div
-                  key={v.venueName}
-                  className="bg-[#111827] border border-[#1E293B] rounded-xl p-4 space-y-3"
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="w-9 h-9 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-400 flex items-center justify-center font-bold text-sm">
-                        📍
-                      </span>
-                      <div>
-                        <h3 className="text-sm font-bold text-white">{v.venueName}</h3>
-                        <div className="text-[11px] font-mono text-slate-400">
-                          {v.machinesCount} 台機台 · {v.boardsCount} 版刮板
-                        </div>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <div
-                        className={`text-base font-mono font-bold ${
-                          v.netProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'
-                        }`}
-                      >
-                        {formatProfit(v.netProfit)}
-                      </div>
-                      <div className="text-[10px] text-slate-500 font-mono">
-                        場地淨利 (利潤率 {v.totalGross > 0 ? Math.round((v.netProfit / v.totalGross) * 100) : 0}%)
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-slate-800 text-center">
-                    <div>
-                      <div className="text-xs text-slate-400 font-medium whitespace-nowrap">總投幣</div>
-                      <div className="text-xs font-mono font-bold text-white">
-                        ${v.totalGross.toLocaleString()}
-                      </div>
-                    </div>
-                    <div>
-                      <div className="text-xs text-slate-400 font-medium whitespace-nowrap">回錢</div>
-                      <div className="text-xs font-mono font-bold text-rose-400">
-                        -${v.totalCashback.toLocaleString()}
-                      </div>
-                    </div>
-                    <div>
-                      <div className="text-xs text-slate-400 font-medium whitespace-nowrap">獎品成本</div>
-                      <div className="text-xs font-mono font-bold text-sky-400">
-                        -${v.totalPrizeCost.toLocaleString()}
-                      </div>
-                    </div>
-                    <div>
-                      <div className="text-xs text-slate-400 font-medium whitespace-nowrap">場租雜支</div>
-                      <div className="text-xs font-mono font-bold text-amber-400">
-                        -${v.totalOverhead.toLocaleString()}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="pt-1 flex flex-wrap items-center gap-1.5">
-                    {v.machines.map((mc) => (
-                      <span
-                        key={mc.machine_id}
-                        className="px-2 py-0.5 rounded bg-[#0B0F17] border border-slate-800 text-[10px] font-mono text-slate-400"
-                      >
-                        [{mc.code}] {mc.name}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              ))
-          )}
-        </div>
-      )}
-
-      {/* 維度 3：個別機台損益 (MACHINE) */}
-      {analyticsDimension === 'MACHINE' && (
-        <div className="bg-[#111827] border border-[#1E293B] rounded-xl p-4 space-y-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1.5 text-xs font-bold text-white">
-              <BarChart3 className="w-4 h-4 text-amber-400" />
-              機台損益
-            </div>
-          </div>
-
-          <div className="space-y-3">
-            {analytics.machineBreakdown
-              .filter((row) => {
-                if (selectedVenueFilter !== 'ALL' && (row.machine.location || '').trim() !== selectedVenueFilter) {
-                  return false;
-                }
-                if (selectedMachineFilter !== 'ALL' && row.machine.machine_id !== selectedMachineFilter) {
-                  return false;
-                }
-                return true;
-              })
-              .map((row) => {
-                const revBarPct = Math.min(
-                  100,
-                  Math.round((row.grossRevenue / analytics.maxMachineRevenue) * 100)
-                );
-                const costTotal =
-                  row.cashbackDeducted + row.totalDirectPrizeCost + row.fixedOverhead;
-                const costBarPct = Math.min(
-                  100,
-                  Math.round((costTotal / analytics.maxMachineRevenue) * 100)
-                );
-
-                return (
-                  <div
-                    key={row.machine.machine_id}
-                    className="p-3.5 rounded-xl bg-[#0B0F17] border border-slate-800 space-y-2.5"
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span className="font-mono font-bold text-xs px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400 shrink-0">
-                          {row.machine.code}
-                        </span>
-                        <div>
-                          <span className="text-xs font-bold text-white block truncate">
-                            {row.machine.name}
-                          </span>
-                          <span className="text-[10px] text-slate-500 font-mono">
-                            📍 {row.machine.location || '未分類'} · 月租 ${row.configuredMonthlyRent.toLocaleString()}
-                          </span>
-                        </div>
-                      </div>
-
-                      <div
-                        className={`text-sm font-mono font-bold shrink-0 ${
-                          row.netProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'
-                        }`}
-                      >
-                        {formatProfit(row.netProfit)}
-                      </div>
-                    </div>
-
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <span className="text-[10px] text-slate-400 w-8 shrink-0">收幣</span>
+                      <div className="flex items-center gap-2 text-[11px] font-mono">
+                        <span className="w-8 text-slate-400 shrink-0">支出</span>
                         <div className="flex-1 h-2 bg-slate-900 rounded-full overflow-hidden">
-                          <div
-                            className="h-full bg-emerald-400 rounded-full"
-                            style={{ width: `${revBarPct}%` }}
-                          />
+                          <div className="h-full bg-rose-500/80 rounded-full" style={{ width: `${costBarPct}%` }} />
                         </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-[10px] text-slate-400 w-8 shrink-0">支出</span>
-                        <div className="flex-1 h-2 bg-slate-900 rounded-full overflow-hidden">
-                          <div
-                            className="h-full bg-amber-500 rounded-full"
-                            style={{ width: `${costBarPct}%` }}
-                          />
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-slate-800/80 text-center">
-                      <div>
-                        <div className="text-xs text-slate-400 font-medium whitespace-nowrap">收幣</div>
-                        <div className="text-xs font-mono font-bold text-white">
-                          ${row.grossRevenue.toLocaleString()}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-xs text-slate-400 font-medium whitespace-nowrap">回錢</div>
-                        <div className="text-xs font-mono font-bold text-rose-400">
-                          -${row.cashbackDeducted.toLocaleString()}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-xs text-slate-400 font-medium whitespace-nowrap">獎品</div>
-                        <div className="text-xs font-mono font-bold text-sky-400">
-                          -${row.totalDirectPrizeCost.toLocaleString()}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-xs text-slate-400 font-medium whitespace-nowrap">實付台租</div>
-                        <div className="text-xs font-mono font-bold text-amber-400">
-                          {row.paidRent > 0 ? `-$${row.paidRent.toLocaleString()}` : '$0'}
-                        </div>
-                        {row.paidRent === 0 && row.configuredMonthlyRent > 0 && (
-                          <div className="text-[11px] text-slate-400 font-mono">待繳 ${row.configuredMonthlyRent.toLocaleString()}</div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-          </div>
-        </div>
-      )}
-
-      {/* 維度 4：刮板明細損益 (BOARD) */}
-      {analyticsDimension === 'BOARD' && (
-        <div className="bg-[#111827] border border-[#1E293B] rounded-xl p-4 space-y-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1.5 text-xs font-bold text-white">
-              <Grid className="w-4 h-4 text-amber-400" />
-              <span>刮板明細 ({displayedBoards.length} 版)</span>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-            {displayedBoards.length === 0 ? (
-              <div className="col-span-full py-8 text-center text-xs text-slate-500">
-                符合篩選條件的刮板為 0 版
-              </div>
-            ) : (
-              displayedBoards.map((board) => {
-                const m = machines.find((mc) => mc.machine_id === board.machine_id);
-                const fin = calculateScratchBoardFinancials(
-                  board.board_cost,
-                  board.gross_coin_revenue,
-                  board.prizes
-                );
-                const remHoles =
-                  board.settled_remaining_holes !== undefined
-                    ? board.settled_remaining_holes
-                    : board.remaining_holes;
-                const scratchedCount =
-                  board.settled_scratched_holes !== undefined
-                    ? board.settled_scratched_holes
-                    : Math.max(0, board.total_holes - remHoles);
-                const avgPerHole =
-                  board.avg_revenue_per_hole !== undefined
-                    ? board.avg_revenue_per_hole
-                    : (scratchedCount > 0 ? Math.round(fin.grossCoinRevenue / scratchedCount) : 0);
-                const holePct = Math.round(
-                  (scratchedCount / Math.max(1, board.total_holes)) * 100
-                );
-
-                return (
-                  <div
-                    key={board.board_id}
-                    className="p-3 rounded-xl bg-[#0B0F17] border border-slate-800 space-y-2.5"
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-1.5 min-w-0">
-                        <span className="font-mono text-xs font-bold px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400 shrink-0">
-                          [{m?.code}] {board.board_letter || 'A'}板
-                        </span>
-                        <span className="text-xs font-bold text-white truncate">
-                          {board.total_holes}刮 (刮{scratchedCount}/剩{remHoles}洞)
-                        </span>
-                        <span
-                          className={`text-[9px] px-1 rounded font-bold shrink-0 ${
-                            board.status === 'ACTIVE'
-                              ? 'bg-emerald-500/20 text-emerald-400'
-                              : 'bg-slate-800 text-slate-400'
-                          }`}
-                        >
-                          {board.status === 'ACTIVE' ? '進行中' : '已結算'}
+                        <span className="w-16 text-right text-rose-400 shrink-0">
+                          -${costTotal.toLocaleString()}
                         </span>
                       </div>
-                      <span
-                        className={`text-xs font-mono font-bold shrink-0 ${
-                          fin.netProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'
-                        }`}
-                      >
-                        {formatProfit(fin.netProfit)}
-                      </span>
                     </div>
 
-                    <div className="w-full h-1.5 bg-slate-900 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-amber-500"
-                        style={{ width: `${holePct}%` }}
-                      />
-                    </div>
-
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] font-mono text-center pt-2 border-t border-slate-800/80">
-                      <div>
-                        <div className="text-[11px] text-slate-400 font-medium">毛收幣</div>
-                        <div className="font-bold text-white">${fin.grossCoinRevenue.toLocaleString()}</div>
-                      </div>
-                      <div>
-                        <div className="text-[11px] text-slate-400 font-medium">回錢</div>
-                        <div className="font-bold text-rose-400">-${fin.totalCashbackDeducted.toLocaleString()}</div>
-                      </div>
-                      <div>
-                        <div className="text-[11px] text-slate-400 font-medium">獎品成本</div>
-                        <div className="font-bold text-sky-400">-${fin.claimedPrizeCost.toLocaleString()}</div>
-                      </div>
-                      <div>
-                        <div className="text-[11px] text-slate-400 font-medium">每洞均投</div>
-                        <div className="font-bold text-amber-400">${avgPerHole}/洞</div>
-                      </div>
+                    <div className="flex flex-wrap items-center justify-between text-[10px] font-mono text-slate-400 pt-1 border-t border-slate-800/80">
+                      <span>台租 -${row.fixedOverhead.toLocaleString()}</span>
+                      <span>貨本 -${row.totalDirectPrizeCost.toLocaleString()}</span>
+                      <span>回錢 -${row.cashbackDeducted.toLocaleString()}</span>
                     </div>
                   </div>
                 );
               })
             )}
           </div>
-        </div>
-      )}
+        )}
 
-      {/* 4. 資料備份、匯入與系統初始化 (需求 2 & 8) */}
-      <div className="bg-[#111827] border border-[#1E293B] rounded-xl p-4 space-y-3">
-        <div className="flex items-center gap-1.5 text-xs font-bold text-white">
-          <Download className="w-4 h-4 text-amber-400" />
-          資料備份、匯入與系統維護
-        </div>
+        {/* 5B. 依場地彙總 */}
+        {detailTab === 'VENUE' && (
+          <div className="space-y-2.5">
+            {venueBreakdown.length === 0 ? (
+              <div className="text-center py-6 text-xs text-slate-500">尚無場地資料</div>
+            ) : (
+              venueBreakdown.map((v) => (
+                <div
+                  key={v.venueName}
+                  className="p-3 rounded-xl bg-[#0B0F17] border border-slate-800 space-y-2"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Building className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                      <span className="text-xs font-bold text-white truncate">{v.venueName}</span>
+                      <span className="text-[10px] font-mono text-slate-400">
+                        ({v.machinesCount} 台)
+                      </span>
+                    </div>
+                    <span
+                      className={`text-sm font-mono font-bold shrink-0 ${
+                        v.netProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                      }`}
+                    >
+                      {formatProfit(v.netProfit)}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-4 gap-1.5 text-[11px] font-mono">
+                    <div className="bg-[#111827] p-2 rounded-lg border border-slate-800/80">
+                      <span className="block text-[10px] text-slate-400">總收幣</span>
+                      <span className="text-white font-bold">${v.totalGross.toLocaleString()}</span>
+                    </div>
+                    <div className="bg-[#111827] p-2 rounded-lg border border-slate-800/80">
+                      <span className="block text-[10px] text-slate-400">台租</span>
+                      <span className="text-amber-400 font-bold">-${v.totalOverhead.toLocaleString()}</span>
+                    </div>
+                    <div className="bg-[#111827] p-2 rounded-lg border border-slate-800/80">
+                      <span className="block text-[10px] text-slate-400">貨本</span>
+                      <span className="text-sky-400 font-bold">-${v.totalPrizeCost.toLocaleString()}</span>
+                    </div>
+                    <div className="bg-[#111827] p-2 rounded-lg border border-slate-800/80">
+                      <span className="block text-[10px] text-slate-400">回錢</span>
+                      <span className="text-rose-400 font-bold">-${v.totalCashback.toLocaleString()}</span>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        )}
 
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".json"
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (!file) return;
-            const reader = new FileReader();
-            reader.onload = (event) => {
-              try {
-                const text = event.target?.result as string;
-                const parsed = JSON.parse(text);
-                setImportedDataPreview(parsed);
-              } catch {
-                alert('解析 JSON 備份檔失敗，請確認檔案格式是否正確。');
-              }
-            };
-            reader.readAsText(file);
-            e.target.value = '';
-          }}
-          className="hidden"
-        />
+        {/* 5C. 依刮板明細 */}
+        {detailTab === 'BOARD' && (
+          <div className="space-y-2.5">
+            <div className="flex items-center gap-1.5">
+              {[
+                { key: 'ALL', label: '全部' },
+                { key: 'ACTIVE', label: '進行中' },
+                { key: 'SETTLED', label: '已結算' },
+              ].map((st) => (
+                <button
+                  key={st.key}
+                  type="button"
+                  onClick={() => setBoardStatusFilter(st.key as any)}
+                  className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-colors ${
+                    boardStatusFilter === st.key
+                      ? 'bg-amber-500/15 text-amber-300 border-amber-500/40'
+                      : 'bg-[#0B0F17] text-slate-400 border-slate-800 hover:text-white'
+                  }`}
+                >
+                  {st.label}
+                </button>
+              ))}
+            </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-          {/* 匯入備份 (需求 8) */}
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            className="flex items-center justify-center gap-1.5 p-2.5 rounded-xl bg-sky-500/15 hover:bg-sky-500/25 border border-sky-500/30 text-sky-300 text-xs font-bold transition-colors"
-          >
-            <Upload className="w-4 h-4" />
-            匯入 JSON
-          </button>
+            {displayedBoards.length === 0 ? (
+              <div className="text-center py-6 text-xs text-slate-500">無符合條件的刮板</div>
+            ) : (
+              displayedBoards.map((b) => {
+                const m = machines.find((mc) => mc.machine_id === b.machine_id);
+                const fin = calculateScratchBoardFinancials(b.board_cost, b.gross_coin_revenue, b.prizes);
+                const scratched = b.total_holes - b.remaining_holes;
+                return (
+                  <div
+                    key={b.board_id}
+                    className="p-3 rounded-xl bg-[#0B0F17] border border-slate-800 space-y-2"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="font-mono font-bold text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-amber-400 shrink-0">
+                          {m?.code || '機台'}
+                        </span>
+                        <span className="text-xs font-bold text-white truncate">{b.title}</span>
+                        <span
+                          className={`text-[10px] px-1.5 py-0.5 rounded font-bold shrink-0 ${
+                            b.status === 'ACTIVE'
+                              ? 'bg-emerald-500/15 text-emerald-400'
+                              : 'bg-slate-800 text-slate-400'
+                          }`}
+                        >
+                          {b.status === 'ACTIVE' ? '進行中' : '已結算'}
+                        </span>
+                      </div>
+                      <span
+                        className={`text-sm font-mono font-bold shrink-0 ${
+                          fin.netProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                        }`}
+                      >
+                        {formatProfit(fin.netProfit)}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-[11px] font-mono text-slate-400">
+                      <span>進度 {scratched}/{b.total_holes} 洞</span>
+                      <span>收幣 ${fin.grossCoinRevenue.toLocaleString()}</span>
+                      <span>貨本 -${fin.claimedPrizeCost.toLocaleString()}</span>
+                      <span>回錢 -${fin.totalCashbackDeducted.toLocaleString()}</span>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        )}
+      </div>
 
-          {/* 匯出備份 */}
-          <button
-            type="button"
-            onClick={onExportJSON}
-            className="flex items-center justify-center gap-1.5 p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition-colors"
-          >
+      {/* 6. 資料備份與系統維護 (預設收合於頁面最底端) */}
+      <div className="bg-[#111827] border border-[#1E293B] rounded-xl overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setIsMaintenanceExpanded((prev) => !prev)}
+          className="w-full p-3.5 flex items-center justify-between text-left hover:bg-slate-800/30 transition-colors"
+        >
+          <div className="flex items-center gap-2 text-xs font-bold text-slate-300">
             <Download className="w-4 h-4 text-amber-400" />
-            匯出 JSON
-          </button>
+            <span>資料備份與系統維護</span>
+          </div>
+          <div className="flex items-center gap-1 text-[11px] text-slate-400 font-bold">
+            <span>{isMaintenanceExpanded ? '收合' : '展開'}</span>
+            <ChevronDown
+              className={`w-4 h-4 transition-transform duration-200 ${
+                isMaintenanceExpanded ? 'rotate-180' : ''
+              }`}
+            />
+          </div>
+        </button>
 
-          {/* 匯出 CSV */}
-          <button
-            type="button"
-            onClick={onExportCSV}
-            className="flex items-center justify-center gap-1.5 p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition-colors"
-          >
-            <FileText className="w-4 h-4 text-emerald-400" />
-            匯出 CSV
-          </button>
-        </div>
+        {isMaintenanceExpanded && (
+          <div className="p-4 pt-3 border-t border-slate-800 space-y-3">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".json"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                  try {
+                    const text = event.target?.result as string;
+                    const parsed = JSON.parse(text);
+                    setImportedDataPreview(parsed);
+                  } catch {
+                    alert('解析 JSON 備份檔失敗，請確認檔案格式是否正確。');
+                  }
+                };
+                reader.readAsText(file);
+                e.target.value = '';
+              }}
+              className="hidden"
+            />
 
-        <div className="pt-2 border-t border-slate-800 flex items-center justify-end">
-          {/* 全系統初始化清空 (需求 2) */}
-          <button
-            type="button"
-            onClick={() => setIsResetConfirmOpen(true)}
-            className="text-xs text-rose-400 hover:text-rose-300 flex items-center gap-1 font-bold"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-            全系統清空歸零
-          </button>
-        </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="flex items-center justify-center gap-1.5 p-2.5 rounded-xl bg-sky-500/15 hover:bg-sky-500/25 border border-sky-500/30 text-sky-300 text-xs font-bold transition-colors"
+              >
+                <Upload className="w-4 h-4" />
+                匯入 JSON
+              </button>
+
+              <button
+                type="button"
+                onClick={onExportJSON}
+                className="flex items-center justify-center gap-1.5 p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition-colors"
+              >
+                <Download className="w-4 h-4 text-amber-400" />
+                匯出 JSON
+              </button>
+
+              <button
+                type="button"
+                onClick={onExportCSV}
+                className="flex items-center justify-center gap-1.5 p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition-colors"
+              >
+                <FileText className="w-4 h-4 text-emerald-400" />
+                匯出 CSV
+              </button>
+            </div>
+
+            <div className="pt-2 border-t border-slate-800 flex items-center justify-end">
+              <button
+                type="button"
+                onClick={() => setIsResetConfirmOpen(true)}
+                className="text-xs text-rose-400 hover:text-rose-300 flex items-center gap-1 font-bold"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                全系統清空歸零
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* 匯入備份確認彈窗 (需求 8) */}
