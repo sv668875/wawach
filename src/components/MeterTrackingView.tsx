@@ -66,6 +66,15 @@ interface MeterTrackingViewProps {
     resetMode: CounterResetMode;
     notes: string;
     targetBoardId?: string | null;
+    scratchSync?: {
+      boardId: string;
+      remainingHoles: number;
+      newlyClaimedNumbers: number[];
+      claimedPrizeDetails: {
+        number_label: number;
+        claim_type: 'PHYSICAL' | 'CASHBACK';
+      }[];
+    };
   }) => void;
   onQuickMountBoard: (machineId: string, totalHoles: number, customTitle?: string) => void;
   onAddMachine: (newMachine: Omit<Machine, 'machine_id' | 'last_read_at'>) => void;
@@ -254,12 +263,19 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
   const [isInitialCountersOpen, setIsInitialCountersOpen] = useState(false);
 
   // 機台錢箱與流程收斂狀態
-  const [targetBoardIdForReading, setTargetBoardIdForReading] = useState<string>('');
   const [isWithdrawModalOpen, setIsWithdrawModalOpen] = useState(false);
   const [withdrawAmountInput, setWithdrawAmountInput] = useState<number>(0);
   const [withdrawNote, setWithdrawNote] = useState('');
   const [isCoinBoxCalibrateOpen, setIsCoinBoxCalibrateOpen] = useState(false);
   const [calibrateCoinBoxInput, setCalibrateCoinBoxInput] = useState<number>(0);
+
+  // 收幣時若有刮板，彈出同步刮板進度小視窗（方案 A：單選歸屬一板）
+  const [isScratchSyncModalOpen, setIsScratchSyncModalOpen] = useState(false);
+  const [pendingClearAction, setPendingClearAction] = useState<ClearActionType>('SEGMENT_CLEAR');
+  const [syncBoardId, setSyncBoardId] = useState<string>('');
+  const [syncScratchedDelta, setSyncScratchedDelta] = useState<number>(0);
+  const [syncClaimedNumbers, setSyncClaimedNumbers] = useState<number[]>([]);
+  const [syncClaimChoices, setSyncClaimChoices] = useState<Record<number, 'PHYSICAL' | 'CASHBACK'>>({});
 
   const [isOcrModalOpen, setIsOcrModalOpen] = useState(false);
   const [ocrLoading, setOcrLoading] = useState(false);
@@ -307,14 +323,20 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
 
   const handleExecuteClearRecord = (clearAction: ClearActionType = 'SEGMENT_CLEAR') => {
     if (!selectedMachine) return;
+
+    // 若該機台目前有進行中刮板，先彈出「同步刮板進度確認」小視窗（方案 A）
+    if (machineActiveBoards.length > 0) {
+      setPendingClearAction(clearAction);
+      setSyncBoardId(machineActiveBoards[0].board_id);
+      setSyncScratchedDelta(0);
+      setSyncClaimedNumbers([]);
+      setSyncClaimChoices({});
+      setIsScratchSyncModalOpen(true);
+      return;
+    }
+
     const isDigital = selectedMachine.machine_model === 'DIGITAL';
     const currentRevenue = isDigital ? panelAmount : sessionMetrics.revenue;
-    const resolvedBoardId =
-      machineActiveBoards.length > 0
-        ? machineActiveBoards.some((b) => b.board_id === targetBoardIdForReading)
-          ? targetBoardIdForReading
-          : machineActiveBoards[0].board_id
-        : null;
 
     onSaveReading({
       machineId: selectedMachine.machine_id,
@@ -327,10 +349,64 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
         : coinCounter,
       prizeCounter: isDigital ? selectedMachine.last_prize_counter : prizeCounter,
       resetMode,
-      targetBoardId: resolvedBoardId,
+      targetBoardId: null,
       notes: notes.trim() || '記錄收幣',
     });
 
+    if (isDigital) {
+      setZeroReminderAmount(currentRevenue);
+      setIsZeroReminderModalOpen(true);
+    }
+
+    setPanelAmount(0);
+    setNotes('');
+  };
+
+  const handleConfirmScratchSyncSave = () => {
+    if (!selectedMachine) return;
+    const syncBoard =
+      machineActiveBoards.find((b) => b.board_id === syncBoardId) || machineActiveBoards[0];
+    if (!syncBoard) return;
+
+    const isDigital = selectedMachine.machine_model === 'DIGITAL';
+    const currentRevenue = isDigital ? panelAmount : sessionMetrics.revenue;
+    const nextRemaining = Math.max(
+      0,
+      syncBoard.remaining_holes - Math.max(0, Number(syncScratchedDelta) || 0)
+    );
+
+    const claimedPrizeDetails = syncClaimedNumbers.map((num) => {
+      const p = syncBoard.prizes.find((pz) => pz.number_label === num);
+      const fallbackType: 'PHYSICAL' | 'CASHBACK' =
+        p?.is_cashback && (!p.prize_cost || p.prize_cost === 0) ? 'CASHBACK' : 'PHYSICAL';
+      return {
+        number_label: num,
+        claim_type: syncClaimChoices[num] || fallbackType,
+      };
+    });
+
+    onSaveReading({
+      machineId: selectedMachine.machine_id,
+      entryMode: selectedMachine.machine_model,
+      clearAction: pendingClearAction,
+      panelAmount: currentRevenue,
+      coinCounter: isDigital
+        ? selectedMachine.last_coin_counter +
+          Math.round(panelAmount / (selectedMachine.coin_unit_value || 10))
+        : coinCounter,
+      prizeCounter: isDigital ? selectedMachine.last_prize_counter : prizeCounter,
+      resetMode,
+      targetBoardId: syncBoard.board_id,
+      notes: notes.trim() || '記錄收幣',
+      scratchSync: {
+        boardId: syncBoard.board_id,
+        remainingHoles: nextRemaining,
+        newlyClaimedNumbers: syncClaimedNumbers,
+        claimedPrizeDetails,
+      },
+    });
+
+    setIsScratchSyncModalOpen(false);
     if (isDigital) {
       setZeroReminderAmount(currentRevenue);
       setIsZeroReminderModalOpen(true);
@@ -1871,6 +1947,230 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
           </div>
         </div>
       )}
+      {/* 收幣時同步刮板進度彈窗（方案 A：單選歸屬一板） */}
+      {isScratchSyncModalOpen && selectedMachine && machineActiveBoards.length > 0 && (() => {
+        const activeSyncBoard =
+          machineActiveBoards.find((b) => b.board_id === syncBoardId) || machineActiveBoards[0];
+        const unclaimedPrizes = activeSyncBoard.prizes.filter((p) => !p.is_claimed);
+        const pendingRevenue =
+          selectedMachine.machine_model === 'DIGITAL' ? panelAmount : sessionMetrics.revenue;
+        const previewRemaining = Math.max(
+          0,
+          activeSyncBoard.remaining_holes - Math.max(0, Number(syncScratchedDelta) || 0)
+        );
+
+        return (
+          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
+            <div className="bg-[#111827] border border-slate-700 w-full max-w-md rounded-t-3xl sm:rounded-2xl p-5 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-white font-bold text-sm">
+                  <Grid className="w-4 h-4 text-amber-400" />
+                  <span>同步刮板進度</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsScratchSyncModalOpen(false)}
+                  className="text-slate-400 hover:text-white"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="bg-[#0B0F17] border border-slate-800 rounded-xl p-3 flex items-center justify-between text-xs">
+                <span className="text-slate-400">本次記錄收幣金額</span>
+                <span className="font-mono font-bold text-amber-400 text-sm">
+                  +${pendingRevenue.toLocaleString()}
+                </span>
+              </div>
+
+              {/* 方案 A：若此機台同時有 2 個以上刮板，選擇本次歸屬哪一板 */}
+              {machineActiveBoards.length > 1 && (
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1.5">
+                    選擇本次收幣歸屬刮板 ({machineActiveBoards.length} 版進行中)
+                  </label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {machineActiveBoards.map((b) => {
+                      const isPicked = b.board_id === activeSyncBoard.board_id;
+                      return (
+                        <button
+                          key={b.board_id}
+                          type="button"
+                          onClick={() => {
+                            setSyncBoardId(b.board_id);
+                            setSyncScratchedDelta(0);
+                            setSyncClaimedNumbers([]);
+                            setSyncClaimChoices({});
+                          }}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${
+                            isPicked
+                              ? 'bg-amber-500 text-slate-950 border-amber-400'
+                              : 'bg-[#0B0F17] text-slate-300 border-slate-800 hover:border-slate-700'
+                          }`}
+                        >
+                          {b.board_letter ? `${b.board_letter}板` : b.title} (剩 {b.remaining_holes} 洞)
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* 本次被刮了幾洞 */}
+              <div className="bg-[#0B0F17] border border-slate-800 rounded-xl p-3.5 space-y-2.5">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-bold text-white">
+                    {activeSyncBoard.board_letter ? `${activeSyncBoard.board_letter}板` : activeSyncBoard.title} · 洞數進度
+                  </span>
+                  <span className="font-mono text-slate-400">
+                    目前剩 <strong className="text-amber-400">{activeSyncBoard.remaining_holes}</strong> / {activeSyncBoard.total_holes} 洞
+                  </span>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] text-slate-400 mb-1">
+                    本次被刮了幾洞？
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      min={0}
+                      max={activeSyncBoard.remaining_holes}
+                      value={syncScratchedDelta === 0 ? '' : syncScratchedDelta}
+                      onFocus={(e) => {
+                        if (e.target.value === '0') e.target.value = '';
+                        e.target.select();
+                      }}
+                      onChange={(e) =>
+                        setSyncScratchedDelta(
+                          Math.min(
+                            activeSyncBoard.remaining_holes,
+                            Math.max(0, Number(e.target.value) || 0)
+                          )
+                        )
+                      }
+                      placeholder="0"
+                      className="flex-1 bg-[#111827] border border-slate-700 rounded-xl px-3 py-2 text-base font-mono font-bold text-white focus:outline-none focus:border-amber-500"
+                    />
+                    <span className="text-xs font-mono text-slate-400 shrink-0">
+                      ➔ 剩 <strong className="text-emerald-400">{previewRemaining}</strong> 洞
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* 本次有沒有被中獎 */}
+              <div className="bg-[#0B0F17] border border-slate-800 rounded-xl p-3.5 space-y-2.5">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-bold text-white">本次有沒有開出獎項？</span>
+                  <span className="text-[11px] font-mono text-slate-400">
+                    {syncClaimedNumbers.length > 0
+                      ? `已選 ${syncClaimedNumbers.length} 個`
+                      : '無中獎可直接確認'}
+                  </span>
+                </div>
+
+                {unclaimedPrizes.length === 0 ? (
+                  <div className="text-xs text-slate-500 py-1">
+                    此板已無未開出獎項
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="flex flex-wrap gap-1.5">
+                      {unclaimedPrizes.map((p) => {
+                        const isPicked = syncClaimedNumbers.includes(p.number_label);
+                        return (
+                          <button
+                            key={p.item_id}
+                            type="button"
+                            onClick={() => {
+                              setSyncClaimedNumbers((prev) =>
+                                prev.includes(p.number_label)
+                                  ? prev.filter((n) => n !== p.number_label)
+                                  : [...prev, p.number_label]
+                              );
+                            }}
+                            className={`px-2.5 py-1.5 rounded-lg text-xs font-mono font-bold border transition-colors ${
+                              isPicked
+                                ? 'bg-emerald-500 text-slate-950 border-emerald-400'
+                                : 'bg-[#111827] text-slate-300 border-slate-700 hover:border-slate-500'
+                            }`}
+                          >
+                            #{p.number_label} {p.prize_name || ''}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* 若勾選獎項同時支援拿獎與回錢，提供快速二選一 */}
+                    {syncClaimedNumbers.map((num) => {
+                      const p = unclaimedPrizes.find((pz) => pz.number_label === num);
+                      if (!p || !(p.is_cashback && p.prize_cost > 0)) return null;
+                      const chosen = syncClaimChoices[num] || 'PHYSICAL';
+                      return (
+                        <div
+                          key={num}
+                          className="flex items-center justify-between gap-2 bg-[#111827] px-2.5 py-2 rounded-lg border border-slate-800 text-xs"
+                        >
+                          <span className="font-mono font-bold text-white">
+                            #{num} {p.prize_name || '大獎'}
+                          </span>
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setSyncClaimChoices((prev) => ({ ...prev, [num]: 'PHYSICAL' }))
+                              }
+                              className={`px-2 py-1 rounded text-[11px] font-bold ${
+                                chosen === 'PHYSICAL'
+                                  ? 'bg-emerald-500 text-slate-950'
+                                  : 'bg-slate-800 text-slate-400'
+                              }`}
+                            >
+                              拿獎 (${p.prize_cost})
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setSyncClaimChoices((prev) => ({ ...prev, [num]: 'CASHBACK' }))
+                              }
+                              className={`px-2 py-1 rounded text-[11px] font-bold ${
+                                chosen === 'CASHBACK'
+                                  ? 'bg-amber-500 text-slate-950'
+                                  : 'bg-slate-800 text-slate-400'
+                              }`}
+                            >
+                              回錢 (${p.cashback_amount})
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setIsScratchSyncModalOpen(false)}
+                  className="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition-colors"
+                >
+                  取消
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmScratchSyncSave}
+                  className="flex-1 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold transition-colors shadow-sm"
+                >
+                  確認收幣並同步
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
           </>
         );
       })()}

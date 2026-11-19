@@ -283,6 +283,15 @@ export default function App() {
     resetMode: CounterResetMode;
     notes: string;
     targetBoardId?: string | null;
+    scratchSync?: {
+      boardId: string;
+      remainingHoles: number;
+      newlyClaimedNumbers: number[];
+      claimedPrizeDetails: {
+        number_label: number;
+        claim_type: 'PHYSICAL' | 'CASHBACK';
+      }[];
+    };
   }) => {
     pushUndo('記錄收幣');
     const targetMachine = machines.find(
@@ -317,11 +326,12 @@ export default function App() {
       prizesDelta = metrics.prizeDelta;
     }
 
-    // 支援指定歸屬哪一個看板（多版獨立記帳）
+    // 支援指定歸屬哪一個看板（多版獨立記帳或收幣彈窗同步）
     const activeBoardId =
-      payload.targetBoardId !== undefined
+      payload.scratchSync?.boardId ||
+      (payload.targetBoardId !== undefined
         ? payload.targetBoardId
-        : targetMachine.active_board_id || null;
+        : targetMachine.active_board_id || null);
 
     const newReading: MeterReading = {
       reading_id: `read_${Date.now()}`,
@@ -351,36 +361,96 @@ export default function App() {
     setReadings((prev) => [newReading, ...prev]);
 
     if (activeBoardId) {
+      const syncInfo = payload.scratchSync;
+      if (syncInfo && syncInfo.claimedPrizeDetails.length > 0) {
+        const targetBoardForSync = scratchBoards.find((b) => b.board_id === activeBoardId);
+        const invIdsToDeduct: string[] = [];
+        syncInfo.claimedPrizeDetails.forEach((detail) => {
+          if (detail.claim_type === 'PHYSICAL') {
+            const p = targetBoardForSync?.prizes.find(
+              (pz) => pz.number_label === detail.number_label
+            );
+            if (p?.inventory_item_id && !p.is_claimed) {
+              invIdsToDeduct.push(p.inventory_item_id);
+            }
+          }
+        });
+        if (invIdsToDeduct.length > 0) {
+          setInventoryItems((prev) =>
+            prev.map((item) => {
+              const count = invIdsToDeduct.filter((id) => id === item.item_id).length;
+              if (count === 0) return item;
+              return { ...item, quantity: Math.max(0, item.quantity - count) };
+            })
+          );
+        }
+      }
+
       setScratchBoards((prev) =>
         prev.map((b) => {
           if (b.board_id !== activeBoardId) return b;
           const nextGross = b.gross_coin_revenue + cashAdded;
+          const isClosingBoard = payload.clearAction === 'BOARD_CLOSE_CLEAR';
+          const nextRemainingHoles = isClosingBoard
+            ? 0
+            : syncInfo
+            ? syncInfo.remainingHoles
+            : b.remaining_holes;
+          const scratchedSnapshot = Math.max(0, b.total_holes - nextRemainingHoles);
+
+          const nextPrizes = syncInfo && syncInfo.newlyClaimedNumbers.length > 0
+            ? b.prizes.map((p) => {
+                if (!syncInfo.newlyClaimedNumbers.includes(p.number_label)) return p;
+                const detail = syncInfo.claimedPrizeDetails.find(
+                  (d) => d.number_label === p.number_label
+                );
+                const resolvedType =
+                  detail?.claim_type ||
+                  p.claim_type ||
+                  (p.is_cashback && (!p.prize_cost || p.prize_cost === 0)
+                    ? 'CASHBACK'
+                    : 'PHYSICAL');
+                return {
+                  ...p,
+                  is_claimed: true,
+                  claim_type: resolvedType,
+                  claimed_at: p.claimed_at || nowIso,
+                  claimed_at_scratched_holes:
+                    p.claimed_at_scratched_holes ?? scratchedSnapshot,
+                  claimed_at_revenue: p.claimed_at_revenue ?? nextGross,
+                };
+              })
+            : b.prizes;
+
           const fin = calculateScratchBoardFinancials(
             b.board_cost,
             nextGross,
-            b.prizes
+            nextPrizes
           );
-          const isClosingBoard = payload.clearAction === 'BOARD_CLOSE_CLEAR';
-          const nextLogs =
-            cashAdded > 0
-              ? [
-                  {
-                    check_id: `chk_meter_${Date.now()}`,
-                    logged_at: nowIso,
-                    remaining_holes: isClosingBoard ? 0 : b.remaining_holes,
-                    newly_claimed_numbers: [],
-                    cumulative_revenue_snapshot: nextGross,
-                    recorded_cash_added: cashAdded,
-                    note: payload.notes || '收幣頁補登',
-                  },
-                  ...(b.check_logs || []),
-                ]
-              : b.check_logs;
+
+          const shouldAppendLog =
+            cashAdded > 0 || (syncInfo && (syncInfo.newlyClaimedNumbers.length > 0 || syncInfo.remainingHoles !== b.remaining_holes));
+          const nextLogs = shouldAppendLog
+            ? [
+                {
+                  check_id: `chk_meter_${Date.now()}`,
+                  logged_at: nowIso,
+                  remaining_holes: nextRemainingHoles,
+                  newly_claimed_numbers: syncInfo ? syncInfo.newlyClaimedNumbers : [],
+                  claimed_prize_details: syncInfo ? syncInfo.claimedPrizeDetails : undefined,
+                  cumulative_revenue_snapshot: nextGross,
+                  recorded_cash_added: cashAdded,
+                  note: payload.notes || '收幣頁同步巡場',
+                },
+                ...(b.check_logs || []),
+              ]
+            : b.check_logs;
           return {
             ...b,
             status: isClosingBoard ? 'SETTLED' : b.status,
             settled_at: isClosingBoard ? nowIso : b.settled_at,
-            remaining_holes: isClosingBoard ? 0 : b.remaining_holes,
+            remaining_holes: nextRemainingHoles,
+            prizes: nextPrizes,
             gross_coin_revenue: fin.grossCoinRevenue,
             total_cashback_deducted: fin.totalCashbackDeducted,
             net_coin_revenue: fin.netCoinRevenue,
