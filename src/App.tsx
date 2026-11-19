@@ -1306,13 +1306,14 @@ export default function App() {
     showToast(`已刪除收幣紀錄 (已自動校準機台讀數與錢箱)`);
   };
 
-  // 1.5b 機台錢箱取出 (換鈔 / 存銀行 / 領出) 與校準
+  // 1.5b 機台錢箱取出與校準
   const handleWithdrawCoinBox = (payload: {
     machineId: string | 'ALL';
     amount?: number;
-    purpose: CoinWithdrawalPurpose;
+    purpose?: CoinWithdrawalPurpose;
     note?: string;
   }) => {
+    const resolvedPurpose: CoinWithdrawalPurpose = payload.purpose || 'OTHER';
     const nowIso = new Date().toISOString();
     if (payload.machineId === 'ALL') {
       const totalAvailable = machines.reduce(
@@ -1320,17 +1321,17 @@ export default function App() {
         0
       );
       if (totalAvailable <= 0) {
-        showToast('目前各機台錢箱皆為 $0，無須領出');
+        showToast('目前各機台錢箱皆為 $0，無須取出');
         return;
       }
-      pushUndo(`全場清錢箱領出 ($${totalAvailable.toLocaleString()})`);
+      pushUndo(`全場清錢箱取出 ($${totalAvailable.toLocaleString()})`);
       const newWithdrawals: CoinBoxWithdrawal[] = machines
         .filter((m) => (Number(m.coin_box_balance) || 0) > 0)
         .map((m, idx) => ({
           withdrawal_id: `wd_${Date.now()}_${idx}`,
           machine_id: m.machine_id,
           amount: Math.max(0, Number(m.coin_box_balance) || 0),
-          purpose: payload.purpose,
+          purpose: resolvedPurpose,
           withdrawn_at: nowIso,
           note: payload.note?.trim() || '全場一鍵清錢箱',
         }));
@@ -1342,7 +1343,7 @@ export default function App() {
           coin_box_balance: 0,
         }))
       );
-      showToast(`已全場清空錢箱，共領出 $${totalAvailable.toLocaleString()}`);
+      showToast(`已全場清空錢箱，共取出 $${totalAvailable.toLocaleString()}`);
       return;
     }
 
@@ -1359,12 +1360,12 @@ export default function App() {
       return;
     }
 
-    pushUndo(`[${targetMachine.code}] 錢箱領出 $${withdrawAmount.toLocaleString()}`);
+    pushUndo(`[${targetMachine.code}] 錢箱取出 $${withdrawAmount.toLocaleString()}`);
     const newRecord: CoinBoxWithdrawal = {
       withdrawal_id: `wd_${Date.now()}`,
       machine_id: targetMachine.machine_id,
       amount: withdrawAmount,
-      purpose: payload.purpose,
+      purpose: resolvedPurpose,
       withdrawn_at: nowIso,
       note: payload.note?.trim() || undefined,
     };

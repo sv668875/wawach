@@ -57,7 +57,7 @@ interface FinancialAnalyticsViewProps {
   onWithdrawCoinBox?: (payload: {
     machineId: string | 'ALL';
     amount?: number;
-    purpose: CoinWithdrawalPurpose;
+    purpose?: CoinWithdrawalPurpose;
     note?: string;
   }) => void;
   activeMachineId?: string;
@@ -123,7 +123,6 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
   const [isSixMonthTrendExpanded, setIsSixMonthTrendExpanded] = useState<boolean>(false);
   const [isCoinBoxExpanded, setIsCoinBoxExpanded] = useState<boolean>(false);
   const [isAllWithdrawModalOpen, setIsAllWithdrawModalOpen] = useState<boolean>(false);
-  const [allWithdrawPurpose, setAllWithdrawPurpose] = useState<CoinWithdrawalPurpose>('EXCHANGE_NOTES');
   const [allWithdrawNote, setAllWithdrawNote] = useState<string>('');
 
   const mappedReadings = useMemo(() => {
@@ -1187,15 +1186,15 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
             </div>
           </div>
 
-          {/* 1b. 錢箱現金動向（還在機台錢箱內 vs 已取出換鈔/存銀行） */}
+          {/* 1b. 錢箱現金動向（還在機台錢箱內 vs 已取出） */}
           <div className="bg-[#111827] border border-[#1E293B] rounded-xl p-4 space-y-3">
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 <Wallet className="w-4 h-4 text-emerald-400" />
                 <div>
-                  <div className="text-xs font-bold text-white">機台錢箱與現金動向</div>
+                  <div className="text-xs font-bold text-white">機台錢箱現況</div>
                   <div className="text-[11px] text-slate-400">
-                    帳面損益依營收成本計算；此區追蹤現金實物留在錢箱或已取出
+                    帳面損益依營收成本計算；此區追蹤錢箱內尚有多少錢未取出
                   </div>
                 </div>
               </div>
@@ -1204,7 +1203,6 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
                   <button
                     type="button"
                     onClick={() => {
-                      setAllWithdrawPurpose('EXCHANGE_NOTES');
                       setAllWithdrawNote('');
                       setIsAllWithdrawModalOpen(true);
                     }}
@@ -1293,16 +1291,6 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
                     <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
                       {coinBoxSummary.filteredWithdrawals.slice(0, 12).map((w) => {
                         const m = machines.find((mc) => mc.machine_id === w.machine_id);
-                        const purposeLabel =
-                          w.purpose === 'EXCHANGE_NOTES'
-                            ? '換成鈔票'
-                            : w.purpose === 'BANK_DEPOSIT'
-                            ? '存進銀行'
-                            : w.purpose === 'PAY_RENT'
-                            ? '繳納台租'
-                            : w.purpose === 'PERSONAL_USE'
-                            ? '私人領出'
-                            : '直接領出';
                         return (
                           <div
                             key={w.withdrawal_id}
@@ -1313,7 +1301,7 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
                                 <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 font-mono text-[10px]">
                                   {m ? m.code : '全場'}
                                 </span>
-                                <span className="font-bold text-slate-200">{purposeLabel}</span>
+                                <span className="font-bold text-slate-200">已取出</span>
                                 {w.note && (
                                   <span className="text-slate-400 truncate">· {w.note}</span>
                                 )}
@@ -2095,37 +2083,12 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
             </div>
 
             <div>
-              <label className="block text-xs text-slate-400 mb-1.5">現金去向 / 用途</label>
-              <div className="grid grid-cols-2 gap-1.5">
-                {[
-                  { key: 'EXCHANGE_NOTES', label: '換成鈔票' },
-                  { key: 'BANK_DEPOSIT', label: '存進銀行' },
-                  { key: 'PAY_RENT', label: '繳納台租' },
-                  { key: 'PERSONAL_USE', label: '私人領出 / 週轉' },
-                ].map((opt) => (
-                  <button
-                    key={opt.key}
-                    type="button"
-                    onClick={() => setAllWithdrawPurpose(opt.key as CoinWithdrawalPurpose)}
-                    className={`py-2 px-2.5 rounded-lg text-xs font-bold border transition-colors ${
-                      allWithdrawPurpose === opt.key
-                        ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
-                        : 'bg-[#0B0F17] text-slate-400 border-slate-800 hover:text-white'
-                    }`}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div>
               <label className="block text-xs text-slate-400 mb-1">備註 (選填)</label>
               <input
                 type="text"
                 value={allWithdrawNote}
                 onChange={(e) => setAllWithdrawNote(e.target.value)}
-                placeholder="例如：週五全場換鈔存銀行"
+                placeholder="選填備註"
                 className="w-full bg-[#0B0F17] border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
               />
             </div>
@@ -2143,14 +2106,13 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
                 onClick={() => {
                   onWithdrawCoinBox({
                     machineId: 'ALL',
-                    purpose: allWithdrawPurpose,
                     note: allWithdrawNote,
                   });
                   setIsAllWithdrawModalOpen(false);
                 }}
                 className="flex-1 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold transition-colors shadow-sm"
               >
-                確認全場領出
+                確認全場取出
               </button>
             </div>
           </div>

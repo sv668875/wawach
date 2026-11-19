@@ -82,7 +82,7 @@ interface MeterTrackingViewProps {
   onWithdrawCoinBox?: (payload: {
     machineId: string | 'ALL';
     amount?: number;
-    purpose: CoinWithdrawalPurpose;
+    purpose?: CoinWithdrawalPurpose;
     note?: string;
   }) => void;
   onCalibrateCoinBox?: (machineId: string, newBalance: number) => void;
@@ -259,7 +259,6 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
   const [targetBoardIdForReading, setTargetBoardIdForReading] = useState<string>('');
   const [isWithdrawModalOpen, setIsWithdrawModalOpen] = useState(false);
   const [withdrawAmountInput, setWithdrawAmountInput] = useState<number>(0);
-  const [withdrawPurpose, setWithdrawPurpose] = useState<CoinWithdrawalPurpose>('EXCHANGE_NOTES');
   const [withdrawNote, setWithdrawNote] = useState('');
   const [isCoinBoxCalibrateOpen, setIsCoinBoxCalibrateOpen] = useState(false);
   const [calibrateCoinBoxInput, setCalibrateCoinBoxInput] = useState<number>(0);
@@ -1021,14 +1020,13 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
                       type="button"
                       onClick={() => {
                         setWithdrawAmountInput(selectedMachine.coin_box_balance || 0);
-                        setWithdrawPurpose('EXCHANGE_NOTES');
                         setWithdrawNote('');
                         setIsWithdrawModalOpen(true);
                       }}
                       disabled={(selectedMachine.coin_box_balance || 0) <= 0}
                       className="h-8 px-3 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 disabled:opacity-40 disabled:pointer-events-none border border-emerald-500/30 text-emerald-300 text-xs font-bold transition-colors"
                     >
-                      領出 / 換鈔
+                      從錢箱取出
                     </button>
                   )}
                 </div>
@@ -1839,37 +1837,12 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
             </div>
 
             <div>
-              <label className="block text-xs text-slate-400 mb-1.5">現金去向 / 用途</label>
-              <div className="grid grid-cols-2 gap-1.5">
-                {[
-                  { key: 'EXCHANGE_NOTES', label: '換成鈔票' },
-                  { key: 'BANK_DEPOSIT', label: '存進銀行' },
-                  { key: 'PAY_RENT', label: '繳納台租' },
-                  { key: 'PERSONAL_USE', label: '私人領出 / 週轉' },
-                ].map((opt) => (
-                  <button
-                    key={opt.key}
-                    type="button"
-                    onClick={() => setWithdrawPurpose(opt.key as CoinWithdrawalPurpose)}
-                    className={`py-2 px-2.5 rounded-lg text-xs font-bold border transition-colors ${
-                      withdrawPurpose === opt.key
-                        ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
-                        : 'bg-[#0B0F17] text-slate-400 border-slate-800 hover:text-white'
-                    }`}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div>
               <label className="block text-xs text-slate-400 mb-1">備註 (選填)</label>
               <input
                 type="text"
                 value={withdrawNote}
                 onChange={(e) => setWithdrawNote(e.target.value)}
-                placeholder="例如：換百元鈔、存入玉山銀行"
+                placeholder="選填備註"
                 className="w-full bg-[#0B0F17] border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
               />
             </div>
@@ -1889,7 +1862,6 @@ export const MeterTrackingView: React.FC<MeterTrackingViewProps> = ({
                   onWithdrawCoinBox({
                     machineId: selectedMachine.machine_id,
                     amount: withdrawAmountInput,
-                    purpose: withdrawPurpose,
                     note: withdrawNote,
                   });
                   setIsWithdrawModalOpen(false);
