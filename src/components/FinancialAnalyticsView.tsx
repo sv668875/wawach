@@ -958,7 +958,7 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
                           key={trend.period_label}
                           onClick={() => setSelectedTrendMonthKey(trend.period_label)}
                           className={`flex-1 flex flex-col items-center justify-between cursor-pointer group rounded-lg py-1 px-0.5 transition-all z-10 ${
-                            isSelected ? 'bg-slate-800/80 ring-1 ring-amber-500/40' : 'hover:bg-slate-800/40'
+                            isSelected ? 'ring-1 ring-amber-500/60' : 'hover:opacity-90'
                           }`}
                         >
                           <div className="text-[9px] sm:text-[10px] font-mono font-bold whitespace-nowrap h-4 flex items-center">
@@ -972,7 +972,7 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
                               {isProfit && (
                                 <div
                                   className={`w-4 sm:w-6 rounded-t-md transition-all ${
-                                    isSelected ? 'bg-emerald-400' : 'bg-emerald-500/75 group-hover:bg-emerald-400'
+                                    isSelected ? 'bg-emerald-400' : 'bg-emerald-500 group-hover:bg-emerald-400'
                                   }`}
                                   style={{ height: `${barHeightPct}%` }}
                                 />
@@ -983,7 +983,7 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
                                 {!isProfit && (
                                   <div
                                     className={`w-4 sm:w-6 rounded-b-md transition-all ${
-                                      isSelected ? 'bg-rose-400' : 'bg-rose-500/75 group-hover:bg-rose-400'
+                                      isSelected ? 'bg-rose-400' : 'bg-rose-500 group-hover:bg-rose-400'
                                     }`}
                                     style={{ height: `${barHeightPct}%` }}
                                   />
@@ -1148,7 +1148,7 @@ export const FinancialAnalyticsView: React.FC<FinancialAnalyticsViewProps> = ({
                       <div className="flex items-center gap-2 text-[11px] font-mono">
                         <span className="w-8 text-slate-400 shrink-0">支出</span>
                         <div className="flex-1 h-2 bg-slate-900 rounded-full overflow-hidden">
-                          <div className="h-full bg-rose-500/80 rounded-full" style={{ width: `${costBarPct}%` }} />
+                          <div className="h-full bg-rose-500 rounded-full" style={{ width: `${costBarPct}%` }} />
                         </div>
                         <span className="w-16 text-right text-rose-400 shrink-0">
                           -${costTotal.toLocaleString()}
