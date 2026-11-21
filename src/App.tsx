@@ -1890,20 +1890,24 @@ export default function App() {
     <div className={`min-h-screen bg-[#0B0F17] text-slate-100 flex flex-col pb-28 md:pb-6 theme-${theme} transition-colors duration-200`}>
       {/* Top Bar */}
       <header className="sticky top-0 z-30 bg-[#0B0F17]/95 backdrop-blur border-b border-[#1E293B] pt-safe transition-colors duration-200">
-        <div className="max-w-3xl mx-auto px-4 h-14 flex items-center justify-between gap-2">
+        <div className="max-w-3xl mx-auto px-2.5 sm:px-4 h-14 flex items-center justify-between gap-1.5 sm:gap-2">
           {/* Brand & Undo Button */}
-          <div className="flex items-center gap-2 sm:gap-3">
-            <div className="w-8 h-8 rounded-lg bg-amber-500 flex items-center justify-center text-slate-950 font-bold">
+          <div className="flex items-center gap-1.5 sm:gap-3 min-w-0 shrink-0">
+            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-amber-500 flex items-center justify-center text-slate-950 font-bold shrink-0">
               <Cpu className="w-4 h-4" />
             </div>
-            <span className="text-sm font-extrabold tracking-tight text-white">
+            <span
+              className={`text-xs sm:text-sm font-extrabold tracking-tight text-white whitespace-nowrap ${
+                undoStack.length > 0 ? 'hidden min-[380px]:inline' : ''
+              }`}
+            >
               ClawOps
             </span>
             {undoStack.length > 0 && (
               <button
                 type="button"
                 onClick={handleUndo}
-                className="min-h-[36px] h-9 px-2.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 active:bg-amber-500/35 text-amber-400 border border-amber-500/40 flex items-center gap-1.5 transition-all shadow-sm active:scale-95 touch-manipulation"
+                className="min-h-[34px] h-8 sm:h-9 px-1.5 sm:px-2.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 active:bg-amber-500/35 text-amber-400 border border-amber-500/40 flex items-center gap-1 sm:gap-1.5 transition-all shadow-sm active:scale-95 touch-manipulation shrink-0"
                 title={`復原：${undoStack[0].description}（可復原 ${undoStack.length} 個步驟）`}
                 aria-label="復原上一步"
               >
@@ -1936,15 +1940,15 @@ export default function App() {
           </nav>
 
           {/* Compact Clickable Profit + CoinBox Pill & Theme Switcher */}
-          <div className="flex items-center gap-2 sm:gap-3 text-right">
+          <div className="flex items-center gap-1 sm:gap-2.5 text-right min-w-0 shrink-0">
             <button
               type="button"
               onClick={() => setTopStatMode((prev) => (prev === 'MONTH' ? 'ALL' : 'MONTH'))}
-              className="flex items-center gap-2.5 sm:gap-3 px-2 py-1 rounded-lg hover:bg-slate-800/50 active:scale-95 transition-all text-right touch-manipulation"
+              className="flex items-center gap-1.5 sm:gap-3 px-1 sm:px-2 py-1 rounded-lg hover:bg-slate-800/50 active:scale-95 transition-all text-right touch-manipulation min-w-0"
               title="點擊切換：本月淨利 ↔ 總淨利"
             >
-              <div>
-                <div className="text-[11px] text-slate-400 leading-none">
+              <div className="min-w-0">
+                <div className="text-[10px] sm:text-[11px] text-slate-400 leading-none whitespace-nowrap">
                   {topStatMode === 'MONTH' ? '本月淨利' : '總淨利'}
                 </div>
                 {(() => {
@@ -1954,7 +1958,7 @@ export default function App() {
                       : topStats.allTimeNetProfit;
                   return (
                     <div
-                      className={`text-xs font-mono font-bold mt-0.5 ${
+                      className={`text-[11px] sm:text-xs font-mono font-bold mt-0.5 whitespace-nowrap ${
                         val >= 0 ? 'text-emerald-400' : 'text-rose-400'
                       }`}
                     >
@@ -1963,9 +1967,9 @@ export default function App() {
                   );
                 })()}
               </div>
-              <div className="pl-2 border-l border-slate-800">
-                <div className="text-[11px] text-slate-400 leading-none">錢箱</div>
-                <div className="text-xs font-mono font-bold text-amber-400 mt-0.5">
+              <div className="pl-1.5 sm:pl-2 border-l border-slate-800 min-w-0">
+                <div className="text-[10px] sm:text-[11px] text-slate-400 leading-none whitespace-nowrap">錢箱</div>
+                <div className="text-[11px] sm:text-xs font-mono font-bold text-amber-400 mt-0.5 whitespace-nowrap">
                   ${topStats.totalCoinBox.toLocaleString()}
                 </div>
               </div>
@@ -1975,7 +1979,7 @@ export default function App() {
             <button
               type="button"
               onClick={() => setIsHelperOpen(true)}
-              className="h-8 px-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-400 border border-slate-700 flex items-center gap-1 text-xs font-bold transition-all active:scale-95 shrink-0 shadow-sm"
+              className="h-7 w-7 sm:h-8 sm:w-auto sm:px-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-400 border border-slate-700 flex items-center justify-center gap-1 text-xs font-bold transition-all active:scale-95 shrink-0 shadow-sm"
               title="隨機選號 & 打台選洞助手"
               aria-label="隨機選號助手"
             >
@@ -1987,7 +1991,7 @@ export default function App() {
             <button
               type="button"
               onClick={handleToggleTheme}
-              className="h-8 px-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 flex items-center gap-1 text-xs font-bold transition-all active:scale-95 shrink-0 shadow-sm"
+              className="h-7 w-7 sm:h-8 sm:w-auto sm:px-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 flex items-center justify-center gap-1 text-xs font-bold transition-all active:scale-95 shrink-0 shadow-sm"
               title={`目前風格：${theme === 'dark' ? '暗黑科技 (當前)' : theme === 'neutral' ? '柔和深灰 (中間值)' : '純淨明亮 (亮色)'}（點擊切換）`}
             >
               {theme === 'dark' && (
